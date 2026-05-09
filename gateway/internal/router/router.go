@@ -1,0 +1,68 @@
+package router
+
+import (
+	"example.com/aim/gateway/internal/handler"
+	"example.com/aim/gateway/internal/middleware"
+	"example.com/aim/gateway/internal/upload"
+	"github.com/gin-gonic/gin"
+)
+
+func New() *gin.Engine {
+	gin.SetMode(gin.ReleaseMode)
+
+	engine := gin.New()
+	engine.Use(middleware.Recovery())
+
+	engine.GET("/healthz", func(ctx *gin.Context) {
+		ctx.String(200, "ok")
+	})
+	engine.Static(upload.PublicPrefix(), upload.Dir())
+	engine.GET("/ws/chat", handler.ChatWebSocket)
+
+	authGroup := engine.Group("/api/v1/auth")
+	authGroup.POST("/register", handler.Register)
+	authGroup.POST("/login", handler.Login)
+	authGroup.POST("/refresh", handler.Refresh)
+	authGroup.Use(middleware.Auth())
+	authGroup.POST("/logout", handler.Logout)
+	authGroup.POST("/logout-all", handler.LogoutAll)
+	authGroup.GET("/sessions", handler.ListSessions)
+	authGroup.POST("/sessions/revoke", handler.RevokeSession)
+
+	userGroup := engine.Group("/api/v1/users")
+	userGroup.Use(middleware.Auth())
+	userGroup.GET("/me", handler.Me)
+	userGroup.POST("/me/avatar", handler.UploadAvatar)
+
+	friendGroup := engine.Group("/api/v1/friends")
+	friendGroup.Use(middleware.Auth())
+	friendGroup.GET("", handler.ListFriends)
+	friendGroup.POST("", handler.AddFriend)
+	friendGroup.GET("/requests", handler.ListFriendRequests)
+	friendGroup.POST("/requests/:requestId/respond", handler.RespondFriendRequest)
+	friendGroup.PATCH("/:friendUserId", handler.UpdateFriend)
+	friendGroup.DELETE("/:friendUserId", handler.DeleteFriend)
+	friendGroup.GET("/groups", handler.ListFriendGroups)
+	friendGroup.POST("/groups", handler.CreateFriendGroup)
+
+	conversationGroup := engine.Group("/api/v1/conversations")
+	conversationGroup.Use(middleware.Auth())
+	conversationGroup.POST("/group", handler.CreateGroup)
+	conversationGroup.GET("", handler.ListConversations)
+	conversationGroup.GET("/single", handler.FindSingleConversation)
+	conversationGroup.POST("/:conversationId/members", handler.JoinGroup)
+	conversationGroup.POST("/:conversationId/members/invite", handler.InviteMember)
+	conversationGroup.DELETE("/:conversationId/members/me", handler.LeaveGroup)
+	conversationGroup.GET("/:conversationId/members", handler.ListMembers)
+	conversationGroup.GET("/:conversationId/bots", handler.ListConversationBots)
+	conversationGroup.POST("/:conversationId/bots", handler.AddConversationBot)
+	conversationGroup.DELETE("/:conversationId/bots/:botId", handler.RemoveConversationBot)
+	conversationGroup.GET("/:conversationId/ai-call-logs", handler.ListAICallLogs)
+	conversationGroup.GET("/:conversationId/messages", handler.ListMessages)
+
+	botGroup := engine.Group("/api/v1/bots")
+	botGroup.Use(middleware.Auth())
+	botGroup.GET("", handler.ListBots)
+
+	return engine
+}

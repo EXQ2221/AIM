@@ -1,0 +1,12 @@
+service:
+  name: auth-service
+  addr: ":9002"
+
+mysql:
+  dsn_env: MYSQL_DSN
+
+redis:
+  addr_env: REDIS_ADDR
+
+jwt:
+  secret_env: JWT_SECRET

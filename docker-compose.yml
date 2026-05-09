@@ -1,0 +1,191 @@
+services:
+  mysql:
+    image: ${DOCKER_HUB_MIRROR:-m.daocloud.io/docker.io}/library/mysql:8.0
+    container_name: aim-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-aim}
+      MYSQL_USER: ${MYSQL_USER:-aim}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  redis:
+    image: ${DOCKER_HUB_MIRROR:-m.daocloud.io/docker.io}/library/redis:7-alpine
+    container_name: aim-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+      args:
+        GO_IMAGE: ${GO_IMAGE:-m.daocloud.io/docker.io/library/golang:1.25.2-alpine}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-m.daocloud.io/docker.io/library/alpine:3.20}
+    container_name: aim-user-service
+    restart: unless-stopped
+    environment:
+      PORT: "9001"
+      HEALTH_PORT: "19001"
+      MYSQL_DSN: "${MYSQL_USER:-aim}:${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}@tcp(mysql:3306)/${MYSQL_DATABASE:-aim}?charset=utf8mb4&parseTime=True&loc=Local"
+      REDIS_ADDR: "redis:6379"
+      CHAT_SERVICE_ADDR: "chat-service:9003"
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:19001/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+      args:
+        GO_IMAGE: ${GO_IMAGE:-m.daocloud.io/docker.io/library/golang:1.25.2-alpine}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-m.daocloud.io/docker.io/library/alpine:3.20}
+    container_name: aim-auth-service
+    restart: unless-stopped
+    environment:
+      PORT: "9002"
+      HEALTH_PORT: "19002"
+      MYSQL_DSN: "${MYSQL_USER:-aim}:${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}@tcp(mysql:3306)/${MYSQL_DATABASE:-aim}?charset=utf8mb4&parseTime=True&loc=Local"
+      REDIS_ADDR: "redis:6379"
+      USER_SERVICE_ADDR: "user-service:9001"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    ports:
+      - "9002:9002"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:19002/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  chat-service:
+    build:
+      context: .
+      dockerfile: chat-service/Dockerfile
+      args:
+        GO_IMAGE: ${GO_IMAGE:-m.daocloud.io/docker.io/library/golang:1.25.2-alpine}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-m.daocloud.io/docker.io/library/alpine:3.20}
+    container_name: aim-chat-service
+    restart: unless-stopped
+    environment:
+      PORT: "9003"
+      HEALTH_PORT: "19003"
+      MYSQL_DSN: "${MYSQL_USER:-aim}:${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}@tcp(mysql:3306)/${MYSQL_DATABASE:-aim}?charset=utf8mb4&parseTime=True&loc=Local"
+      USER_SERVICE_ADDR: "user-service:9001"
+      REDIS_ADDR: "redis:6379"
+      BOT_ID: "${BOT_ID:-1}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-}"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+      LLM_MODEL: "${LLM_MODEL:-}"
+      LLM_TIMEOUT_SECONDS: "${LLM_TIMEOUT_SECONDS:-30}"
+      TZ: Asia/Shanghai
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    ports:
+      - "9003:9003"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:19003/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+      args:
+        GO_IMAGE: ${GO_IMAGE:-m.daocloud.io/docker.io/library/golang:1.25.2-alpine}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-m.daocloud.io/docker.io/library/alpine:3.20}
+    container_name: aim-gateway
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      AUTH_SERVICE_ADDR: "auth-service:9002"
+      USER_SERVICE_ADDR: "user-service:9001"
+      CHAT_SERVICE_ADDR: "chat-service:9003"
+      REDIS_ADDR: "redis:6379"
+      UPLOAD_DIR: "/app/uploads"
+      UPLOAD_PUBLIC_PREFIX: "/uploads"
+      UPLOAD_MAX_BYTES: "5242880"
+      TZ: Asia/Shanghai
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      chat-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - gateway_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+volumes:
+  mysql_data:
+  redis_data:
+  gateway_uploads:
+
+networks:
+  aim-net:
+    driver: bridge

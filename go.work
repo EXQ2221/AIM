@@ -1,0 +1,9 @@
+go 1.25.2
+
+use (
+	./auth-service
+	./chat-service
+	./gateway
+	./shared
+	./user-service
+)
