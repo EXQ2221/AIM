@@ -1,24 +1,61 @@
 import type React from "react";
-import { Bot, MessageCircle, SendHorizontal, UserPlus, UserRound, Wifi, WifiOff } from "lucide-react";
+import { Bot, FileText, MessageCircle, Mic, SendHorizontal, UserPlus, UserRound, Wifi, WifiOff } from "lucide-react";
 import type { MessageInfo, MobilePane } from "../types";
 import type { ToastState, WsStatus } from "./types";
-import { cx, formatClock, handleAvatarMention, initials } from "./utils";
+import {
+  cx,
+  formatClock,
+  formatFileSize,
+  formatVoiceDuration,
+  handleAvatarMention,
+  initials,
+  messageText,
+  parseFileMessageContent,
+  parseImageMessageContent,
+  parseSystemMessageContent,
+  parseVoiceMessageContent
+} from "./utils";
 
 export function MessageBubble({
   message,
   mine,
   senderName,
   senderAvatar,
+  readReceiptLabel,
   mentionTarget,
-  onMention
+  onMention,
+  replySummaryLabel,
+  onReply,
+  onRecall
 }: {
   message: MessageInfo;
   mine: boolean;
   senderName: string;
   senderAvatar?: string;
+  readReceiptLabel?: string;
   mentionTarget?: string;
   onMention: (mentionTarget: string) => void;
+  replySummaryLabel?: string;
+  onReply?: () => void;
+  onRecall?: () => void;
 }) {
+  const imageContent = message.messageType === "IMAGE" ? parseImageMessageContent(message.content) : null;
+  const fileContent = message.messageType === "FILE" ? parseFileMessageContent(message.content) : null;
+  const systemContent = message.messageType === "SYSTEM" ? parseSystemMessageContent(message.content) : null;
+  const voiceContent = message.messageType === "VOICE" ? parseVoiceMessageContent(message.content) : null;
+  const recalled = message.status === "RECALLED";
+
+  if (message.messageType === "SYSTEM") {
+    return (
+      <article className="message-row system">
+        <div className="system-message-row">
+          <span>{systemContent?.text || messageText(message)}</span>
+          <time>{formatClock(message.createdAt)}</time>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <article className={cx("message-row", mine && "mine")}>
       {!mine && (
@@ -32,13 +69,65 @@ export function MessageBubble({
         <div className="message-meta">
           <span>{senderName}</span>
           <time>{formatClock(message.createdAt)}</time>
+          {onReply && !message.pending && message.status === "NORMAL" && (
+            <button className="message-reply-button" type="button" onClick={onReply}>
+              Reply
+            </button>
+          )}
+          {onRecall && mine && !message.pending && message.status === "NORMAL" && (
+            <button className="message-reply-button" type="button" onClick={onRecall}>
+              Recall
+            </button>
+          )}
           {(message.pending || message.status === "FAILED") && (
             <span className={cx("message-state", message.pending && "pending", message.status === "FAILED" && "failed")}>
               {message.pending ? "发送中" : "发送失败"}
             </span>
           )}
         </div>
-        <p>{message.status === "RECALLED" ? "消息已撤回" : message.content}</p>
+        {(message.replyTo || message.replyToId) && (
+          <div className="message-reply-preview">
+            <strong>{replySummaryLabel || "Original message unavailable"}</strong>
+            <span>{message.replyTo?.contentPreview || "Original message unavailable"}</span>
+          </div>
+        )}
+        {recalled ? (
+          <p>{messageText(message)}</p>
+        ) : message.messageType === "IMAGE" && imageContent ? (
+          <div className="message-media message-image">
+            <a href={imageContent.url} target="_blank" rel="noreferrer">
+              <img alt={imageContent.name} src={imageContent.url} />
+            </a>
+            <span>{imageContent.name}</span>
+          </div>
+        ) : message.messageType === "FILE" && fileContent ? (
+          <div className="message-media message-file">
+            <span className="message-file-icon">
+              <FileText size={18} />
+            </span>
+            <div className="message-file-copy">
+              <strong>{fileContent.name}</strong>
+              <span>{[formatFileSize(fileContent.size), fileContent.mimeType].filter(Boolean).join(" · ")}</span>
+            </div>
+            <a href={fileContent.url} target="_blank" rel="noreferrer">
+              下载
+            </a>
+          </div>
+        ) : message.messageType === "VOICE" && voiceContent ? (
+          <div className="message-media message-voice">
+            <div className="message-voice-meta">
+              <Mic size={18} />
+              <span>{voiceContent.name}</span>
+              <span>{formatVoiceDuration(voiceContent.durationMs)}</span>
+            </div>
+            <audio controls preload="none" src={voiceContent.url} />
+          </div>
+        ) : (
+          <p>{messageText(message)}</p>
+        )}
+        {mine && !message.pending && message.status !== "FAILED" && readReceiptLabel && (
+          <div className="message-read-receipt">{readReceiptLabel}</div>
+        )}
       </div>
       {mine && (
         <Avatar

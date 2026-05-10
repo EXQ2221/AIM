@@ -28,7 +28,7 @@ func TestBuildPromptLimitsRecentMessages(t *testing.T) {
 			SenderID:    uint64(i),
 			SenderType:  model.SenderTypeUser,
 			MessageType: model.MessageTypeText,
-			Content:     fmt.Sprintf("message-%d", i),
+			Content:     fmt.Sprintf(`{"text":"message-%d"}`, i),
 		})
 	}
 
@@ -43,12 +43,16 @@ func TestBuildPromptLimitsRecentMessages(t *testing.T) {
 
 func TestBuildPromptFormatsSenders(t *testing.T) {
 	prompt := BuildPrompt([]model.Message{
-		{SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: "user text"},
+		{SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"user text"}`},
+		{SenderID: 10002, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: `{"url":"https://cdn.example.com/a.png","name":"a.png","size":123,"mimeType":"image/png","width":640,"height":480}`},
 		{SenderID: 1, SenderType: model.SenderTypeBot, MessageType: model.MessageTypeBotReply, Content: "bot text"},
 	}, "@AIM next", 20, map[uint64]string{10001: "Alice"}, 10001)
 
 	if !strings.Contains(prompt, "[Alice]: user text") {
 		t.Fatalf("missing user line: %q", prompt)
+	}
+	if !strings.Contains(prompt, "[用户10002]: [图片]") {
+		t.Fatalf("missing image placeholder line: %q", prompt)
 	}
 	if !strings.Contains(prompt, "[AIM]: bot text") {
 		t.Fatalf("missing bot line: %q", prompt)

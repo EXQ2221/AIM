@@ -34,6 +34,14 @@ func (h *ChatServiceImpl) CreateGroup(ctx context.Context, req *chatpb.CreateGro
 	return &chatpb.CreateGroupResponse{Group: toGroupPB(group)}, nil
 }
 
+func (h *ChatServiceImpl) GetGroupInfo(ctx context.Context, req *chatpb.GetGroupInfoRequest) (*chatpb.GetGroupInfoResponse, error) {
+	group, err := h.Service.GetGroupInfo(ctx, uint64(req.OperatorId), req.ConversationId)
+	if err != nil {
+		return nil, err
+	}
+	return &chatpb.GetGroupInfoResponse{Group: toGroupPB(group)}, nil
+}
+
 func (h *ChatServiceImpl) CreateSingleConversation(ctx context.Context, req *chatpb.CreateSingleConversationRequest) (*chatpb.CreateSingleConversationResponse, error) {
 	conversation, err := h.Service.CreateSingleConversation(ctx, biz.CreateSingleConversationInput{
 		OperatorID: uint64(req.OperatorId),
@@ -70,28 +78,128 @@ func (h *ChatServiceImpl) ListConversations(ctx context.Context, req *chatpb.Lis
 	return &chatpb.ListConversationsResponse{Conversations: result}, nil
 }
 
-func (h *ChatServiceImpl) JoinGroup(ctx context.Context, req *chatpb.JoinGroupRequest) (*chatpb.CommonResponse, error) {
-	if err := h.Service.JoinGroup(ctx, uint64(req.OperatorId), req.ConversationId); err != nil {
-		return &chatpb.CommonResponse{Success: false, Message: err.Error()}, nil
+func (h *ChatServiceImpl) JoinGroup(ctx context.Context, req *chatpb.JoinGroupRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.JoinGroup(ctx, uint64(req.OperatorId), req.ConversationId)
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
 	}
-	return &chatpb.CommonResponse{Success: true, Message: "ok"}, nil
+	return toConversationEventPB(event), nil
 }
 
-func (h *ChatServiceImpl) InviteMember(ctx context.Context, req *chatpb.InviteMemberRequest) (*chatpb.CommonResponse, error) {
-	if err := h.Service.InviteMember(ctx, biz.InviteMemberInput{
+func (h *ChatServiceImpl) InviteMember(ctx context.Context, req *chatpb.InviteMemberRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.InviteMember(ctx, biz.InviteMemberInput{
 		OperatorID:   uint64(req.OperatorId),
 		TargetUserID: uint64(req.TargetUserId),
-	}, req.ConversationId); err != nil {
-		return &chatpb.CommonResponse{Success: false, Message: err.Error()}, nil
+	}, req.ConversationId)
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
 	}
-	return &chatpb.CommonResponse{Success: true, Message: "ok"}, nil
+	return toConversationEventPB(event), nil
 }
 
-func (h *ChatServiceImpl) LeaveGroup(ctx context.Context, req *chatpb.LeaveGroupRequest) (*chatpb.CommonResponse, error) {
-	if err := h.Service.LeaveGroup(ctx, uint64(req.OperatorId), req.ConversationId); err != nil {
-		return &chatpb.CommonResponse{Success: false, Message: err.Error()}, nil
+func (h *ChatServiceImpl) LeaveGroup(ctx context.Context, req *chatpb.LeaveGroupRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.LeaveGroup(ctx, uint64(req.OperatorId), req.ConversationId)
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
 	}
-	return &chatpb.CommonResponse{Success: true, Message: "ok"}, nil
+	return toConversationEventPB(event), nil
+}
+
+func (h *ChatServiceImpl) TransferOwner(ctx context.Context, req *chatpb.TransferOwnerRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.TransferOwner(ctx, biz.TransferOwnerInput{
+		OperatorID:     uint64(req.OperatorId),
+		ConversationID: req.ConversationId,
+		TargetUserID:   uint64(req.TargetUserId),
+	})
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
+	}
+	return toConversationEventPB(event), nil
+}
+
+func (h *ChatServiceImpl) SetAdmin(ctx context.Context, req *chatpb.SetAdminRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.SetAdmin(ctx, biz.SetAdminInput{
+		OperatorID:     uint64(req.OperatorId),
+		ConversationID: req.ConversationId,
+		TargetUserID:   uint64(req.TargetUserId),
+	})
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
+	}
+	return toConversationEventPB(event), nil
+}
+
+func (h *ChatServiceImpl) RemoveAdmin(ctx context.Context, req *chatpb.RemoveAdminRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.RemoveAdmin(ctx, biz.RemoveAdminInput{
+		OperatorID:     uint64(req.OperatorId),
+		ConversationID: req.ConversationId,
+		TargetUserID:   uint64(req.TargetUserId),
+	})
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
+	}
+	return toConversationEventPB(event), nil
+}
+
+func (h *ChatServiceImpl) MuteMember(ctx context.Context, req *chatpb.MuteMemberRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.MuteMember(ctx, biz.MuteMemberInput{
+		OperatorID:     uint64(req.OperatorId),
+		ConversationID: req.ConversationId,
+		TargetUserID:   uint64(req.TargetUserId),
+		MuteUntil:      req.MuteUntil,
+	})
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
+	}
+	return toConversationEventPB(event), nil
+}
+
+func (h *ChatServiceImpl) UnmuteMember(ctx context.Context, req *chatpb.UnmuteMemberRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.UnmuteMember(ctx, biz.UnmuteMemberInput{
+		OperatorID:     uint64(req.OperatorId),
+		ConversationID: req.ConversationId,
+		TargetUserID:   uint64(req.TargetUserId),
+	})
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
+	}
+	return toConversationEventPB(event), nil
+}
+
+func (h *ChatServiceImpl) RemoveMember(ctx context.Context, req *chatpb.RemoveMemberRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.RemoveMember(ctx, biz.RemoveMemberInput{
+		OperatorID:     uint64(req.OperatorId),
+		ConversationID: req.ConversationId,
+		TargetUserID:   uint64(req.TargetUserId),
+	})
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
+	}
+	return toConversationEventPB(event), nil
+}
+
+func (h *ChatServiceImpl) SetGroupMuteAll(ctx context.Context, req *chatpb.SetGroupMuteAllRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.SetGroupMuteAll(ctx, biz.SetGroupMuteAllInput{
+		OperatorID:     uint64(req.OperatorId),
+		ConversationID: req.ConversationId,
+		MuteAll:        req.MuteAll,
+	})
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
+	}
+	return toConversationEventPB(event), nil
+}
+
+func (h *ChatServiceImpl) UpdateGroupAnnouncement(ctx context.Context, req *chatpb.UpdateGroupAnnouncementRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.UpdateGroupAnnouncement(ctx, biz.UpdateGroupAnnouncementInput{
+		OperatorID:     uint64(req.OperatorId),
+		ConversationID: req.ConversationId,
+		Announcement:   req.Announcement,
+	})
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
+	}
+	return toConversationEventPB(event), nil
 }
 
 func (h *ChatServiceImpl) ListMembers(ctx context.Context, req *chatpb.ListMembersRequest) (*chatpb.ListMembersResponse, error) {
@@ -123,6 +231,29 @@ func (h *ChatServiceImpl) ListMessages(ctx context.Context, req *chatpb.ListMess
 		result = append(result, toMessagePB(message))
 	}
 	return &chatpb.ListMessagesResponse{Messages: result}, nil
+}
+
+func (h *ChatServiceImpl) MarkConversationRead(ctx context.Context, req *chatpb.MarkConversationReadRequest) (*chatpb.CommonResponse, error) {
+	if err := h.Service.MarkConversationRead(ctx, biz.MarkConversationReadInput{
+		OperatorID:        uint64(req.OperatorId),
+		ConversationID:    req.ConversationId,
+		LastReadMessageID: uint64(req.LastReadMessageId),
+	}); err != nil {
+		return &chatpb.CommonResponse{Success: false, Message: err.Error()}, nil
+	}
+	return &chatpb.CommonResponse{Success: true, Message: "ok"}, nil
+}
+
+func (h *ChatServiceImpl) RecallMessage(ctx context.Context, req *chatpb.RecallMessageRequest) (*chatpb.MessageRecalledEventResponse, error) {
+	event, err := h.Service.RecallMessage(ctx, biz.RecallMessageInput{
+		OperatorID:     uint64(req.OperatorId),
+		ConversationID: req.ConversationId,
+		MessageID:      uint64(req.MessageId),
+	})
+	if err != nil {
+		return &chatpb.MessageRecalledEventResponse{Success: false, Message: err.Error()}, nil
+	}
+	return toMessageRecalledEventPB(event), nil
 }
 
 func (h *ChatServiceImpl) ListBots(ctx context.Context, req *chatpb.ListBotsRequest) (*chatpb.ListBotsResponse, error) {
@@ -224,7 +355,7 @@ func (h *ChatServiceImpl) CreateMessage(ctx context.Context, req *chatpb.CreateM
 		value := uint64(*req.ReplyToId)
 		replyToID = &value
 	}
-	message, err := h.Service.CreateMessage(ctx, uint64(req.OperatorId), req.ConversationId, req.Content, replyToID)
+	message, err := h.Service.CreateMessage(ctx, uint64(req.OperatorId), req.ConversationId, req.Content, replyToID, req.GetMessageType())
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +366,7 @@ func toGroupPB(group *biz.GroupView) *chatpb.GroupInfo {
 	if group == nil {
 		return nil
 	}
-	return &chatpb.GroupInfo{
+	pb := &chatpb.GroupInfo{
 		ConversationId: group.ConversationID,
 		Type:           group.Type,
 		Name:           group.Name,
@@ -245,6 +376,15 @@ func toGroupPB(group *biz.GroupView) *chatpb.GroupInfo {
 		JoinPolicy:     group.JoinPolicy,
 		CreatedAt:      group.CreatedAt,
 	}
+	if group.AnnouncementUpdatedBy != nil {
+		value := int64(*group.AnnouncementUpdatedBy)
+		pb.AnnouncementUpdatedBy = &value
+	}
+	if group.AnnouncementUpdatedAt != nil {
+		value := *group.AnnouncementUpdatedAt
+		pb.AnnouncementUpdatedAt = &value
+	}
+	return pb
 }
 
 func toBotPB(item biz.BotView) *chatpb.BotInfo {
@@ -318,6 +458,7 @@ func toConversationPB(conversation biz.ConversationView) *chatpb.ConversationInf
 		LastMessageSenderId:   lastMessageSenderID,
 		LastMessageSenderName: conversation.LastMessageSenderName,
 		LastMessageContent:    conversation.LastMessageContent,
+		MuteAll:               conversation.MuteAll,
 	}
 }
 
@@ -347,6 +488,10 @@ func toMemberPB(member biz.MemberListView) *chatpb.MemberInfo {
 	if member.PermissionScope != "" {
 		pb.PermissionScope = &member.PermissionScope
 	}
+	if member.MuteUntil != nil {
+		value := *member.MuteUntil
+		pb.MuteUntil = &value
+	}
 	return pb
 }
 
@@ -356,7 +501,17 @@ func toMessagePB(message biz.MessageView) *chatpb.MessageInfo {
 		value := int64(*message.ReplyToID)
 		replyToID = &value
 	}
-	return &chatpb.MessageInfo{
+	var replyTo *chatpb.ReplyPreviewInfo
+	if message.ReplyTo != nil {
+		replyTo = &chatpb.ReplyPreviewInfo{
+			MessageId:      int64(message.ReplyTo.MessageID),
+			SenderId:       int64(message.ReplyTo.SenderID),
+			SenderType:     message.ReplyTo.SenderType,
+			MessageType:    message.ReplyTo.MessageType,
+			ContentPreview: message.ReplyTo.ContentPreview,
+		}
+	}
+	pb := &chatpb.MessageInfo{
 		Id:             int64(message.ID),
 		ConversationId: message.ConversationID,
 		SenderId:       int64(message.SenderID),
@@ -364,7 +519,60 @@ func toMessagePB(message biz.MessageView) *chatpb.MessageInfo {
 		MessageType:    message.MessageType,
 		Content:        message.Content,
 		ReplyToId:      replyToID,
+		ReplyTo:        replyTo,
 		Status:         message.Status,
 		CreatedAt:      message.CreatedAt,
 	}
+	if message.ReadByPeer != nil {
+		value := *message.ReadByPeer
+		pb.ReadByPeer = &value
+	}
+	if message.ReadCount != nil {
+		value := *message.ReadCount
+		pb.ReadCount = &value
+	}
+	return pb
+}
+
+func toConversationEventPB(event *biz.ConversationEventView) *chatpb.ConversationEventResponse {
+	resp := &chatpb.ConversationEventResponse{
+		Success: true,
+		Message: "ok",
+	}
+	if event == nil {
+		return resp
+	}
+	if event.Message != nil {
+		resp.EventMessage = toMessagePB(*event.Message)
+	}
+	if len(event.RecipientUserIDs) > 0 {
+		recipients := make([]int64, 0, len(event.RecipientUserIDs))
+		for _, userID := range event.RecipientUserIDs {
+			recipients = append(recipients, int64(userID))
+		}
+		resp.RecipientUserIds = recipients
+	}
+	return resp
+}
+
+func toMessageRecalledEventPB(event *biz.MessageRecalledEventView) *chatpb.MessageRecalledEventResponse {
+	resp := &chatpb.MessageRecalledEventResponse{
+		Success: true,
+		Message: "ok",
+	}
+	if event == nil {
+		return resp
+	}
+	resp.Event = &chatpb.MessageRecalledEventInfo{
+		MessageId:      int64(event.MessageID),
+		ConversationId: event.ConversationID,
+	}
+	if len(event.RecipientUserIDs) > 0 {
+		recipients := make([]int64, 0, len(event.RecipientUserIDs))
+		for _, userID := range event.RecipientUserIDs {
+			recipients = append(recipients, int64(userID))
+		}
+		resp.RecipientUserIds = recipients
+	}
+	return resp
 }

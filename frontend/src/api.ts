@@ -189,9 +189,68 @@ export const api = {
       body: JSON.stringify({ targetUserId })
     });
   },
+  transferOwner(conversationId: string, targetUserId: number) {
+    return request<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/owner/transfer`, {
+      method: "POST",
+      body: JSON.stringify({ targetUserId })
+    });
+  },
+  setAdmin(conversationId: string, targetUserId: number) {
+    return request<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/admins`, {
+      method: "POST",
+      body: JSON.stringify({ targetUserId })
+    });
+  },
+  removeAdmin(conversationId: string, targetUserId: number) {
+    return request<void>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/admins/${encodeURIComponent(String(targetUserId))}`,
+      {
+        method: "DELETE"
+      }
+    );
+  },
+  muteMember(conversationId: string, targetUserId: number, muteUntil: number) {
+    return request<void>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/members/${encodeURIComponent(String(targetUserId))}/mute`,
+      {
+        method: "POST",
+        body: JSON.stringify({ muteUntil })
+      }
+    );
+  },
+  unmuteMember(conversationId: string, targetUserId: number) {
+    return request<void>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/members/${encodeURIComponent(String(targetUserId))}/mute`,
+      {
+        method: "DELETE"
+      }
+    );
+  },
+  removeMember(conversationId: string, targetUserId: number) {
+    return request<void>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/members/${encodeURIComponent(String(targetUserId))}`,
+      {
+        method: "DELETE"
+      }
+    );
+  },
+  setGroupMuteAll(conversationId: string, muteAll: boolean) {
+    return request<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/mute-all`, {
+      method: muteAll ? "POST" : "DELETE"
+    });
+  },
   leaveGroup(conversationId: string) {
     return request<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/members/me`, {
       method: "DELETE"
+    });
+  },
+  groupInfo(conversationId: string) {
+    return request<GroupInfo>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/group`);
+  },
+  updateGroupAnnouncement(conversationId: string, announcement: string) {
+    return request<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/announcement`, {
+      method: "PUT",
+      body: JSON.stringify({ announcement })
     });
   },
   members(conversationId: string) {
@@ -202,6 +261,20 @@ export const api = {
     if (options.beforeId) params.set("beforeId", String(options.beforeId));
     params.set("limit", String(options.limit ?? 30));
     return request<MessageInfo[]>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/messages?${params}`);
+  },
+  markConversationRead(conversationId: string, lastReadMessageId: number) {
+    return request<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/read`, {
+      method: "POST",
+      body: JSON.stringify({ lastReadMessageId })
+    });
+  },
+  recallMessage(conversationId: string, messageId: number) {
+    return request<void>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(String(messageId))}/recall`,
+      {
+        method: "POST"
+      }
+    );
   },
   bots() {
     return request<BotInfo[]>("/api/v1/bots");

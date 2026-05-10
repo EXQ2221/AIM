@@ -435,6 +435,61 @@ func (r *fakeMessageRepo) Create(ctx context.Context, message *model.Message) er
 	return nil
 }
 
+func (r *fakeMessageRepo) GetByID(ctx context.Context, id uint64) (*model.Message, error) {
+	for _, message := range r.created {
+		if message.ID == id {
+			return message, nil
+		}
+	}
+	for index := range r.recent {
+		if r.recent[index].ID == id {
+			return &r.recent[index], nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *fakeMessageRepo) GetByIDs(ctx context.Context, ids []uint64) ([]model.Message, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	idSet := make(map[uint64]struct{}, len(ids))
+	for _, id := range ids {
+		idSet[id] = struct{}{}
+	}
+	result := make([]model.Message, 0, len(ids))
+	for _, message := range r.created {
+		if _, ok := idSet[message.ID]; ok {
+			result = append(result, *message)
+		}
+	}
+	for index := range r.recent {
+		message := r.recent[index]
+		if _, ok := idSet[message.ID]; ok {
+			result = append(result, message)
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeMessageRepo) UpdateStatus(ctx context.Context, id uint64, status model.MessageStatus) error {
+	for _, message := range r.created {
+		if message.ID == id {
+			message.Status = status
+			message.UpdatedAt = time.Now()
+			return nil
+		}
+	}
+	for index := range r.recent {
+		if r.recent[index].ID == id {
+			r.recent[index].Status = status
+			r.recent[index].UpdatedAt = time.Now()
+			return nil
+		}
+	}
+	return gorm.ErrRecordNotFound
+}
+
 func (r *fakeMessageRepo) ListByConversationID(ctx context.Context, conversationID uint64, beforeID *uint64, limit int) ([]model.Message, error) {
 	r.listConversationID = conversationID
 	r.listLimit = limit
@@ -482,7 +537,7 @@ func (r *fakeConversationRepo) UpdateLastMessage(ctx context.Context, conversati
 }
 
 type fakeAICallLogRepo struct {
-	created []*model.AICallLog
+	created   []*model.AICallLog
 	usedToday int64
 }
 
@@ -517,6 +572,14 @@ func (r *fakeMemberRepo) Create(ctx context.Context, member *model.ConversationM
 }
 
 func (r *fakeMemberRepo) Update(ctx context.Context, member *model.ConversationMember) error {
+	return nil
+}
+
+func (r *fakeMemberRepo) UpdateLastReadMessageID(ctx context.Context, conversationID, userID, lastReadMessageID uint64) error {
+	return nil
+}
+
+func (r *fakeMemberRepo) GetDB() *gorm.DB {
 	return nil
 }
 

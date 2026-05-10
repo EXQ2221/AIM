@@ -2,10 +2,16 @@ import type React from "react";
 import { APIError } from "../api";
 import type {
   ConversationInfo,
+  FileMessageContent,
   FriendInfo,
   FriendRequestInfo,
+  ImageMessageContent,
   MemberInfo,
-  MessageInfo
+  MessageInfo,
+  ReplyPreviewInfo,
+  SystemMessageContent,
+  TextMessageContent,
+  VoiceMessageContent
 } from "../types";
 import type { BrowserNotificationStatus } from "./types";
 
@@ -33,6 +39,212 @@ export function truncateNotificationBody(content: string) {
   const runes = Array.from(content.trim());
   if (runes.length <= 50) return content.trim();
   return `${runes.slice(0, 50).join("")}...`;
+}
+
+function parseJSONObject(value: string): Record<string, unknown> | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function readString(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function readNumber(record: Record<string, unknown>, key: string) {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+export function parseTextMessageContent(content: string): TextMessageContent | null {
+  const parsed = parseJSONObject(content);
+  if (!parsed) return null;
+  const text = readString(parsed, "text");
+  return text ? { text } : null;
+}
+
+export function parseImageMessageContent(content: string): ImageMessageContent | null {
+  const parsed = parseJSONObject(content);
+  if (!parsed) return null;
+  const url = readString(parsed, "url");
+  const name = readString(parsed, "name");
+  const mimeType = readString(parsed, "mimeType");
+  if (!url || !name || !mimeType) return null;
+  return {
+    url,
+    name,
+    mimeType,
+    size: readNumber(parsed, "size"),
+    width: readNumber(parsed, "width"),
+    height: readNumber(parsed, "height")
+  };
+}
+
+export function parseFileMessageContent(content: string): FileMessageContent | null {
+  const parsed = parseJSONObject(content);
+  if (!parsed) return null;
+  const url = readString(parsed, "url");
+  const name = readString(parsed, "name");
+  const mimeType = readString(parsed, "mimeType");
+  const size = readNumber(parsed, "size");
+  if (!url || !name || !mimeType || !size || size <= 0) return null;
+  return { url, name, mimeType, size };
+}
+
+export function parseVoiceMessageContent(content: string): VoiceMessageContent | null {
+  const parsed = parseJSONObject(content);
+  if (!parsed) return null;
+  const url = readString(parsed, "url");
+  const name = readString(parsed, "name");
+  const mimeType = readString(parsed, "mimeType");
+  const durationMs = readNumber(parsed, "durationMs");
+  if (!url || !name || !mimeType || !durationMs || durationMs <= 0) return null;
+  return {
+    url,
+    name,
+    mimeType,
+    durationMs,
+    size: readNumber(parsed, "size")
+  };
+}
+
+export function parseSystemMessageContent(content: string): SystemMessageContent | null {
+  const parsed = parseJSONObject(content);
+  if (!parsed) return null;
+  const text = readString(parsed, "text");
+  if (!text) return null;
+
+  const eventType = readString(parsed, "eventType") || undefined;
+  const actorUserId = readNumber(parsed, "actorUserId");
+  const targetUserIds = Array.isArray(parsed.targetUserIds)
+    ? parsed.targetUserIds.filter((value): value is number => typeof value === "number" && Number.isFinite(value))
+    : undefined;
+
+  return {
+    text,
+    eventType,
+    actorUserId,
+    targetUserIds
+  };
+}
+
+export function messageText(message: Pick<MessageInfo, "messageType" | "content" | "status">) {
+  if (message.status === "RECALLED") {
+    return "消息已撤回";
+  }
+
+  switch (message.messageType) {
+    case "TEXT":
+      return parseTextMessageContent(message.content)?.text || message.content.trim();
+    case "IMAGE":
+      return "[图片]";
+    case "FILE":
+      return parseFileMessageContent(message.content)?.name || "[文件]";
+    case "VOICE":
+      return "[语音]";
+    case "SYSTEM":
+      return parseSystemMessageContent(message.content)?.text || message.content.trim();
+    default:
+      return message.content.trim();
+  }
+}
+
+function inferConversationPreview(content: string) {
+  const textPayload = parseTextMessageContent(content);
+  if (textPayload) return textPayload.text;
+
+  const voicePayload = parseVoiceMessageContent(content);
+  if (voicePayload) return "[语音]";
+
+  const imagePayload = parseImageMessageContent(content);
+  if (imagePayload) return "[图片]";
+
+  const filePayload = parseFileMessageContent(content);
+  if (filePayload) return filePayload.name || "[文件]";
+
+  const systemPayload = parseSystemMessageContent(content);
+  if (systemPayload) return systemPayload.text;
+
+  return content.trim();
+}
+
+export function messageContentPreview(
+  messageType: MessageInfo["messageType"],
+  content: string,
+  options: { truncateText?: number } = {}
+) {
+  const truncateText = options.truncateText ?? 80;
+  let preview = "";
+
+  switch (messageType) {
+    case "TEXT":
+      preview = parseTextMessageContent(content)?.text || content.trim();
+      break;
+    case "IMAGE":
+      preview = "[Image]";
+      break;
+    case "FILE":
+      preview = parseFileMessageContent(content)?.name || "[File]";
+      break;
+    case "VOICE":
+      preview = "[Voice]";
+      break;
+    case "SYSTEM":
+      preview = parseSystemMessageContent(content)?.text || content.trim();
+      break;
+    case "BOT_REPLY":
+      preview = parseTextMessageContent(content)?.text || content.trim();
+      break;
+    default:
+      preview = inferConversationPreview(content);
+      break;
+  }
+
+  const runes = Array.from(preview.trim());
+  if (truncateText > 0 && runes.length > truncateText) {
+    return `${runes.slice(0, truncateText).join("")}...`;
+  }
+  return runes.join("");
+}
+
+export function buildReplyPreview(message: Pick<MessageInfo, "id" | "senderId" | "senderType" | "messageType" | "content">): ReplyPreviewInfo {
+  return {
+    messageId: message.id,
+    senderId: message.senderId,
+    senderType: message.senderType,
+    messageType: message.messageType,
+    contentPreview: messageContentPreview(message.messageType, message.content, { truncateText: 80 })
+  };
+}
+
+export function formatFileSize(size?: number) {
+  if (!size || size <= 0) return "";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = size;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const digits = value >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${value.toFixed(digits)} ${units[unitIndex]}`;
+}
+
+export function formatVoiceDuration(durationMs?: number) {
+  if (!durationMs || durationMs <= 0) return "";
+  const totalSeconds = Math.ceil(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 export function scrollMessagesToBottom(messageListRef?: React.RefObject<HTMLDivElement | null>) {
@@ -120,13 +332,14 @@ export function conversationPreview(conversation: ConversationInfo) {
   if (!conversation.lastMessageContent) {
     return "暂无消息";
   }
+  const preview = inferConversationPreview(conversation.lastMessageContent);
   const sender =
     conversation.lastMessageSenderName ||
     (conversation.lastMessageSenderId ? `用户${conversation.lastMessageSenderId}` : "");
   if (sender) {
-    return `${sender}: ${conversation.lastMessageContent}`;
+    return `${sender}: ${preview}`;
   }
-  return conversation.lastMessageContent;
+  return preview;
 }
 
 export function canSendToConversation(

@@ -35,7 +35,7 @@ func BuildPrompt(recentMessages []model.Message, currentContent string, limit in
 }
 
 func formatMessageLine(msg model.Message, userDisplayNames map[uint64]string) string {
-	content := strings.TrimSpace(msg.Content)
+	content := strings.TrimSpace(model.MessagePreview(msg.MessageType, msg.Content))
 	switch msg.SenderType {
 	case model.SenderTypeBot:
 		return fmt.Sprintf("[AIM]: %s", content)

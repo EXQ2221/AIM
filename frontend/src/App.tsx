@@ -3,8 +3,10 @@ import {
   Bell,
   Bot,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   DoorOpen,
+  FileImage,
   KeyRound,
   Loader2,
   LockKeyhole,
@@ -12,7 +14,9 @@ import {
   Mail,
   MessageCircle,
   MessageSquarePlus,
+  Mic,
   PanelRightOpen,
+  Paperclip,
   RefreshCw,
   Search,
   SendHorizontal,
@@ -49,6 +53,7 @@ import {
 } from "./app/types";
 import {
   appendMentionToDraft,
+  buildReplyPreview,
   canSendToConversation,
   conversationPreview,
   cx,
@@ -56,8 +61,9 @@ import {
   formatRelative,
   getNotificationStatus,
   handleAvatarMention,
+  messageText,
   mergeMessagesById,
-
+  parseSystemMessageContent,
   parseGroupValue,
   reconcilePendingMessage,
   roleLabel,
@@ -78,15 +84,20 @@ import type {
   FriendGroupInfo,
   FriendInfo,
   FriendRequestInfo,
+  GroupInfo,
   MemberInfo,
   MessageInfo,
+  MessageRecalledEventInfo,
   MobilePane,
+  OutgoingMessagePayload,
+  ReplyPreviewInfo,
   SessionInfo,
   UserInfo,
   WebSocketEvent
 } from "./types";
 
 const NOTIFICATION_PREFERENCE_KEY = "aim:notifications:enabled";
+const RECALLED_MESSAGE_PLACEHOLDER = "消息已撤回";
 
 function loadNotificationPreference() {
   if (typeof window === "undefined") return true;
@@ -98,6 +109,77 @@ function saveNotificationPreference(enabled: boolean) {
   window.localStorage.setItem(NOTIFICATION_PREFERENCE_KEY, enabled ? "on" : "off");
 }
 
+function latestMessageId(messages: MessageInfo[]) {
+  return messages.reduce((max, message) => (message.id > max && !message.pending ? message.id : max), 0);
+}
+
+function readReceiptLabel(conversation: ConversationInfo | null, message: MessageInfo, mine: boolean) {
+  if (!conversation || !mine || message.pending || message.status === "FAILED") {
+    return undefined;
+  }
+  if (conversation.type === "SINGLE") {
+    return message.readByPeer ? "Read" : "Unread";
+  }
+  if (conversation.type === "GROUP" && typeof message.readCount === "number") {
+    return `${message.readCount} read`;
+  }
+  return undefined;
+}
+
+function applyMessageRecalled(messages: MessageInfo[], event: MessageRecalledEventInfo) {
+  return mergeMessagesById(
+    [],
+    messages.map((message) => {
+      const next =
+        message.id === event.messageId
+          ? {
+              ...message,
+              content: "",
+              pending: false,
+              status: "RECALLED"
+            }
+          : message;
+      if (next.replyTo?.messageId === event.messageId) {
+        return {
+          ...next,
+          replyTo: {
+            ...next.replyTo,
+            contentPreview: RECALLED_MESSAGE_PLACEHOLDER
+          }
+        };
+      }
+      return next;
+    })
+  );
+}
+
+function applyConversationRecalled(conversations: ConversationInfo[], event: MessageRecalledEventInfo) {
+  return sortConversations(
+    conversations.map((conversation) =>
+      conversation.conversationId === event.conversationId && conversation.lastMessageId === event.messageId
+        ? {
+            ...conversation,
+            lastMessageContent: RECALLED_MESSAGE_PLACEHOLDER
+          }
+        : conversation
+    )
+  );
+}
+
+function isMemberMuted(member: Pick<MemberInfo, "muteUntil"> | null | undefined) {
+  return typeof member?.muteUntil === "number" && member.muteUntil > Math.floor(Date.now() / 1000);
+}
+
+function formatMuteUntil(value?: number | null) {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value * 1000));
+}
+
 function App() {
   const [booting, setBooting] = useState(true);
   const [user, setUser] = useState<UserInfo | null>(null);
@@ -107,10 +189,12 @@ function App() {
   const [friendRequests, setFriendRequests] = useState<FriendRequestInfo[]>([]);
   const [conversations, setConversations] = useState<ConversationInfo[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [selectedGroupInfo, setSelectedGroupInfo] = useState<GroupInfo | null>(null);
   const [members, setMembers] = useState<MemberInfo[]>([]);
   const [messages, setMessages] = useState<MessageInfo[]>([]);
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [messageDraft, setMessageDraft] = useState("");
+  const [replyingTo, setReplyingTo] = useState<ReplyPreviewInfo | null>(null);
   const [search, setSearch] = useState("");
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -141,29 +225,47 @@ function App() {
   const connectNowRef = useRef<(() => void) | null>(null);
   const realtimeRecoveringRef = useRef(false);
   const pendingMessagesRef = useRef(new Map<string, PendingMessageEntry>());
+  const lastMarkedReadRef = useRef(new Map<string, number>());
+  const handleSocketEventRef = useRef<(raw: string) => void>(() => {});
+  const recoverRealtimeStateRef = useRef<() => Promise<void>>(async () => {});
 
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.conversationId === selectedConversationId) ?? null,
     [conversations, selectedConversationId]
   );
-  const canSendCurrentConversation = useMemo(
-    () => canSendToConversation(selectedConversation, members, friends),
-    [selectedConversation, members, friends]
-  );
+  const currentMember = useMemo(() => {
+    if (!user) return null;
+    return members.find((member) => member.userId === user.user_id) ?? null;
+  }, [members, user]);
+  const canSendCurrentConversation = useMemo(() => {
+    if (!canSendToConversation(selectedConversation, members, friends)) {
+      return false;
+    }
+    if (!selectedConversation) {
+      return false;
+    }
+    if (isMemberMuted(currentMember)) {
+      return false;
+    }
+    if (
+      selectedConversation.type === "GROUP" &&
+      selectedConversation.muteAll &&
+      currentMember?.role !== "OWNER" &&
+      currentMember?.role !== "ADMIN"
+    ) {
+      return false;
+    }
+    return true;
+  }, [currentMember, friends, members, selectedConversation]);
 
   const filteredConversations = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     if (!keyword) return conversations;
     return conversations.filter((item) => {
       const target = `${item.title} ${item.conversationId} ${item.type}`.toLowerCase();
-      return target.includes(keyword);
+    return target.includes(keyword);
     });
   }, [conversations, search]);
-
-  const currentMember = useMemo(() => {
-    if (!user) return null;
-    return members.find((member) => member.userId === user.user_id) ?? null;
-  }, [members, user]);
 
   const showToast = useCallback((message: string, tone: ToastTone = "info") => {
     setToast({ tone, message });
@@ -212,6 +314,24 @@ function App() {
     [refreshConversations, refreshFriends, showToast]
   );
 
+  const markConversationRead = useCallback(async (conversationID: string, lastReadMessageId: number) => {
+    if (!conversationID || lastReadMessageId <= 0) {
+      return;
+    }
+    const previous = lastMarkedReadRef.current.get(conversationID) ?? 0;
+    if (previous >= lastReadMessageId) {
+      return;
+    }
+    lastMarkedReadRef.current.set(conversationID, lastReadMessageId);
+    try {
+      await api.markConversationRead(conversationID, lastReadMessageId);
+    } catch {
+      if ((lastMarkedReadRef.current.get(conversationID) ?? 0) === lastReadMessageId) {
+        lastMarkedReadRef.current.delete(conversationID);
+      }
+    }
+  }, []);
+
   const refreshCurrentConversationMessages = useCallback(async () => {
     const conversationID = selectedConversationIdRef.current;
     if (!conversationID) return;
@@ -222,6 +342,18 @@ function App() {
     setMessages((current) => mergeMessagesById(current, nextMessages));
     setUnreadCounts((current) => ({ ...current, [conversationID]: 0 }));
     window.setTimeout(() => scrollMessagesToBottom(messageListRef), 20);
+    const lastReadMessageId = latestMessageId(nextMessages);
+    if (lastReadMessageId > 0) {
+      void markConversationRead(conversationID, lastReadMessageId);
+    }
+  }, [markConversationRead]);
+
+  const refreshSelectedGroupInfo = useCallback(async (conversationId: string) => {
+    const data = await api.groupInfo(conversationId);
+    if (selectedConversationIdRef.current === conversationId) {
+      setSelectedGroupInfo(data);
+    }
+    return data;
   }, []);
 
   const recoverRealtimeState = useCallback(async () => {
@@ -241,12 +373,13 @@ function App() {
       if (!user || message.senderId === user.user_id || document.visibilityState === "visible") return;
       if (!notificationsEnabled) return;
       if (getNotificationStatus() !== "granted") return;
+      if (message.messageType === "SYSTEM") return;
 
-      const title = message.senderType === "BOT" || message.messageType === "BOT_REPLY" ? "AIM Bot 回复" : "AIM 新消息";
-      const content = message.content.trim();
+      const title = message.senderType === "BOT" || message.messageType === "BOT_REPLY" ? "AIM Bot reply" : "AIM new message";
+      const content = messageText(message).trim();
       try {
         new Notification(title, {
-          body: content ? truncateNotificationBody(content) : "收到一条新消息"
+          body: content ? truncateNotificationBody(content) : "You received a new message"
         });
       } catch {
         // Notification support can disappear in restricted browser contexts.
@@ -265,7 +398,7 @@ function App() {
       setNotificationStatus("granted");
       setNotificationsEnabled(true);
       saveNotificationPreference(true);
-      showToast("浏览器通知已开启", "success");
+      showToast("Browser notifications enabled", "success");
       return;
     }
     if (Notification.permission === "denied") {
@@ -280,7 +413,7 @@ function App() {
       setNotificationsEnabled(true);
       saveNotificationPreference(true);
     }
-    showToast(permission === "granted" ? "浏览器通知已开启" : "浏览器通知未开启", permission === "granted" ? "success" : "info");
+    showToast(permission === "granted" ? "Browser notifications enabled" : "Browser notifications not enabled", permission === "granted" ? "success" : "info");
   }, [showToast]);
 
   const handleToggleNotifications = useCallback(async () => {
@@ -288,7 +421,7 @@ function App() {
       const next = !notificationsEnabled;
       setNotificationsEnabled(next);
       saveNotificationPreference(next);
-      showToast(next ? "浏览器通知已开启" : "浏览器通知已关闭", next ? "success" : "info");
+      showToast(next ? "Browser notifications enabled" : "Browser notifications disabled", next ? "success" : "info");
       return;
     }
     await handleRequestNotifications();
@@ -322,6 +455,7 @@ function App() {
     if (selectedConversationId) {
       setUnreadCounts((current) => ({ ...current, [selectedConversationId]: 0 }));
     }
+    setReplyingTo(null);
   }, [selectedConversationId]);
 
   useEffect(() => {
@@ -341,17 +475,31 @@ function App() {
     if (!selectedConversationId) {
       setMessages([]);
       setMembers([]);
+      setSelectedGroupInfo(null);
       return;
     }
 
     let active = true;
     setLoadingMessages(true);
-    Promise.all([api.messages(selectedConversationId, { limit: 30 }), api.members(selectedConversationId)])
-      .then(([nextMessages, nextMembers]) => {
+    const shouldLoadGroupInfo = selectedConversation?.type === "GROUP";
+    if (!shouldLoadGroupInfo) {
+      setSelectedGroupInfo(null);
+    }
+    Promise.all([
+      api.messages(selectedConversationId, { limit: 30 }),
+      api.members(selectedConversationId),
+      shouldLoadGroupInfo ? api.groupInfo(selectedConversationId) : Promise.resolve(null)
+    ])
+      .then(([nextMessages, nextMembers, nextGroupInfo]) => {
         if (!active) return;
         setMessages(mergeMessagesById([], nextMessages));
         setMembers(nextMembers);
+        setSelectedGroupInfo(nextGroupInfo);
         window.setTimeout(() => scrollMessagesToBottom(messageListRef), 20);
+        const lastReadMessageId = latestMessageId(nextMessages);
+        if (lastReadMessageId > 0) {
+          void markConversationRead(selectedConversationId, lastReadMessageId);
+        }
       })
       .catch((error: unknown) => {
         if (!active) return;
@@ -364,7 +512,7 @@ function App() {
     return () => {
       active = false;
     };
-  }, [selectedConversationId, showToast]);
+  }, [markConversationRead, selectedConversation?.type, selectedConversationId, showToast]);
 
   const handleSocketEvent = useCallback(
     (raw: string) => {
@@ -398,22 +546,30 @@ function App() {
               })
             );
             pendingMessagesRef.current.delete(clientMsgID);
+            if (data.status === "SUCCESS" && pendingEntry.conversationId === selectedConversationIdRef.current && data.messageId) {
+              void markConversationRead(pendingEntry.conversationId, data.messageId);
+            }
           }
         }
         if (data.status === "FAILED") {
-          showToast(data.errorMessage || "消息发送失败", "error");
+          showToast(data.errorMessage || "Message send failed", "error");
         }
         return;
       }
 
       if (event.type === "NEW_MESSAGE") {
         const incoming = event.data as MessageInfo;
+        const systemContent = incoming.messageType === "SYSTEM" ? parseSystemMessageContent(incoming.content) : null;
         showMessageNotification(incoming);
         const activeConversationID = selectedConversationIdRef.current;
         if (activeConversationID === incoming.conversationId) {
           setMessages((current) => mergeMessagesById(current, [incoming]));
           window.setTimeout(() => scrollMessagesToBottom(messageListRef), 20);
-        } else {
+          void markConversationRead(incoming.conversationId, incoming.id);
+          if (systemContent?.eventType === "ANNOUNCEMENT_UPDATED") {
+            void refreshSelectedGroupInfo(incoming.conversationId);
+          }
+        } else if (incoming.messageType !== "SYSTEM") {
           setUnreadCounts((current) => ({
             ...current,
             [incoming.conversationId]: (current[incoming.conversationId] ?? 0) + 1
@@ -430,7 +586,9 @@ function App() {
                     lastMessageAt: incoming.createdAt,
                     lastMessageSenderId: incoming.senderId,
                     lastMessageSenderName:
-                      incoming.senderType === "BOT" || incoming.messageType === "BOT_REPLY"
+                      incoming.senderType === "SYSTEM" || incoming.messageType === "SYSTEM"
+                        ? ""
+                        : incoming.senderType === "BOT" || incoming.messageType === "BOT_REPLY"
                         ? "Bot"
                         : incoming.senderId === user?.user_id
                           ? user.nickname || user.aim_id
@@ -442,6 +600,24 @@ function App() {
             )
           )
         );
+        return;
+      }
+
+      if (event.type === "MESSAGE_RECALLED") {
+        const recalled = event.data as Partial<MessageRecalledEventInfo> | undefined;
+        if (
+          !recalled ||
+          typeof recalled.messageId !== "number" ||
+          recalled.messageId <= 0 ||
+          typeof recalled.conversationId !== "string" ||
+          !recalled.conversationId
+        ) {
+          return;
+        }
+        applyRecalledMessageEvent({
+          messageId: recalled.messageId,
+          conversationId: recalled.conversationId
+        });
         return;
       }
 
@@ -458,8 +634,24 @@ function App() {
         });
       }
     },
-    [showMessageNotification, showToast, syncFriendStateFromRealtime, user]
+    [
+      applyRecalledMessageEvent,
+      markConversationRead,
+      refreshSelectedGroupInfo,
+      showMessageNotification,
+      showToast,
+      syncFriendStateFromRealtime,
+      user
+    ]
   );
+
+  useEffect(() => {
+    handleSocketEventRef.current = handleSocketEvent;
+  }, [handleSocketEvent]);
+
+  useEffect(() => {
+    recoverRealtimeStateRef.current = recoverRealtimeState;
+  }, [recoverRealtimeState]);
 
   useEffect(() => {
     if (!user) {
@@ -510,7 +702,7 @@ function App() {
         if (disposed) return;
         reconnectAttemptRef.current = 0;
         setWsStatus("open");
-        void recoverRealtimeState();
+        void recoverRealtimeStateRef.current();
       };
       socket.onclose = () => {
         if (disposed) return;
@@ -526,7 +718,7 @@ function App() {
         socket.close();
       };
       socket.onmessage = (event) => {
-        handleSocketEvent(event.data);
+        handleSocketEventRef.current(event.data);
       };
     }
 
@@ -541,7 +733,7 @@ function App() {
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [handleSocketEvent, recoverRealtimeState, user]);
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -639,7 +831,7 @@ function App() {
       await refreshConversations();
       setSelectedConversationId(conversationId);
       setMobilePane("chat");
-      showToast("已加入群聊", "success");
+      showToast("Joined group", "success");
     } catch (error) {
       showToast(errorMessage(error), "error");
     } finally {
@@ -653,7 +845,7 @@ function App() {
     try {
       await api.leaveGroup(selectedConversationId);
       await refreshConversations();
-      showToast("已退出群聊", "success");
+      showToast("Left group", "success");
     } catch (error) {
       showToast(errorMessage(error), "error");
     } finally {
@@ -669,6 +861,136 @@ function App() {
       setMembers(nextMembers);
     } catch (error) {
       throw error;
+    }
+  };
+
+  const refreshSelectedConversationState = useCallback(async () => {
+    const conversationId = selectedConversationIdRef.current;
+    if (!conversationId) return;
+
+    const shouldRefreshGroupInfo = selectedConversation?.type === "GROUP";
+    const [nextMembers, nextGroupInfo] = await Promise.all([
+      api.members(conversationId),
+      shouldRefreshGroupInfo ? api.groupInfo(conversationId) : Promise.resolve(null),
+      refreshConversations()
+    ]);
+    if (selectedConversationIdRef.current === conversationId) {
+      setMembers(nextMembers);
+      setSelectedGroupInfo(nextGroupInfo);
+      await refreshCurrentConversationMessages();
+    }
+  }, [refreshConversations, refreshCurrentConversationMessages, selectedConversation?.type]);
+
+  const handleTransferOwner = async (targetUserId: number) => {
+    if (!selectedConversationId) return;
+    setBusyAction(true);
+    try {
+      await api.transferOwner(selectedConversationId, targetUserId);
+      await refreshSelectedConversationState();
+      showToast("Ownership transferred", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleSetAdmin = async (targetUserId: number) => {
+    if (!selectedConversationId) return;
+    setBusyAction(true);
+    try {
+      await api.setAdmin(selectedConversationId, targetUserId);
+      await refreshSelectedConversationState();
+      showToast("管理员已设置", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleRemoveAdmin = async (targetUserId: number) => {
+    if (!selectedConversationId) return;
+    setBusyAction(true);
+    try {
+      await api.removeAdmin(selectedConversationId, targetUserId);
+      await refreshSelectedConversationState();
+      showToast("管理员已取消", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleMuteMember = async (targetUserId: number, durationSeconds: number) => {
+    if (!selectedConversationId || durationSeconds <= 0) return;
+    setBusyAction(true);
+    try {
+      const muteUntil = Math.floor(Date.now() / 1000) + durationSeconds;
+      await api.muteMember(selectedConversationId, targetUserId, muteUntil);
+      await refreshSelectedConversationState();
+      showToast("成员已禁言", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleUnmuteMember = async (targetUserId: number) => {
+    if (!selectedConversationId) return;
+    setBusyAction(true);
+    try {
+      await api.unmuteMember(selectedConversationId, targetUserId);
+      await refreshSelectedConversationState();
+      showToast("已解除禁言", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleRemoveMember = async (targetUserId: number) => {
+    if (!selectedConversationId) return;
+    setBusyAction(true);
+    try {
+      await api.removeMember(selectedConversationId, targetUserId);
+      await refreshSelectedConversationState();
+      showToast("Member removed from group", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleSetGroupMuteAll = async (muteAll: boolean) => {
+    if (!selectedConversationId) return;
+    setBusyAction(true);
+    try {
+      await api.setGroupMuteAll(selectedConversationId, muteAll);
+      await refreshSelectedConversationState();
+      showToast(muteAll ? "已开启全员禁言" : "已关闭全员禁言", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleUpdateGroupAnnouncement = async (announcement: string) => {
+    if (!selectedConversationId) return;
+    setBusyAction(true);
+    try {
+      await api.updateGroupAnnouncement(selectedConversationId, announcement);
+      await Promise.all([refreshSelectedGroupInfo(selectedConversationId), refreshSelectedConversationState()]);
+      showToast("Group announcement updated", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+    } finally {
+      setBusyAction(false);
     }
   };
 
@@ -702,32 +1024,93 @@ function App() {
     });
   }, []);
 
-  const handleSendMessage = () => {
+  const handleReplyMessage = useCallback((message: MessageInfo) => {
+    if (message.pending || message.id <= 0 || message.status !== "NORMAL") {
+      return;
+    }
+    setReplyingTo(buildReplyPreview(message));
+    window.requestAnimationFrame(() => {
+      composerRef.current?.focus();
+    });
+  }, []);
+
+  function applyRecalledMessageEvent(event: MessageRecalledEventInfo) {
+    setMessages((current) => applyMessageRecalled(current, event));
+    setConversations((current) => applyConversationRecalled(current, event));
+    setReplyingTo((current) =>
+      current?.messageId === event.messageId
+        ? {
+            ...current,
+            contentPreview: RECALLED_MESSAGE_PLACEHOLDER
+          }
+        : current
+    );
+  }
+
+  const handleRecallMessage = useCallback(
+    async (message: MessageInfo) => {
+      if (!message || message.pending || message.id <= 0 || message.status !== "NORMAL") {
+        return;
+      }
+      if (!window.confirm("确认撤回这条消息吗？")) {
+        return;
+      }
+      try {
+        await api.recallMessage(message.conversationId, message.id);
+        applyRecalledMessageEvent({
+          messageId: message.id,
+          conversationId: message.conversationId
+        });
+      } catch (error) {
+        showToast(errorMessage(error), "error");
+      }
+    },
+    [applyRecalledMessageEvent, showToast]
+  );
+
+  const handleSendMessage = (payload?: OutgoingMessagePayload) => {
     const content = messageDraft.trim();
-    if (!selectedConversationId || !content || !user) return;
+    if (!selectedConversationId || !user) return;
     if (!canSendCurrentConversation) {
-      showToast("已不是好友，不能继续发送单聊消息", "error");
+      showToast("You cannot continue sending messages in this conversation.", "error");
       return;
     }
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-      showToast("实时连接未就绪", "error");
+      showToast("Realtime connection is not ready", "error");
+      return;
+    }
+
+    const outgoing =
+      payload ??
+      (content
+        ? {
+            messageType: "TEXT" as const,
+            content: JSON.stringify({ text: content })
+          }
+        : null);
+    if (!outgoing) {
       return;
     }
 
     const clientMsgId = `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     const tempId = -1 * (Date.now() + Math.floor(Math.random() * 1000));
     const createdAt = Math.floor(Date.now() / 1000);
+    const replyToId = replyingTo?.messageId && replyingTo.messageId > 0 ? replyingTo.messageId : undefined;
     const pendingMessage: MessageInfo = {
       id: tempId,
       clientMsgId,
       conversationId: selectedConversationId,
       senderId: user.user_id,
       senderType: "USER",
-      messageType: "TEXT",
-      content,
+      messageType: outgoing.messageType,
+      content: outgoing.content,
+      replyToId,
+      replyTo: replyingTo,
       status: "NORMAL",
       createdAt,
+      readByPeer: selectedConversation?.type === "SINGLE" ? false : undefined,
+      readCount: selectedConversation?.type === "GROUP" ? 0 : undefined,
       pending: true
     };
 
@@ -742,7 +1125,7 @@ function App() {
           item.conversationId === selectedConversationId
             ? {
                 ...item,
-                lastMessageContent: content,
+                lastMessageContent: outgoing.content,
                 lastMessageSenderId: user.user_id,
                 lastMessageSenderName: user.nickname || user.aim_id,
                 updatedAt: createdAt,
@@ -761,10 +1144,13 @@ function App() {
           clientMsgId,
           data: {
             conversationId: selectedConversationId,
-            content
+            messageType: outgoing.messageType,
+            content: outgoing.content,
+            replyToId
           }
         })
       );
+      setReplyingTo(null);
     } catch {
       pendingMessagesRef.current.delete(clientMsgId);
       setMessages((current) =>
@@ -773,10 +1159,12 @@ function App() {
           status: "FAILED"
         })
       );
-      showToast("发送失败", "error");
+      showToast("Send failed", "error");
       return;
     }
-    setMessageDraft("");
+    if (outgoing.messageType === "TEXT") {
+      setMessageDraft("");
+    }
   };
 
   const handleLoadOlder = async () => {
@@ -795,7 +1183,7 @@ function App() {
 
   const handleRevokeSession = async (sessionId: string, password: string) => {
     if (!password.trim()) {
-      showToast("请输入密码", "error");
+      showToast("Please enter your password", "error");
       return;
     }
     setBusyAction(true);
@@ -812,7 +1200,7 @@ function App() {
 
   const handleLogoutAll = async (password: string) => {
     if (!password.trim()) {
-      showToast("请输入密码", "error");
+      showToast("Please enter your password", "error");
       return;
     }
     setBusyAction(true);
@@ -837,7 +1225,7 @@ function App() {
             : member
         )
       );
-      showToast("头像已更新", "success");
+      showToast("Avatar updated", "success");
     } catch (error) {
       showToast(errorMessage(error), "error");
     } finally {
@@ -871,7 +1259,7 @@ function App() {
       await refreshFriends();
       setDetailTab("friends");
       setMobilePane("friends");
-      showToast(`好友申请已发送给：${request.nickname || request.aim_id}`, "success");
+      showToast(`好友申请已发送给${request.nickname || request.aim_id}`, "success");
     } catch (error) {
       showToast(errorMessage(error), "error");
     } finally {
@@ -897,11 +1285,11 @@ function App() {
           setDetailTab("friends");
           setMobilePane("friends");
         }
-        showToast(`已同意 ${response.friend?.nickname || response.request.nickname} 的好友申请`, "success");
+        showToast(`Accepted ${response.friend?.nickname || response.request.nickname}` + "'s friend request", "success");
       } else {
         setDetailTab("friends");
         setMobilePane("friends");
-        showToast(`已拒绝 ${response.request.nickname} 的好友申请`, "info");
+        showToast(`Rejected ${response.request.nickname}` + "'s friend request", "info");
       }
     } catch (error) {
       showToast(errorMessage(error), "error");
@@ -920,7 +1308,7 @@ function App() {
       setFriends((current) =>
         sortFriends(current.map((item) => (item.user_id === friendUserId ? updated : item)))
       );
-      showToast("好友信息已更新", "success");
+      showToast("Friend updated", "success");
     } catch (error) {
       showToast(errorMessage(error), "error");
     } finally {
@@ -933,7 +1321,7 @@ function App() {
     try {
       await api.deleteFriend(friendUserId);
       setFriends((current) => current.filter((item) => item.user_id !== friendUserId));
-      showToast("好友已删除", "success");
+      showToast("Friend deleted", "success");
     } catch (error) {
       showToast(errorMessage(error), "error");
     } finally {
@@ -988,7 +1376,7 @@ function App() {
     try {
       await api.addConversationBot(selectedConversationId, input);
       await refreshConversationBots();
-      showToast("Bot 已添加", "success");
+      showToast("Bot added", "success");
     } catch (error) {
       showToast(errorMessage(error), "error");
     } finally {
@@ -1002,7 +1390,7 @@ function App() {
     try {
       await api.removeConversationBot(selectedConversationId, botId);
       await refreshConversationBots();
-      showToast("Bot 已移除", "success");
+      showToast("Bot removed", "success");
     } catch (error) {
       showToast(errorMessage(error), "error");
     } finally {
@@ -1104,6 +1492,7 @@ function App() {
         loadingOlder={loadingOlder}
         messages={messages}
         messageDraft={messageDraft}
+        replyingTo={replyingTo}
         wsStatus={wsStatus}
         busy={busyAction}
         messageListRef={messageListRef}
@@ -1119,6 +1508,9 @@ function App() {
           setMobilePane("members");
         }}
         onMention={handleMention}
+        onReplySelect={handleReplyMessage}
+        onRecallMessage={handleRecallMessage}
+        onCancelReply={() => setReplyingTo(null)}
         onSend={handleSendMessage}
       />
 
@@ -1137,7 +1529,9 @@ function App() {
         notificationStatus={notificationStatus}
         notificationsEnabled={notificationsEnabled}
         selectedConversationId={selectedConversationId}
+        selectedConversation={selectedConversation}
         selectedConversationType={selectedConversation?.type ?? null}
+        selectedGroupInfo={selectedGroupInfo}
         currentMember={currentMember}
         availableBots={availableBots}
         conversationBots={conversationBots}
@@ -1158,6 +1552,14 @@ function App() {
         onAvatarUpload={handleAvatarUpload}
         onRevokeSession={handleRevokeSession}
         onToggleNotifications={handleToggleNotifications}
+        onTransferOwner={handleTransferOwner}
+        onSetAdmin={handleSetAdmin}
+        onRemoveAdmin={handleRemoveAdmin}
+        onMuteMember={handleMuteMember}
+        onUnmuteMember={handleUnmuteMember}
+        onRemoveMember={handleRemoveMember}
+        onSetGroupMuteAll={handleSetGroupMuteAll}
+        onUpdateGroupAnnouncement={handleUpdateGroupAnnouncement}
         onAddBot={handleAddBot}
         onRemoveBot={handleRemoveBot}
         onAICallLogStatusChange={setAICallLogStatus}
@@ -1359,8 +1761,8 @@ function ConversationPanel({
 
       {createOpen && (
         <form className="drawer-form" onSubmit={create}>
-          <input required value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="会话名称" />
-          <textarea value={announcement} onChange={(event) => setAnnouncement(event.target.value)} rows={3} placeholder="群公告" />
+          <input required value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="Group name" />
+          <textarea value={announcement} onChange={(event) => setAnnouncement(event.target.value)} rows={3} placeholder="Announcement" />
           <select value={joinPolicy} onChange={(event) => setJoinPolicy(event.target.value)}>
             {joinPolicies.map((item) => (
               <option key={item.value} value={item.value}>
@@ -1377,7 +1779,7 @@ function ConversationPanel({
 
       {joinOpen && (
         <form className="drawer-form" onSubmit={join}>
-          <input required value={joinID} onChange={(event) => setJoinID(event.target.value)} placeholder="conversationId（如 c_xxxxx）" />
+          <input required value={joinID} onChange={(event) => setJoinID(event.target.value)} placeholder="conversationId (for example c_xxxxx)" />
           <button disabled={busy} type="submit">
             {busy ? <Loader2 className="spin" size={16} /> : <UserPlus size={16} />}
             加入
@@ -1387,7 +1789,7 @@ function ConversationPanel({
 
       <label className="search-box">
         <Search size={17} />
-        <input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="搜索会话或 ID" />
+        <input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search conversations or IDs" />
       </label>
 
       <div className="list-meta">
@@ -1444,6 +1846,7 @@ function ChatPanel({
   loadingOlder,
   messages,
   messageDraft,
+  replyingTo,
   wsStatus,
   busy,
   messageListRef,
@@ -1456,6 +1859,9 @@ function ChatPanel({
   onOpenMembers,
   onInviteMember,
   onMention,
+  onReplySelect,
+  onRecallMessage,
+  onCancelReply,
   onSend
 }: {
   active: boolean;
@@ -1467,6 +1873,7 @@ function ChatPanel({
   loadingOlder: boolean;
   messages: MessageInfo[];
   messageDraft: string;
+  replyingTo: ReplyPreviewInfo | null;
   wsStatus: WsStatus;
   busy: boolean;
   messageListRef: React.RefObject<HTMLDivElement | null>;
@@ -1479,12 +1886,23 @@ function ChatPanel({
   onOpenMembers: () => void;
   onInviteMember?: (targetUserId: number) => Promise<void>;
   onMention: (mentionTarget: string) => void;
-  onSend: () => void;
+  onReplySelect: (message: MessageInfo) => void;
+  onRecallMessage: (message: MessageInfo) => Promise<void>;
+  onCancelReply: () => void;
+  onSend: (payload?: OutgoingMessagePayload) => void;
 }) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteFriends, setInviteFriends] = useState<FriendInfo[]>([]);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteInvitingId, setInviteInvitingId] = useState<number | null>(null);
+  const [mediaMode, setMediaMode] = useState<"IMAGE" | "FILE" | "VOICE" | null>(null);
+  const [mediaURL, setMediaURL] = useState("");
+  const [mediaName, setMediaName] = useState("");
+  const [mediaMimeType, setMediaMimeType] = useState("");
+  const [mediaSize, setMediaSize] = useState("");
+  const [imageWidth, setImageWidth] = useState("");
+  const [imageHeight, setImageHeight] = useState("");
+  const [voiceDurationMs, setVoiceDurationMs] = useState("");
 
   const isGroupChat = conversation?.type === "GROUP";
   const memberUserIds = useMemo(() => new Set(members.filter((m) => m.memberType !== "BOT").map((m) => m.userId)), [members]);
@@ -1511,15 +1929,148 @@ function ChatPanel({
       setInviteFriends((prev) => prev.filter((f) => f.user_id !== friend.user_id));
       setInviteOpen(false);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "邀请失败");
+      alert(err instanceof Error ? err.message : "Invite failed");
     } finally {
       setInviteInvitingId(null);
     }
   };
 
+  const resetMediaComposer = useCallback(() => {
+    setMediaMode(null);
+    setMediaURL("");
+    setMediaName("");
+    setMediaMimeType("");
+    setMediaSize("");
+    setImageWidth("");
+    setImageHeight("");
+    setVoiceDurationMs("");
+  }, []);
+
+  const toggleMediaMode = useCallback(
+    (mode: "IMAGE" | "FILE" | "VOICE") => {
+      if (mediaMode === mode) {
+        resetMediaComposer();
+        return;
+      }
+      setMediaMode(mode);
+      setMediaURL("");
+      setMediaName("");
+      setMediaMimeType("");
+      setMediaSize("");
+      setImageWidth("");
+      setImageHeight("");
+      setVoiceDurationMs("");
+    },
+    [mediaMode, resetMediaComposer]
+  );
+
+  const handleSendMedia = () => {
+    if (!mediaMode) return;
+    const url = mediaURL.trim();
+    const name = mediaName.trim();
+    const mimeType = mediaMimeType.trim();
+    if (!url || !name || !mimeType) return;
+
+    if (mediaMode === "IMAGE") {
+      const payload = {
+        url,
+        name,
+        mimeType,
+        size: mediaSize.trim() ? Number(mediaSize) : undefined,
+        width: imageWidth.trim() ? Number(imageWidth) : undefined,
+        height: imageHeight.trim() ? Number(imageHeight) : undefined
+      };
+      onSend({
+        messageType: "IMAGE",
+        content: JSON.stringify(payload)
+      });
+      resetMediaComposer();
+      return;
+    }
+
+    if (mediaMode === "FILE") {
+      const size = Number(mediaSize);
+      if (!Number.isFinite(size) || size <= 0) return;
+      onSend({
+        messageType: "FILE",
+        content: JSON.stringify({
+          url,
+          name,
+          mimeType,
+          size
+        })
+      });
+      resetMediaComposer();
+      return;
+    }
+
+    const durationMs = Number(voiceDurationMs);
+    if (!Number.isFinite(durationMs) || durationMs <= 0) return;
+    onSend({
+      messageType: "VOICE",
+      content: JSON.stringify({
+        url,
+        name,
+        mimeType,
+        size: mediaSize.trim() ? Number(mediaSize) : undefined,
+        durationMs
+      })
+    });
+    resetMediaComposer();
+  };
+
   const sendDisabled = !conversation || !canSend || !messageDraft.trim() || wsStatus !== "open";
   const composerDisabled = !conversation || !canSend || wsStatus !== "open";
+  const mediaSendDisabled =
+    !conversation ||
+    !canSend ||
+    wsStatus !== "open" ||
+    !mediaMode ||
+    !mediaURL.trim() ||
+    !mediaName.trim() ||
+    !mediaMimeType.trim() ||
+    (mediaMode === "FILE" && (!mediaSize.trim() || Number(mediaSize) <= 0)) ||
+    (mediaMode === "VOICE" && (!voiceDurationMs.trim() || Number(voiceDurationMs) <= 0));
   const memberMap = useMemo(() => new Map(members.map((member) => [member.userId, member])), [members]);
+  const resolveReplySenderLabel = useCallback(
+    (replyPreview: ReplyPreviewInfo | null | undefined) => {
+      if (!replyPreview) {
+        return "Original message unavailable";
+      }
+      if (replyPreview.senderType === "SYSTEM") {
+        return "System";
+      }
+      if (replyPreview.senderType === "BOT") {
+        const botMember = memberMap.get(replyPreview.senderId);
+        return botMember?.nickname || botMember?.mentionName || `Bot ${replyPreview.senderId}`;
+      }
+      if (replyPreview.senderId === currentUser.user_id) {
+        return currentUser.nickname || currentUser.aim_id;
+      }
+      return memberMap.get(replyPreview.senderId)?.nickname || `User ${replyPreview.senderId}`;
+    },
+    [currentUser.aim_id, currentUser.nickname, currentUser.user_id, memberMap]
+  );
+  /* const lockedReason = !conversation
+    ? ""
+    : conversation.type === "SINGLE"
+      ? "已不是好友，不能继续发送单聊消息"
+      : isMemberMuted(currentMember)
+        ? `你已被禁言?${formatMuteUntil(currentMember?.muteUntil)}`
+        : conversation.muteAll && currentMember?.role !== "OWNER" && currentMember?.role !== "ADMIN"
+          ? "当前群已开启全员禁言"
+          : "当前无法发送消息";
+
+  */
+  const lockedReason = !conversation
+    ? ""
+    : conversation.type === "SINGLE"
+      ? "You can no longer send direct messages in this conversation."
+      : isMemberMuted(currentMember)
+        ? `You are muted until ${formatMuteUntil(currentMember?.muteUntil)}`
+        : conversation.muteAll && currentMember?.role !== "OWNER" && currentMember?.role !== "ADMIN"
+          ? "This group is muted for regular members."
+          : "You cannot send messages right now.";
 
   const onComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (!canSend) {
@@ -1530,6 +2081,10 @@ function ChatPanel({
       onSend();
     }
   };
+
+  useEffect(() => {
+    resetMediaComposer();
+  }, [conversation?.conversationId, resetMediaComposer]);
 
   return (
     <main className={cx("pane chat-pane", active && "mobile-active")}>
@@ -1552,11 +2107,11 @@ function ChatPanel({
               <PanelRightOpen size={19} />
             </IconButton>
             {isGroupChat && onInviteMember && (
-              <IconButton label="邀请好友" onClick={openInviteDialog}>
+              <IconButton label="Invite friend" onClick={openInviteDialog}>
                 <UserPlus size={19} />
               </IconButton>
             )}
-            <IconButton label="退出群聊" disabled={busy} onClick={() => void onLeaveGroup()}>
+            <IconButton label="Leave group" disabled={busy} onClick={() => void onLeaveGroup()}>
               <DoorOpen size={19} />
             </IconButton>
           </header>
@@ -1594,8 +2149,12 @@ function ChatPanel({
                     key={message.id}
                     message={message}
                     mine={mine}
+                    readReceiptLabel={readReceiptLabel(conversation, message, mine)}
+                    replySummaryLabel={resolveReplySenderLabel(message.replyTo)}
                     senderAvatar={sender?.avatar}
                     onMention={onMention}
+                    onReply={() => onReplySelect(message)}
+                    onRecall={() => void onRecallMessage(message)}
                     mentionTarget={message.senderType === "BOT" ? sender?.mentionName || sender?.nickname : sender?.nickname}
                     senderName={sender?.nickname || `用户 ${message.senderId}`}
                   />
@@ -1604,30 +2163,96 @@ function ChatPanel({
             ) : (
               <div className="empty-thread">
                 <MessageCircle size={36} />
-                <strong>还没有消息</strong>
+                <strong>No messages yet</strong>
               </div>
             )}
           </div>
 
           {canSend ? (
             <footer className="composer">
-            <textarea
-              ref={composerRef}
-              value={messageDraft}
-              onChange={(event) => onDraftChange(event.target.value)}
-              onKeyDown={onComposerKeyDown}
-              rows={1}
-              disabled={composerDisabled}
-              placeholder={wsStatus === "open" ? "发送文本消息" : "正在连接实时通道"}
-            />
-              <button aria-label="发送" disabled={sendDisabled} type="button" onClick={onSend}>
-              <SendHorizontal size={21} />
-            </button>
+              {replyingTo && (
+                <div className="replying-banner">
+                  <div className="replying-banner-copy">
+                    <strong>Replying to {resolveReplySenderLabel(replyingTo)}</strong>
+                    <span>{replyingTo.contentPreview}</span>
+                  </div>
+                  <button type="button" onClick={onCancelReply}>
+                    Cancel
+                  </button>
+                </div>
+              )}
+              {mediaMode && (
+                <div className="media-composer">
+                  <div className="media-composer-grid">
+                    <input value={mediaURL} onChange={(event) => setMediaURL(event.target.value)} placeholder="Media URL" />
+                    <input value={mediaName} onChange={(event) => setMediaName(event.target.value)} placeholder="Name" />
+                    <input value={mediaMimeType} onChange={(event) => setMediaMimeType(event.target.value)} placeholder="MIME type" />
+                    <input
+                      value={mediaSize}
+                      onChange={(event) => setMediaSize(event.target.value)}
+                      inputMode="numeric"
+                      placeholder={mediaMode === "FILE" ? "Size in bytes (required)" : "Size in bytes (optional)"}
+                    />
+                    {mediaMode === "IMAGE" && (
+                      <>
+                        <input value={imageWidth} onChange={(event) => setImageWidth(event.target.value)} inputMode="numeric" placeholder="Width (optional)" />
+                        <input value={imageHeight} onChange={(event) => setImageHeight(event.target.value)} inputMode="numeric" placeholder="Height (optional)" />
+                      </>
+                    )}
+                    {mediaMode === "VOICE" && (
+                      <input
+                        value={voiceDurationMs}
+                        onChange={(event) => setVoiceDurationMs(event.target.value)}
+                        inputMode="numeric"
+                        placeholder="Duration ms (required)"
+                      />
+                    )}
+                  </div>
+                  <div className="media-composer-actions">
+                    <button disabled={mediaSendDisabled} type="button" onClick={handleSendMedia}>
+                      {mediaMode === "IMAGE" ? "Send image" : mediaMode === "FILE" ? "Send file" : "Send voice"}
+                    </button>
+                    <button type="button" onClick={resetMediaComposer}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="composer-tools">
+                <button className={cx(mediaMode === "IMAGE" && "active")} type="button" onClick={() => toggleMediaMode("IMAGE")}>
+                  <FileImage size={16} />
+                  Image
+                </button>
+                <button className={cx(mediaMode === "FILE" && "active")} type="button" onClick={() => toggleMediaMode("FILE")}>
+                  <Paperclip size={16} />
+                  File
+                </button>
+                <button className={cx(mediaMode === "VOICE" && "active")} type="button" onClick={() => toggleMediaMode("VOICE")}>
+                  <Mic size={16} />
+                  Voice
+                </button>
+              </div>
+
+              <div className="composer-input-row">
+                <textarea
+                  ref={composerRef}
+                  value={messageDraft}
+                  onChange={(event) => onDraftChange(event.target.value)}
+                  onKeyDown={onComposerKeyDown}
+                  rows={1}
+                  disabled={composerDisabled}
+                  placeholder={wsStatus === "open" ? "Send a message" : "Connecting to realtime channel"}
+                />
+                <button aria-label="Send" disabled={sendDisabled} type="button" onClick={() => onSend()}>
+                  <SendHorizontal size={21} />
+                </button>
+              </div>
             </footer>
           ) : (
-            <footer className="composer composer-locked">
+            <footer className="composer composer-locked" title={lockedReason}>
               <LockKeyhole size={18} />
-              <span>已不是好友，不能继续发送单聊消息</span>
+              <span>{lockedReason}</span>
             </footer>
           )}
         </>
@@ -1635,7 +2260,7 @@ function ChatPanel({
         <div className="no-selection">
           <div className="brand-mark">A</div>
           <h2>AIM</h2>
-          <p>选择会话后开始聊天</p>
+          <p>Pick a conversation to start chatting</p>
         </div>
       )}
 
@@ -1643,7 +2268,7 @@ function ChatPanel({
         <div className="modal-overlay" onClick={() => setInviteOpen(false)}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <strong>邀请好友进群</strong>
+              <strong>Invite a friend</strong>
               <button type="button" onClick={() => setInviteOpen(false)}>
                 <X size={18} />
               </button>
@@ -1654,7 +2279,7 @@ function ChatPanel({
               </div>
             ) : inviteFriends.length === 0 ? (
               <div className="center-state" style={{ padding: "2rem 0" }}>
-                <p>暂无可邀请的好友</p>
+                <p>No inviteable friends</p>
               </div>
             ) : (
               <div className="invite-friend-list">
@@ -1666,10 +2291,10 @@ function ChatPanel({
                       <Avatar name={friend.nickname || friend.aim_id} src={friend.avatar} />
                       <div className="invite-friend-info">
                         <strong>{friend.remark || friend.nickname || friend.aim_id}</strong>
-                        <span>{alreadyIn ? "已在群内" : friend.nickname || friend.aim_id}</span>
+                        <span>{alreadyIn ? "Already in group" : friend.nickname || friend.aim_id}</span>
                       </div>
                       {alreadyIn ? (
-                        <span className="invite-badge in-group">已在群内</span>
+                        <span className="invite-badge in-group">Already in group</span>
                       ) : (
                         <button
                           className="btn btn-sm"
@@ -1677,7 +2302,7 @@ function ChatPanel({
                           type="button"
                           onClick={() => void handleInviteFriend(friend)}
                         >
-                          {inviting ? <Loader2 className="spin" size={14} /> : "邀请"}
+                          {inviting ? <Loader2 className="spin" size={14} /> : "Invite"}
                         </button>
                       )}
                     </div>
@@ -1707,7 +2332,9 @@ function DetailPanel({
   notificationStatus,
   notificationsEnabled,
   selectedConversationId,
+  selectedConversation,
   selectedConversationType,
+  selectedGroupInfo,
   currentMember,
   availableBots,
   conversationBots,
@@ -1728,6 +2355,14 @@ function DetailPanel({
   onAvatarUpload,
   onRevokeSession,
   onToggleNotifications,
+  onTransferOwner,
+  onSetAdmin,
+  onRemoveAdmin,
+  onMuteMember,
+  onUnmuteMember,
+  onRemoveMember,
+  onSetGroupMuteAll,
+  onUpdateGroupAnnouncement,
   onAddBot,
   onRemoveBot,
   onAICallLogStatusChange,
@@ -1749,7 +2384,9 @@ function DetailPanel({
   notificationStatus: BrowserNotificationStatus;
   notificationsEnabled: boolean;
   selectedConversationId: string | null;
+  selectedConversation: ConversationInfo | null;
   selectedConversationType: ConversationInfo["type"] | null;
+  selectedGroupInfo: GroupInfo | null;
   currentMember: MemberInfo | null;
   availableBots: BotInfo[];
   conversationBots: BotInfo[];
@@ -1770,6 +2407,14 @@ function DetailPanel({
   onAvatarUpload: (avatar: Blob) => Promise<void>;
   onRevokeSession: (sessionId: string, password: string) => Promise<void>;
   onToggleNotifications: () => Promise<void>;
+  onTransferOwner: (targetUserId: number) => Promise<void>;
+  onSetAdmin: (targetUserId: number) => Promise<void>;
+  onRemoveAdmin: (targetUserId: number) => Promise<void>;
+  onMuteMember: (targetUserId: number, durationSeconds: number) => Promise<void>;
+  onUnmuteMember: (targetUserId: number) => Promise<void>;
+  onRemoveMember: (targetUserId: number) => Promise<void>;
+  onSetGroupMuteAll: (muteAll: boolean) => Promise<void>;
+  onUpdateGroupAnnouncement: (announcement: string) => Promise<void>;
   onAddBot: (input: {
     botId: number;
     displayNameOverride?: string;
@@ -1823,7 +2468,22 @@ function DetailPanel({
           onDeleteFriend={onDeleteFriend}
         />
       ) : tab === "members" ? (
-        <MembersViewClean members={members} onMention={onMention} />
+        <MembersViewClean
+          members={members}
+          selectedConversation={selectedConversation}
+          groupInfo={selectedGroupInfo}
+          currentMember={currentMember}
+          busy={busy}
+          onMention={onMention}
+          onTransferOwner={onTransferOwner}
+          onSetAdmin={onSetAdmin}
+          onRemoveAdmin={onRemoveAdmin}
+          onMuteMember={onMuteMember}
+          onUnmuteMember={onUnmuteMember}
+          onRemoveMember={onRemoveMember}
+          onSetGroupMuteAll={onSetGroupMuteAll}
+          onUpdateGroupAnnouncement={onUpdateGroupAnnouncement}
+        />
       ) : tab === "bots" ? (
         <BotPanelClean
           selectedConversationId={selectedConversationId}
@@ -1940,14 +2600,14 @@ function FriendsView({
           <input required value={targetAimId} onChange={(event) => setTargetAimId(event.target.value)} placeholder="目标 AIM ID" />
           <input value={remark} onChange={(event) => setRemark(event.target.value)} placeholder="备注（可选）" />
           <select value={groupId ?? ""} onChange={(event) => setGroupId(parseGroupValue(event.target.value))}>
-            <option value="">未分组</option>
+            <option value="">Ungrouped</option>
             {friendGroups.map((group) => (
               <option key={group.id} value={group.id}>
                 {group.name}
               </option>
             ))}
           </select>
-          <span className="form-hint">对方同意申请后，双方才会建立好友关系并创建单聊。</span>
+          <span className="form-hint">A chat will be created after the request is accepted.</span>
           <button disabled={busy} type="submit">
             {busy ? <Loader2 className="spin" size={16} /> : <UserPlus size={16} />}
             发送申请
@@ -2029,14 +2689,14 @@ function FriendsView({
           <div className="empty-block">
             <UserRound size={28} />
             <strong>当前分组暂无好友</strong>
-            <span>切换到其他分组，或者把好友移动到这个分组。</span>
+            <span>Move friends to another group or switch filters.</span>
           </div>
         )}
         {friends.length === 0 && (
           <div className="empty-block">
             <UserRound size={28} />
-            <strong>还没有好友</strong>
-            <span>可以先按 AIM ID 添加一个。</span>
+            <strong>No friends yet</strong>
+            <span>You can add one by AIM ID first.</span>
           </div>
         )}
       </div>
@@ -2062,7 +2722,7 @@ function FriendRequestRow({
         <Avatar name={request.nickname || request.aim_id} src={request.avatar} />
         <div className="friend-card-meta">
           <strong>{request.nickname || request.aim_id}</strong>
-          <span>{request.aim_id} {" · "} {incoming ? "收到的申请" : "发出的申请"}</span>
+          <span>{request.aim_id} {"  "} {incoming ? "Incoming request" : "Outgoing request"}</span>
         </div>
         <StatusPill label={request.status} />
       </div>
@@ -2125,7 +2785,7 @@ function FriendRow({
         <Avatar name={friend.nickname || friend.aim_id} src={friend.avatar} />
         <div className="friend-card-meta">
           <strong>{friend.remark || friend.nickname || friend.aim_id}</strong>
-          <span>{friend.aim_id} {" · "} {assignedGroup?.name || "未分组"}</span>
+          <span>{friend.aim_id} {"  "} {assignedGroup?.name || "Ungrouped"}</span>
         </div>
         <div className="friend-card-side">
           <StatusPill label={friend.status} />
@@ -2145,7 +2805,7 @@ function FriendRow({
           <label className="field compact-field">
             <span>分组</span>
             <select value={groupId ?? ""} onChange={(event) => setGroupId(parseGroupValue(event.target.value))}>
-              <option value="">未分组</option>
+              <option value="">Ungrouped</option>
               {friendGroups.map((group) => (
                 <option key={group.id} value={group.id}>
                   {group.name}
@@ -2221,7 +2881,7 @@ function BotPanel({
       {!selectedConversationId ? (
         <div className="empty-block">
           <Bot size={30} />
-          <strong>选择一个群聊</strong>
+          <strong>Select a group conversation</strong>
           <span>进入会话后可管理 AI 助手</span>
         </div>
       ) : (
@@ -2249,15 +2909,15 @@ function BotPanel({
                     </select>
                   </label>
 
-                  {candidateBots.length === 0 && <span className="form-hint">所有可用 Bot 都已添加到当前会话。</span>}
+                  {candidateBots.length === 0 && <span className="form-hint">All available bots are already added to this conversation.</span>}
 
                   <input value={displayNameOverride} onChange={(e) => setDisplayNameOverride(e.target.value)} placeholder="显示名称覆盖（可选）" />
                   <input value={mentionNameOverride} onChange={(e) => setMentionNameOverride(e.target.value)} placeholder="@提及名覆盖（可选）" />
                   <input value={aliasesOverrideText} onChange={(e) => setAliasesOverrideText(e.target.value)} placeholder="别名覆盖，逗号分隔（可选）" />
-                  <span className="form-hint">仅 OWNER / ADMIN 可配置覆盖字段。普通成员只可查看。</span>
+                  <span className="form-hint">Only OWNER and ADMIN can override these fields.</span>
                   <button disabled={busy || typeof selectedBotId !== "number"} type="submit">
                     {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
-                    添加到会话
+                    添加到会话?
                   </button>
                 </form>
               )}
@@ -2265,7 +2925,7 @@ function BotPanel({
           )}
 
           <div className="section-title">
-            <span>会话内 AI 助手</span>
+            <span>会话中的 AI 助手</span>
             <strong>{conversationBots.length}</strong>
           </div>
 
@@ -2277,7 +2937,7 @@ function BotPanel({
               <div className="empty-block compact-empty">
                 <Bot size={24} />
                 <strong>暂无 AI 助手</strong>
-                <span>{canManage ? "点击上方“添加助手”按钮添加。" : "等待管理员添加 AI 助手。"}</span>
+                <span>{canManage ? "Use the add action above to add an assistant." : "Wait for an admin to add an assistant."}</span>
               </div>
             )}
           </div>
@@ -2315,13 +2975,13 @@ function BotCard({
 
       <div className="bot-detail-fields">
         <div className="bot-field-row">
-          <span className="bot-field-label">触发名</span>
+          <span className="bot-field-label">Mention</span>
           <span className="bot-field-value">@{bot.mentionName}</span>
         </div>
         {bot.aliases.length > 0 && (
           <div className="bot-field-row">
             <span className="bot-field-label">别名</span>
-            <span className="bot-field-value">{bot.aliases.join("、")}</span>
+            <span className="bot-field-value">{bot.aliases.join(", ")}</span>
           </div>
         )}
         <div className="bot-field-row">
@@ -2329,7 +2989,7 @@ function BotCard({
           <span className="bot-field-value">{bot.permissionScope}</span>
         </div>
         <div className="bot-field-row">
-          <span className="bot-field-label">状态</span>
+          <span className="bot-field-label">Status</span>
           <StatusPill label={bot.memberStatus} />
         </div>
       </div>
@@ -2352,7 +3012,7 @@ function MembersView({ members, onMention }: { members: MemberInfo[]; onMention:
   return (
     <div className="detail-body">
       <div className="section-title">
-        <span>群成员</span>
+        <span>Members</span>
         <strong>{members.length}</strong>
       </div>
       <div className="member-list">
@@ -2361,8 +3021,8 @@ function MembersView({ members, onMention }: { members: MemberInfo[]; onMention:
             <Avatar name={member.nickname || "Bot"} src={member.avatar} onContextMenu={(event) => handleAvatarMention(event, member.mentionName || member.nickname, onMention)} />
             <div>
               <strong>{member.nickname || `Bot ${member.botId ?? member.userId}`}</strong>
-              <span><StatusPill label="AI 助手" /> {" · "}@{member.mentionName ?? "?"}{member.enabled === false && <StatusPill label="已禁用" />}</span>
-              {member.aliases && member.aliases.length > 0 && <span className="bot-member-aliases">别名：{member.aliases.join("、")}</span>}
+              <span><StatusPill label="AI" /> {"  "}@{member.mentionName ?? "bot"}{member.enabled === false && <StatusPill label="Disabled" />}</span>
+              {member.aliases && member.aliases.length > 0 && <span className="bot-member-aliases">Aliases: {member.aliases.join(", ")}</span>}
             </div>
           </div>
         ) : (
@@ -2409,8 +3069,8 @@ function AICallLogsPanel({
       <div className="detail-body log-body">
         <div className="empty-block">
           <Bot size={28} />
-          <strong>请选择一个群聊</strong>
-          <span>进入会话后可以查看当前群的 AI 调用记录。</span>
+          <strong>Select a group conversation</strong>
+          <span>Open a group chat to inspect AI call logs.</span>
         </div>
       </div>
     );
@@ -2461,7 +3121,7 @@ function AICallLogsPanel({
           <div className="empty-block compact-empty">
             <Bot size={24} />
             <strong>暂无调用记录</strong>
-            <span>等这个群里触发过 AI 助手后，记录会出现在这里。</span>
+            <span>AI call logs will appear here after the assistant is triggered in this group.</span>
           </div>
         ) : (
           logs.map((log) => (
@@ -2495,11 +3155,11 @@ function AICallLogsPanel({
   );
 }
 
-function MembersViewClean({ members, onMention }: { members: MemberInfo[]; onMention: (mentionTarget: string) => void }) {
+function MembersViewLegacy({ members, onMention }: { members: MemberInfo[]; onMention: (mentionTarget: string) => void }) {
   return (
     <div className="detail-body">
       <div className="section-title">
-        <span>群成员</span>
+        <span>Members</span>
         <strong>{members.length}</strong>
       </div>
       <div className="member-list">
@@ -2514,11 +3174,11 @@ function MembersViewClean({ members, onMention }: { members: MemberInfo[]; onMen
               <div>
                 <strong>{member.nickname || `Bot ${member.botId ?? member.userId}`}</strong>
                 <span>
-                  <StatusPill label="AI 助手" /> {" · "}@{member.mentionName ?? "?"}
-                  {member.enabled === false && <StatusPill label="已禁用" />}
+                  <StatusPill label="AI" /> {"  "}@{member.mentionName ?? "bot"}
+                  {member.enabled === false && <StatusPill label="Disabled" />}
                 </span>
                 {member.aliases && member.aliases.length > 0 && (
-                  <span className="bot-member-aliases">别名：{member.aliases.join("、")}</span>
+                  <span className="bot-member-aliases">Aliases: {member.aliases.join(", ")}</span>
                 )}
               </div>
             </div>
@@ -2547,6 +3207,644 @@ function MembersViewClean({ members, onMention }: { members: MemberInfo[]; onMen
   );
 }
 
+/* function MembersViewClean({
+  members,
+  selectedConversation,
+  currentMember,
+  busy,
+  onMention,
+  onTransferOwner,
+  onSetAdmin,
+  onRemoveAdmin,
+  onMuteMember,
+  onUnmuteMember,
+  onRemoveMember,
+  onSetGroupMuteAll
+}: {
+  members: MemberInfo[];
+  selectedConversation: ConversationInfo | null;
+  currentMember: MemberInfo | null;
+  busy: boolean;
+  onMention: (mentionTarget: string) => void;
+  onTransferOwner: (targetUserId: number) => Promise<void>;
+  onSetAdmin: (targetUserId: number) => Promise<void>;
+  onRemoveAdmin: (targetUserId: number) => Promise<void>;
+  onMuteMember: (targetUserId: number, durationSeconds: number) => Promise<void>;
+  onUnmuteMember: (targetUserId: number) => Promise<void>;
+  onRemoveMember: (targetUserId: number) => Promise<void>;
+  onSetGroupMuteAll: (muteAll: boolean) => Promise<void>;
+}) {
+  const [muteDurations, setMuteDurations] = useState<Record<number, number>>({});
+  const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
+  const isGroup = selectedConversation?.type === "GROUP";
+  const canToggleMuteAll = isGroup && currentMember?.role === "OWNER";
+  const muteAllEnabled = Boolean(selectedConversation?.muteAll);
+  const durationOptions = [
+    { label: "10分钟", value: 10 * 60 },
+    { label: "1小时", value: 60 * 60 },
+    { label: "24小时", value: 24 * 60 * 60 }
+  ];
+
+  const getMuteDuration = (userId: number) => muteDurations[userId] ?? durationOptions[0].value;
+
+  useEffect(() => {
+    setExpandedMemberId(null);
+  }, [selectedConversation?.conversationId]);
+
+  const canTransfer = (member: MemberInfo) =>
+    isGroup &&
+    currentMember?.role === "OWNER" &&
+    member.memberType !== "BOT" &&
+    member.userId !== currentMember.userId &&
+    (member.role === "MEMBER" || member.role === "ADMIN");
+
+  const canSetAdminFor = (member: MemberInfo) =>
+    isGroup &&
+    currentMember?.role === "OWNER" &&
+    member.memberType !== "BOT" &&
+    member.userId !== currentMember.userId &&
+    member.role === "MEMBER";
+
+  const canRemoveAdminFor = (member: MemberInfo) =>
+    isGroup &&
+    currentMember?.role === "OWNER" &&
+    member.memberType !== "BOT" &&
+    member.userId !== currentMember.userId &&
+    member.role === "ADMIN";
+
+  const canManageMember = (member: MemberInfo) => {
+    if (!isGroup || member.memberType === "BOT" || !currentMember || member.userId === currentMember.userId) {
+      return false;
+    }
+    if (currentMember.role === "OWNER") {
+      return member.role === "MEMBER" || member.role === "ADMIN";
+    }
+    if (currentMember.role === "ADMIN") {
+      return member.role === "MEMBER";
+    }
+    return false;
+  };
+
+  const hasManagementActions = (member: MemberInfo) =>
+    canTransfer(member) || canSetAdminFor(member) || canRemoveAdminFor(member) || canManageMember(member);
+
+  return (
+    <div className="detail-body">
+      <div className="section-title">
+        <span>Members</span>
+        <strong>{members.length}</strong>
+      </div>
+      {canToggleMuteAll && (
+        <div className="member-toolbar">
+          <button
+            className={cx("secondary-button", "compact-button", muteAllEnabled && "member-toolbar-active")}
+            disabled={busy}
+            type="button"
+            onClick={() => void onSetGroupMuteAll(!muteAllEnabled)}
+          >
+            <LockKeyhole size={14} />
+            {muteAllEnabled ? "关闭全员禁言" : "开启全员禁言"}
+          </button>
+        </div>
+      )}
+      <div className="member-list">
+        {members.map((member) =>
+          member.memberType === "BOT" ? (
+            <div className="member-row member-bot-row" key={`bot-${member.botId ?? member.userId}`}>
+              <Avatar
+                name={member.nickname || "Bot"}
+                src={member.avatar}
+                onContextMenu={(event) => handleAvatarMention(event, member.mentionName || member.nickname, onMention)}
+              />
+              <div>
+                <strong>{member.nickname || `Bot ${member.botId ?? member.userId}`}</strong>
+                <span>
+                  <StatusPill label="AI 助手" /> {" ?"}@{member.mentionName ?? "?"}
+                  {member.enabled === false && <StatusPill label="已禁用" />}
+                </span>
+                {member.aliases && member.aliases.length > 0 && (
+                  <span className="bot-member-aliases">Aliases: {member.aliases.join(", ")}</span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="member-row" key={member.userId}>
+              <Avatar
+                name={member.nickname || String(member.userId)}
+                src={member.avatar}
+                onContextMenu={(event) => handleAvatarMention(event, member.nickname, onMention)}
+              />
+              <div className="member-meta-stack">
+                <strong>{member.nickname || `用户 ${member.userId}`}</strong>
+                <span>{roleLabel(member.role)} {" ?"} {statusLabel(member.status)}</span>
+                {isMemberMuted(member) && (
+                  <span className="member-extra-note">已禁言?{formatMuteUntil(member.muteUntil)}</span>
+                )}
+                {member.userId === currentMember?.userId && muteAllEnabled && currentMember.role !== "OWNER" && currentMember.role !== "ADMIN" && (
+                  <span className="member-extra-note">当前群已开启全员禁言</span>
+                )}
+                {hasManagementActions(member) && (
+                  <>
+                    <button
+                      className={cx("member-expand-toggle", expandedMemberId === member.userId && "is-open")}
+                      disabled={busy}
+                      type="button"
+                      onClick={() =>
+                        setExpandedMemberId((current) => (current === member.userId ? null : member.userId))
+                      }
+                    >
+                      <span>Manage</span>
+                      <ChevronDown size={16} />
+                    </button>
+                  </>
+                )}
+                {hasManagementActions(member) && expandedMemberId === member.userId && (
+                  <div className="member-actions">
+                    {canTransfer(member) && (
+                      <button
+                        className="secondary-button compact-button"
+                        disabled={busy}
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`确认将群主转让给 ${member.nickname || `用户 ${member.userId}`} 吗？`)) {
+                            void onTransferOwner(member.userId);
+                          }
+                        }}
+                      >
+                        <ShieldCheck size={14} />
+                        转让群主
+                      </button>
+                    )}
+                    {canSetAdminFor(member) && (
+                      <button
+                        className="secondary-button compact-button"
+                        disabled={busy}
+                        type="button"
+                        onClick={() => void onSetAdmin(member.userId)}
+                      >
+                        <ShieldCheck size={14} />
+                        设为管理�?                      </button>
+                    )}
+                    {canRemoveAdminFor(member) && (
+                      <button
+                        className="secondary-button compact-button"
+                        disabled={busy}
+                        type="button"
+                        onClick={() => void onRemoveAdmin(member.userId)}
+                      >
+                        <ShieldCheck size={14} />
+                        取消管理�?                      </button>
+                    )}
+                    {canManageMember(member) && (
+                      <div className="member-action-row">
+                        {isMemberMuted(member) ? (
+                          <button
+                            className="secondary-button compact-button"
+                            disabled={busy}
+                            type="button"
+                            onClick={() => void onUnmuteMember(member.userId)}
+                          >
+                            <LockKeyhole size={14} />
+                            解除禁言
+                          </button>
+                        ) : (
+                          <>
+                            <select
+                              className="member-action-select"
+                              value={getMuteDuration(member.userId)}
+                              onChange={(event) =>
+                                setMuteDurations((current) => ({
+                                  ...current,
+                                  [member.userId]: Number(event.target.value)
+                                }))
+                              }
+                            >
+                              {durationOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              className="secondary-button compact-button"
+                              disabled={busy}
+                              type="button"
+                              onClick={() => void onMuteMember(member.userId, getMuteDuration(member.userId))}
+                            >
+                              <LockKeyhole size={14} />
+                              禁言
+                            </button>
+                          </>
+                        )}
+                        <button
+                          className="danger-button compact-button"
+                          disabled={busy}
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`确认�?${member.nickname || `用户 ${member.userId}`} 移出群聊吗？`)) {
+                              void onRemoveMember(member.userId);
+                            }
+                          }}
+                        >
+                          <Trash2 size={14} />
+                          移出群聊
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        )}
+        {members.length === 0 && (
+          <div className="empty-block">
+            <UsersRound size={28} />
+            <strong>暂无成员数据</strong>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+*/
+function GroupAnnouncementCard({
+  groupInfo,
+  members,
+  currentMember,
+  busy,
+  onSave
+}: {
+  groupInfo: GroupInfo | null;
+  members: MemberInfo[];
+  currentMember: MemberInfo | null;
+  busy: boolean;
+  onSave: (announcement: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(groupInfo?.announcement ?? "");
+
+  useEffect(() => {
+    setDraft(groupInfo?.announcement ?? "");
+    setEditing(false);
+  }, [groupInfo?.announcement, groupInfo?.announcementUpdatedAt, groupInfo?.announcementUpdatedBy]);
+
+  const canEdit = Boolean(groupInfo) && (currentMember?.role === "OWNER" || currentMember?.role === "ADMIN");
+  const announcement = groupInfo?.announcement?.trim() ?? "";
+  const nextAnnouncement = draft.trim();
+  const updater =
+    typeof groupInfo?.announcementUpdatedBy === "number"
+      ? members.find((member) => member.userId === groupInfo.announcementUpdatedBy)
+      : null;
+  const updatedMeta =
+    typeof groupInfo?.announcementUpdatedAt === "number"
+      ? `Updated ${formatRelative(groupInfo.announcementUpdatedAt)}${
+          typeof groupInfo.announcementUpdatedBy === "number"
+            ? ` by ${updater?.nickname || `User ${groupInfo.announcementUpdatedBy}`}`
+            : ""
+        }`
+      : "";
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await onSave(draft);
+  };
+
+  return (
+    <section className="group-announcement-card">
+      <div className="group-announcement-header">
+        <div>
+          <strong>Announcement</strong>
+          <span>Shown in the group details area for all members.</span>
+        </div>
+        {canEdit && !editing && (
+          <button className="secondary-button compact-button" disabled={busy} type="button" onClick={() => setEditing(true)}>
+            Edit
+          </button>
+        )}
+      </div>
+
+      {groupInfo === null ? (
+        <p className="group-announcement-empty">Loading group announcement...</p>
+      ) : editing ? (
+        <form className="group-announcement-form" onSubmit={handleSubmit}>
+          <textarea
+            maxLength={2000}
+            placeholder="Write a group announcement"
+            rows={5}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+          <div className="group-announcement-actions">
+            <span className="form-hint">{draft.trim().length}/2000</span>
+            <button
+              className="secondary-button compact-button"
+              disabled={busy || nextAnnouncement === announcement}
+              type="submit"
+            >
+              Save
+            </button>
+            <button
+              className="secondary-button compact-button"
+              disabled={busy}
+              type="button"
+              onClick={() => {
+                setDraft(groupInfo?.announcement ?? "");
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : announcement ? (
+        <p className="group-announcement-content">{announcement}</p>
+      ) : (
+        <p className="group-announcement-empty">{canEdit ? "No announcement yet. Add one for the group." : "No announcement yet."}</p>
+      )}
+
+      {updatedMeta && <div className="group-announcement-meta">{updatedMeta}</div>}
+    </section>
+  );
+}
+
+function MembersViewClean({
+  members,
+  selectedConversation,
+  groupInfo,
+  currentMember,
+  busy,
+  onMention,
+  onTransferOwner,
+  onSetAdmin,
+  onRemoveAdmin,
+  onMuteMember,
+  onUnmuteMember,
+  onRemoveMember,
+  onSetGroupMuteAll,
+  onUpdateGroupAnnouncement
+}: {
+  members: MemberInfo[];
+  selectedConversation: ConversationInfo | null;
+  groupInfo: GroupInfo | null;
+  currentMember: MemberInfo | null;
+  busy: boolean;
+  onMention: (mentionTarget: string) => void;
+  onTransferOwner: (targetUserId: number) => Promise<void>;
+  onSetAdmin: (targetUserId: number) => Promise<void>;
+  onRemoveAdmin: (targetUserId: number) => Promise<void>;
+  onMuteMember: (targetUserId: number, durationSeconds: number) => Promise<void>;
+  onUnmuteMember: (targetUserId: number) => Promise<void>;
+  onRemoveMember: (targetUserId: number) => Promise<void>;
+  onSetGroupMuteAll: (muteAll: boolean) => Promise<void>;
+  onUpdateGroupAnnouncement: (announcement: string) => Promise<void>;
+}) {
+  const [muteDurations, setMuteDurations] = useState<Record<number, number>>({});
+  const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
+  const isGroup = selectedConversation?.type === "GROUP";
+  const canToggleMuteAll = isGroup && currentMember?.role === "OWNER";
+  const muteAllEnabled = Boolean(selectedConversation?.muteAll);
+  const durationOptions = [
+    { label: "10 min", value: 10 * 60 },
+    { label: "1 hour", value: 60 * 60 },
+    { label: "24 hours", value: 24 * 60 * 60 }
+  ];
+
+  const getMuteDuration = (userId: number) => muteDurations[userId] ?? durationOptions[0].value;
+
+  const canTransfer = (member: MemberInfo) =>
+    isGroup &&
+    currentMember?.role === "OWNER" &&
+    member.memberType !== "BOT" &&
+    member.userId !== currentMember.userId &&
+    (member.role === "MEMBER" || member.role === "ADMIN");
+
+  const canSetAdminFor = (member: MemberInfo) =>
+    isGroup &&
+    currentMember?.role === "OWNER" &&
+    member.memberType !== "BOT" &&
+    member.userId !== currentMember.userId &&
+    member.role === "MEMBER";
+
+  const canRemoveAdminFor = (member: MemberInfo) =>
+    isGroup &&
+    currentMember?.role === "OWNER" &&
+    member.memberType !== "BOT" &&
+    member.userId !== currentMember.userId &&
+    member.role === "ADMIN";
+
+  const canManageMember = (member: MemberInfo) => {
+    if (!isGroup || member.memberType === "BOT" || !currentMember || member.userId === currentMember.userId) {
+      return false;
+    }
+    if (currentMember.role === "OWNER") {
+      return member.role === "MEMBER" || member.role === "ADMIN";
+    }
+    if (currentMember.role === "ADMIN") {
+      return member.role === "MEMBER";
+    }
+    return false;
+  };
+
+  const hasManagementActions = (member: MemberInfo) =>
+    canTransfer(member) || canSetAdminFor(member) || canRemoveAdminFor(member) || canManageMember(member);
+
+  useEffect(() => {
+    setExpandedMemberId(null);
+  }, [selectedConversation?.conversationId]);
+
+  return (
+    <div className="detail-body">
+      {isGroup && (
+        <GroupAnnouncementCard
+          groupInfo={groupInfo}
+          members={members}
+          currentMember={currentMember}
+          busy={busy}
+          onSave={onUpdateGroupAnnouncement}
+        />
+      )}
+      <div className="section-title">
+        <span>Members</span>
+        <strong>{members.length}</strong>
+      </div>
+      {canToggleMuteAll && (
+        <div className="member-toolbar">
+          <button
+            className={cx("secondary-button", "compact-button", muteAllEnabled && "member-toolbar-active")}
+            disabled={busy}
+            type="button"
+            onClick={() => void onSetGroupMuteAll(!muteAllEnabled)}
+          >
+            <LockKeyhole size={14} />
+            {muteAllEnabled ? "Disable mute all" : "Enable mute all"}
+          </button>
+        </div>
+      )}
+      <div className="member-list">
+        {members.map((member) =>
+          member.memberType === "BOT" ? (
+            <div className="member-row member-bot-row" key={`bot-${member.botId ?? member.userId}`}>
+              <Avatar
+                name={member.nickname || "Bot"}
+                src={member.avatar}
+                onContextMenu={(event) => handleAvatarMention(event, member.mentionName || member.nickname, onMention)}
+              />
+              <div>
+                <strong>{member.nickname || `Bot ${member.botId ?? member.userId}`}</strong>
+                <span>
+                  <StatusPill label="AI" /> {"  "}@{member.mentionName ?? "bot"}
+                  {member.enabled === false && <StatusPill label="Disabled" />}
+                </span>
+                {member.aliases && member.aliases.length > 0 && (
+                  <span className="bot-member-aliases">Aliases: {member.aliases.join(", ")}</span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="member-row" key={member.userId}>
+              <Avatar
+                name={member.nickname || String(member.userId)}
+                src={member.avatar}
+                onContextMenu={(event) => handleAvatarMention(event, member.nickname, onMention)}
+              />
+              <div className="member-meta-stack">
+                <strong>{member.nickname || `User ${member.userId}`}</strong>
+                <span>
+                  {roleLabel(member.role)} {"  "} {statusLabel(member.status)}
+                </span>
+                {isMemberMuted(member) && (
+                  <span className="member-extra-note">Muted until {formatMuteUntil(member.muteUntil)}</span>
+                )}
+                {member.userId === currentMember?.userId &&
+                  muteAllEnabled &&
+                  currentMember.role !== "OWNER" &&
+                  currentMember.role !== "ADMIN" && (
+                    <span className="member-extra-note">This group is currently muted for members.</span>
+                  )}
+                {hasManagementActions(member) && (
+                  <button
+                    className={cx("member-expand-toggle", expandedMemberId === member.userId && "is-open")}
+                    disabled={busy}
+                    type="button"
+                    onClick={() => setExpandedMemberId((current) => (current === member.userId ? null : member.userId))}
+                  >
+                    <span>Manage</span>
+                    <ChevronDown size={16} />
+                  </button>
+                )}
+                {hasManagementActions(member) && expandedMemberId === member.userId && (
+                  <div className="member-actions">
+                    {canTransfer(member) && (
+                      <button
+                        className="secondary-button compact-button"
+                        disabled={busy}
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`Transfer ownership to ${member.nickname || `User ${member.userId}`}?`)) {
+                            void onTransferOwner(member.userId);
+                          }
+                        }}
+                      >
+                        <ShieldCheck size={14} />
+                        Transfer owner
+                      </button>
+                    )}
+                    {canSetAdminFor(member) && (
+                      <button
+                        className="secondary-button compact-button"
+                        disabled={busy}
+                        type="button"
+                        onClick={() => void onSetAdmin(member.userId)}
+                      >
+                        <ShieldCheck size={14} />
+                        Set admin
+                      </button>
+                    )}
+                    {canRemoveAdminFor(member) && (
+                      <button
+                        className="secondary-button compact-button"
+                        disabled={busy}
+                        type="button"
+                        onClick={() => void onRemoveAdmin(member.userId)}
+                      >
+                        <ShieldCheck size={14} />
+                        Remove admin
+                      </button>
+                    )}
+                    {canManageMember(member) && (
+                      <div className="member-action-row">
+                        {isMemberMuted(member) ? (
+                          <button
+                            className="secondary-button compact-button"
+                            disabled={busy}
+                            type="button"
+                            onClick={() => void onUnmuteMember(member.userId)}
+                          >
+                            <LockKeyhole size={14} />
+                            Unmute
+                          </button>
+                        ) : (
+                          <>
+                            <select
+                              className="member-action-select"
+                              value={getMuteDuration(member.userId)}
+                              onChange={(event) =>
+                                setMuteDurations((current) => ({
+                                  ...current,
+                                  [member.userId]: Number(event.target.value)
+                                }))
+                              }
+                            >
+                              {durationOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              className="secondary-button compact-button"
+                              disabled={busy}
+                              type="button"
+                              onClick={() => void onMuteMember(member.userId, getMuteDuration(member.userId))}
+                            >
+                              <LockKeyhole size={14} />
+                              Mute
+                            </button>
+                          </>
+                        )}
+                        <button
+                          className="danger-button compact-button"
+                          disabled={busy}
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Remove ${member.nickname || `User ${member.userId}`} from the group?`)) {
+                              void onRemoveMember(member.userId);
+                            }
+                          }}
+                        >
+                          <Trash2 size={14} />
+                          Remove member
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        )}
+        {members.length === 0 && (
+          <div className="empty-block">
+            <UsersRound size={28} />
+            <strong>No member data</strong>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 function BotPanelClean({
   selectedConversationId,
   selectedConversationType,
@@ -2610,14 +3908,14 @@ function BotPanelClean({
       {!selectedConversationId ? (
         <div className="empty-block">
           <Bot size={30} />
-          <strong>选择一个群聊</strong>
+          <strong>Select a group conversation</strong>
           <span>进入会话后可管理 AI 助手</span>
         </div>
       ) : selectedConversationType !== "GROUP" ? (
         <div className="empty-block">
           <Bot size={30} />
           <strong>单聊不支持添加 AI 助手</strong>
-          <span>除单聊外，所有群都可以单独加入平台内置 Bot 并切换模型。</span>
+          <span>Bots can currently be added only in group conversations.</span>
         </div>
       ) : (
         <>
@@ -2660,11 +3958,11 @@ function BotPanelClean({
                     </select>
                   </label>
 
-                  {candidateBots.length === 0 && <span className="form-hint">当前群已经加入全部可用 Bot 了。</span>}
-                  <span className="form-hint">当前只开放平台内置 DeepSeek，可在群里选择 Flash / Pro 模型。</span>
+                  {candidateBots.length === 0 && <span className="form-hint">All available bots are already in this group.</span>}
+                  <span className="form-hint">DeepSeek platform bots are currently available here.</span>
                   <button disabled={busy || typeof selectedBotId !== "number" || !selectedModelName} type="submit">
                     {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
-                    添加到会话
+                    添加到会话?
                   </button>
                 </form>
               )}
@@ -2672,7 +3970,7 @@ function BotPanelClean({
           )}
 
           <div className="section-title">
-            <span>会话内 AI 助手</span>
+            <span>会话中的 AI 助手</span>
             <strong>{conversationBots.length}</strong>
           </div>
 
@@ -2697,7 +3995,7 @@ function BotPanelClean({
               <div className="empty-block compact-empty">
                 <Bot size={24} />
                 <strong>暂无 AI 助手</strong>
-                <span>{canManage ? "点击上方“添加助手”按钮添加。" : "等待管理员添加 AI 助手。"}</span>
+                <span>{canManage ? "Use the add action above to add an assistant." : "Wait for an admin to add an assistant."}</span>
               </div>
             )}
           </div>
@@ -2747,13 +4045,13 @@ function BotCardClean({
 
       <div className="bot-detail-fields">
         <div className="bot-field-row">
-          <span className="bot-field-label">触发名</span>
+          <span className="bot-field-label">Mention</span>
           <span className="bot-field-value">@{bot.mentionName}</span>
         </div>
         {bot.aliases.length > 0 && (
           <div className="bot-field-row">
             <span className="bot-field-label">别名</span>
-            <span className="bot-field-value">{bot.aliases.join("、")}</span>
+            <span className="bot-field-value">{bot.aliases.join(", ")}</span>
           </div>
         )}
         <div className="bot-field-row">
@@ -2785,7 +4083,7 @@ function BotCardClean({
           )}
         </div>
         <div className="bot-field-row">
-          <span className="bot-field-label">状态</span>
+          <span className="bot-field-label">Status</span>
           <StatusPill label={bot.memberStatus} />
         </div>
       </div>
@@ -2832,14 +4130,14 @@ function AccountView({
   const [password, setPassword] = useState("");
   const notificationLabel =
     notificationStatus === "unsupported"
-      ? "当前浏览器不支持通知"
+      ? "Browser notifications are not supported"
       : notificationStatus === "denied"
-        ? "浏览器通知已被阻止"
+        ? "Browser notifications are blocked"
         : notificationStatus === "granted"
           ? notificationsEnabled
-            ? "浏览器通知已开启"
-            : "浏览器通知已关闭"
-          : "浏览器通知未授权";
+            ? "Browser notifications are enabled"
+            : "Browser notifications are disabled"
+          : "Browser notifications are not granted";
 
   return (
     <div className="detail-body account-body">
@@ -2878,7 +4176,7 @@ function AccountView({
           <span>{notificationLabel}</span>
         </div>
         <button className={cx(notificationStatus === "granted" && notificationsEnabled && "is-on")} disabled={notificationStatus === "unsupported"} type="button" onClick={() => void onToggleNotifications()}>
-          {notificationStatus === "granted" ? (notificationsEnabled ? "关闭" : "开启") : "开启通知"}
+          {notificationStatus === "granted" ? (notificationsEnabled ? "Disable" : "Enable") : "Enable notifications"}
         </button>
       </div>
 

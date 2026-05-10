@@ -7,6 +7,7 @@ import (
 	"example.com/aim/gateway/internal/middleware"
 	"example.com/aim/gateway/internal/model"
 	"example.com/aim/gateway/internal/rpc"
+	gatewayws "example.com/aim/gateway/internal/websocket"
 	chatpb "example.com/aim/gateway/kitex_gen/chat"
 	"github.com/gin-gonic/gin"
 )
@@ -40,6 +41,40 @@ func CreateGroup(ctx *gin.Context) {
 		Avatar:       req.Avatar,
 		Announcement: req.Announcement,
 		JoinPolicy:   req.JoinPolicy,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+
+	writeJSON(ctx, 200, model.APIResponse{
+		Code:    0,
+		Message: "success",
+		Data:    toGroupModel(resp.Group),
+	})
+}
+
+func GetGroupInfo(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.GetGroupInfo(ctx.Request.Context(), &chatpb.GetGroupInfoRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
 	})
 	if err != nil {
 		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
@@ -111,7 +146,7 @@ func FindSingleConversation(ctx *gin.Context) {
 	}
 
 	resp, err := client.FindSingleByUsers(ctx.Request.Context(), &chatpb.FindSingleByUsersRequest{
-		OperatorId:  authCtx.UserID,
+		OperatorId:   authCtx.UserID,
 		TargetUserId: targetUserID,
 	})
 	if err != nil {
@@ -161,6 +196,7 @@ func JoinGroup(ctx *gin.Context) {
 		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
 		return
 	}
+	broadcastConversationEvent(resp)
 
 	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
 }
@@ -206,6 +242,7 @@ func InviteMember(ctx *gin.Context) {
 		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
 		return
 	}
+	broadcastConversationEvent(resp)
 
 	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
 }
@@ -240,6 +277,320 @@ func LeaveGroup(ctx *gin.Context) {
 		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
 		return
 	}
+	broadcastConversationEvent(resp)
+
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+}
+
+func TransferOwner(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	var req model.TransferOwnerRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, 400, "invalid request body")
+		return
+	}
+	if req.TargetUserID <= 0 {
+		writeError(ctx, 400, "targetUserId is required")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.TransferOwner(ctx.Request.Context(), &chatpb.TransferOwnerRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+		TargetUserId:   req.TargetUserID,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	broadcastConversationEvent(resp)
+
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+}
+
+func SetAdmin(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	var req model.SetAdminRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, 400, "invalid request body")
+		return
+	}
+	if req.TargetUserID <= 0 {
+		writeError(ctx, 400, "targetUserId is required")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.SetAdmin(ctx.Request.Context(), &chatpb.SetAdminRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+		TargetUserId:   req.TargetUserID,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	broadcastConversationEvent(resp)
+
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+}
+
+func RemoveAdmin(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+	targetUserID, ok := targetUserIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.RemoveAdmin(ctx.Request.Context(), &chatpb.RemoveAdminRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+		TargetUserId:   targetUserID,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	broadcastConversationEvent(resp)
+
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+}
+
+func MuteMember(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+	targetUserID, ok := targetUserIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	var req model.MuteMemberRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, 400, "invalid request body")
+		return
+	}
+	if req.MuteUntil <= 0 {
+		writeError(ctx, 400, "muteUntil is required")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.MuteMember(ctx.Request.Context(), &chatpb.MuteMemberRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+		TargetUserId:   targetUserID,
+		MuteUntil:      req.MuteUntil,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	broadcastConversationEvent(resp)
+
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+}
+
+func UnmuteMember(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+	targetUserID, ok := targetUserIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.UnmuteMember(ctx.Request.Context(), &chatpb.UnmuteMemberRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+		TargetUserId:   targetUserID,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	broadcastConversationEvent(resp)
+
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+}
+
+func RemoveMember(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+	targetUserID, ok := targetUserIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.RemoveMember(ctx.Request.Context(), &chatpb.RemoveMemberRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+		TargetUserId:   targetUserID,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	broadcastConversationEvent(resp)
+
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+}
+
+func EnableGroupMuteAll(ctx *gin.Context) {
+	setGroupMuteAll(ctx, true)
+}
+
+func DisableGroupMuteAll(ctx *gin.Context) {
+	setGroupMuteAll(ctx, false)
+}
+
+func UpdateGroupAnnouncement(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	var req model.UpdateGroupAnnouncementRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, 400, "invalid request body")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.UpdateGroupAnnouncement(ctx.Request.Context(), &chatpb.UpdateGroupAnnouncementRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+		Announcement:   req.Announcement,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	broadcastConversationEvent(resp)
 
 	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
 }
@@ -297,6 +648,9 @@ func ListMembers(ctx *gin.Context) {
 		}
 		if member.PermissionScope != nil {
 			info.PermissionScope = member.PermissionScope
+		}
+		if member.MuteUntil != nil {
+			info.MuteUntil = member.MuteUntil
 		}
 		members = append(members, info)
 	}
@@ -367,6 +721,91 @@ func ListMessages(ctx *gin.Context) {
 		Message: "success",
 		Data:    messages,
 	})
+}
+
+func MarkConversationRead(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	var req model.MarkConversationReadRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, 400, "invalid request body")
+		return
+	}
+	if req.LastReadMessageID <= 0 {
+		writeError(ctx, 400, "lastReadMessageId is required")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.MarkConversationRead(ctx.Request.Context(), &chatpb.MarkConversationReadRequest{
+		OperatorId:        authCtx.UserID,
+		ConversationId:    conversationID,
+		LastReadMessageId: req.LastReadMessageID,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+}
+
+func RecallMessage(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+	messageID, ok := messageIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.RecallMessage(ctx.Request.Context(), &chatpb.RecallMessageRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+		MessageId:      messageID,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+
+	broadcastMessageRecalledEvent(resp)
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
 }
 
 func ListBots(ctx *gin.Context) {
@@ -609,11 +1048,31 @@ func conversationIDParam(ctx *gin.Context) (string, bool) {
 	return value, true
 }
 
+func targetUserIDParam(ctx *gin.Context) (int64, bool) {
+	value := strings.TrimSpace(ctx.Param("targetUserId"))
+	targetUserID, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || targetUserID <= 0 {
+		writeError(ctx, 400, "invalid targetUserId")
+		return 0, false
+	}
+	return targetUserID, true
+}
+
+func messageIDParam(ctx *gin.Context) (int64, bool) {
+	value := strings.TrimSpace(ctx.Param("messageId"))
+	messageID, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || messageID <= 0 {
+		writeError(ctx, 400, "invalid messageId")
+		return 0, false
+	}
+	return messageID, true
+}
+
 func toGroupModel(group *chatpb.GroupInfo) model.GroupInfo {
 	if group == nil {
 		return model.GroupInfo{}
 	}
-	return model.GroupInfo{
+	info := model.GroupInfo{
 		ConversationID: group.ConversationId,
 		Type:           group.Type,
 		Name:           group.Name,
@@ -623,6 +1082,15 @@ func toGroupModel(group *chatpb.GroupInfo) model.GroupInfo {
 		JoinPolicy:     group.JoinPolicy,
 		CreatedAt:      group.CreatedAt,
 	}
+	if group.AnnouncementUpdatedBy != nil {
+		value := *group.AnnouncementUpdatedBy
+		info.AnnouncementUpdatedBy = &value
+	}
+	if group.AnnouncementUpdatedAt != nil {
+		value := *group.AnnouncementUpdatedAt
+		info.AnnouncementUpdatedAt = &value
+	}
+	return info
 }
 
 func toConversationModel(conversation *chatpb.ConversationInfo) model.ConversationInfo {
@@ -639,6 +1107,7 @@ func toConversationModel(conversation *chatpb.ConversationInfo) model.Conversati
 		LastMessageSenderID:   conversation.LastMessageSenderId,
 		LastMessageSenderName: conversation.LastMessageSenderName,
 		LastMessageContent:    conversation.LastMessageContent,
+		MuteAll:               conversation.MuteAll,
 		Role:                  conversation.Role,
 		IsPinned:              conversation.IsPinned,
 		IsMuted:               conversation.IsMuted,
@@ -650,6 +1119,16 @@ func toMessageModel(message *chatpb.MessageInfo) model.MessageInfo {
 	if message == nil {
 		return model.MessageInfo{}
 	}
+	var replyTo *model.ReplyPreviewInfo
+	if message.ReplyTo != nil {
+		replyTo = &model.ReplyPreviewInfo{
+			MessageID:      message.ReplyTo.MessageId,
+			SenderID:       message.ReplyTo.SenderId,
+			SenderType:     message.ReplyTo.SenderType,
+			MessageType:    message.ReplyTo.MessageType,
+			ContentPreview: message.ReplyTo.ContentPreview,
+		}
+	}
 	return model.MessageInfo{
 		ID:             message.Id,
 		ConversationID: message.ConversationId,
@@ -658,8 +1137,11 @@ func toMessageModel(message *chatpb.MessageInfo) model.MessageInfo {
 		MessageType:    message.MessageType,
 		Content:        message.Content,
 		ReplyToID:      message.ReplyToId,
+		ReplyTo:        replyTo,
 		Status:         message.Status,
 		CreatedAt:      message.CreatedAt,
+		ReadByPeer:     message.ReadByPeer,
+		ReadCount:      message.ReadCount,
 	}
 }
 
@@ -706,4 +1188,63 @@ func toAICallLogModel(item *chatpb.AICallLogInfo) model.AICallLogInfo {
 		ErrorMessage:      item.ErrorMessage,
 		CreatedAt:         item.CreatedAt,
 	}
+}
+
+func broadcastConversationEvent(resp *chatpb.ConversationEventResponse) {
+	if resp == nil || resp.EventMessage == nil || len(resp.RecipientUserIds) == 0 {
+		return
+	}
+	chatHub.SendToUsers(resp.RecipientUserIds, gatewayws.OutgoingEvent{
+		Type: gatewayws.EventNewMessage,
+		Data: gatewayws.ToMessageInfo(resp.EventMessage),
+	})
+}
+
+func broadcastMessageRecalledEvent(resp *chatpb.MessageRecalledEventResponse) {
+	if resp == nil || resp.Event == nil || len(resp.RecipientUserIds) == 0 {
+		return
+	}
+	chatHub.SendToUsers(resp.RecipientUserIds, gatewayws.OutgoingEvent{
+		Type: gatewayws.EventMessageRecalled,
+		Data: gatewayws.MessageRecalledInfo{
+			MessageID:      resp.Event.MessageId,
+			ConversationID: resp.Event.ConversationId,
+		},
+	})
+}
+
+func setGroupMuteAll(ctx *gin.Context, muteAll bool) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.SetGroupMuteAll(ctx.Request.Context(), &chatpb.SetGroupMuteAllRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+		MuteAll:        muteAll,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	broadcastConversationEvent(resp)
+
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
 }

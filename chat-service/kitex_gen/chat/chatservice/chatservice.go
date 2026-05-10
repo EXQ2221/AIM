@@ -27,6 +27,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"GetGroupInfo": kitex.NewMethodInfo(
+		getGroupInfoHandler,
+		newChatServiceGetGroupInfoArgs,
+		newChatServiceGetGroupInfoResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"CreateSingleConversation": kitex.NewMethodInfo(
 		createSingleConversationHandler,
 		newChatServiceCreateSingleConversationArgs,
@@ -62,6 +69,62 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"TransferOwner": kitex.NewMethodInfo(
+		transferOwnerHandler,
+		newChatServiceTransferOwnerArgs,
+		newChatServiceTransferOwnerResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"SetAdmin": kitex.NewMethodInfo(
+		setAdminHandler,
+		newChatServiceSetAdminArgs,
+		newChatServiceSetAdminResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"RemoveAdmin": kitex.NewMethodInfo(
+		removeAdminHandler,
+		newChatServiceRemoveAdminArgs,
+		newChatServiceRemoveAdminResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"MuteMember": kitex.NewMethodInfo(
+		muteMemberHandler,
+		newChatServiceMuteMemberArgs,
+		newChatServiceMuteMemberResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"UnmuteMember": kitex.NewMethodInfo(
+		unmuteMemberHandler,
+		newChatServiceUnmuteMemberArgs,
+		newChatServiceUnmuteMemberResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"RemoveMember": kitex.NewMethodInfo(
+		removeMemberHandler,
+		newChatServiceRemoveMemberArgs,
+		newChatServiceRemoveMemberResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"SetGroupMuteAll": kitex.NewMethodInfo(
+		setGroupMuteAllHandler,
+		newChatServiceSetGroupMuteAllArgs,
+		newChatServiceSetGroupMuteAllResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"UpdateGroupAnnouncement": kitex.NewMethodInfo(
+		updateGroupAnnouncementHandler,
+		newChatServiceUpdateGroupAnnouncementArgs,
+		newChatServiceUpdateGroupAnnouncementResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"ListMembers": kitex.NewMethodInfo(
 		listMembersHandler,
 		newChatServiceListMembersArgs,
@@ -73,6 +136,20 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		listMessagesHandler,
 		newChatServiceListMessagesArgs,
 		newChatServiceListMessagesResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"MarkConversationRead": kitex.NewMethodInfo(
+		markConversationReadHandler,
+		newChatServiceMarkConversationReadArgs,
+		newChatServiceMarkConversationReadResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"RecallMessage": kitex.NewMethodInfo(
+		recallMessageHandler,
+		newChatServiceRecallMessageArgs,
+		newChatServiceRecallMessageResult,
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
@@ -227,6 +304,24 @@ func newChatServiceCreateGroupResult() interface{} {
 	return chat.NewChatServiceCreateGroupResult()
 }
 
+func getGroupInfoHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceGetGroupInfoArgs)
+	realResult := result.(*chat.ChatServiceGetGroupInfoResult)
+	success, err := handler.(chat.ChatService).GetGroupInfo(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceGetGroupInfoArgs() interface{} {
+	return chat.NewChatServiceGetGroupInfoArgs()
+}
+
+func newChatServiceGetGroupInfoResult() interface{} {
+	return chat.NewChatServiceGetGroupInfoResult()
+}
+
 func createSingleConversationHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	realArg := arg.(*chat.ChatServiceCreateSingleConversationArgs)
 	realResult := result.(*chat.ChatServiceCreateSingleConversationResult)
@@ -317,6 +412,150 @@ func newChatServiceLeaveGroupResult() interface{} {
 	return chat.NewChatServiceLeaveGroupResult()
 }
 
+func transferOwnerHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceTransferOwnerArgs)
+	realResult := result.(*chat.ChatServiceTransferOwnerResult)
+	success, err := handler.(chat.ChatService).TransferOwner(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceTransferOwnerArgs() interface{} {
+	return chat.NewChatServiceTransferOwnerArgs()
+}
+
+func newChatServiceTransferOwnerResult() interface{} {
+	return chat.NewChatServiceTransferOwnerResult()
+}
+
+func setAdminHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceSetAdminArgs)
+	realResult := result.(*chat.ChatServiceSetAdminResult)
+	success, err := handler.(chat.ChatService).SetAdmin(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceSetAdminArgs() interface{} {
+	return chat.NewChatServiceSetAdminArgs()
+}
+
+func newChatServiceSetAdminResult() interface{} {
+	return chat.NewChatServiceSetAdminResult()
+}
+
+func removeAdminHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceRemoveAdminArgs)
+	realResult := result.(*chat.ChatServiceRemoveAdminResult)
+	success, err := handler.(chat.ChatService).RemoveAdmin(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceRemoveAdminArgs() interface{} {
+	return chat.NewChatServiceRemoveAdminArgs()
+}
+
+func newChatServiceRemoveAdminResult() interface{} {
+	return chat.NewChatServiceRemoveAdminResult()
+}
+
+func muteMemberHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceMuteMemberArgs)
+	realResult := result.(*chat.ChatServiceMuteMemberResult)
+	success, err := handler.(chat.ChatService).MuteMember(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceMuteMemberArgs() interface{} {
+	return chat.NewChatServiceMuteMemberArgs()
+}
+
+func newChatServiceMuteMemberResult() interface{} {
+	return chat.NewChatServiceMuteMemberResult()
+}
+
+func unmuteMemberHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceUnmuteMemberArgs)
+	realResult := result.(*chat.ChatServiceUnmuteMemberResult)
+	success, err := handler.(chat.ChatService).UnmuteMember(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceUnmuteMemberArgs() interface{} {
+	return chat.NewChatServiceUnmuteMemberArgs()
+}
+
+func newChatServiceUnmuteMemberResult() interface{} {
+	return chat.NewChatServiceUnmuteMemberResult()
+}
+
+func removeMemberHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceRemoveMemberArgs)
+	realResult := result.(*chat.ChatServiceRemoveMemberResult)
+	success, err := handler.(chat.ChatService).RemoveMember(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceRemoveMemberArgs() interface{} {
+	return chat.NewChatServiceRemoveMemberArgs()
+}
+
+func newChatServiceRemoveMemberResult() interface{} {
+	return chat.NewChatServiceRemoveMemberResult()
+}
+
+func setGroupMuteAllHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceSetGroupMuteAllArgs)
+	realResult := result.(*chat.ChatServiceSetGroupMuteAllResult)
+	success, err := handler.(chat.ChatService).SetGroupMuteAll(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceSetGroupMuteAllArgs() interface{} {
+	return chat.NewChatServiceSetGroupMuteAllArgs()
+}
+
+func newChatServiceSetGroupMuteAllResult() interface{} {
+	return chat.NewChatServiceSetGroupMuteAllResult()
+}
+
+func updateGroupAnnouncementHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceUpdateGroupAnnouncementArgs)
+	realResult := result.(*chat.ChatServiceUpdateGroupAnnouncementResult)
+	success, err := handler.(chat.ChatService).UpdateGroupAnnouncement(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceUpdateGroupAnnouncementArgs() interface{} {
+	return chat.NewChatServiceUpdateGroupAnnouncementArgs()
+}
+
+func newChatServiceUpdateGroupAnnouncementResult() interface{} {
+	return chat.NewChatServiceUpdateGroupAnnouncementResult()
+}
+
 func listMembersHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	realArg := arg.(*chat.ChatServiceListMembersArgs)
 	realResult := result.(*chat.ChatServiceListMembersResult)
@@ -351,6 +590,42 @@ func newChatServiceListMessagesArgs() interface{} {
 
 func newChatServiceListMessagesResult() interface{} {
 	return chat.NewChatServiceListMessagesResult()
+}
+
+func markConversationReadHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceMarkConversationReadArgs)
+	realResult := result.(*chat.ChatServiceMarkConversationReadResult)
+	success, err := handler.(chat.ChatService).MarkConversationRead(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceMarkConversationReadArgs() interface{} {
+	return chat.NewChatServiceMarkConversationReadArgs()
+}
+
+func newChatServiceMarkConversationReadResult() interface{} {
+	return chat.NewChatServiceMarkConversationReadResult()
+}
+
+func recallMessageHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceRecallMessageArgs)
+	realResult := result.(*chat.ChatServiceRecallMessageResult)
+	success, err := handler.(chat.ChatService).RecallMessage(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceRecallMessageArgs() interface{} {
+	return chat.NewChatServiceRecallMessageArgs()
+}
+
+func newChatServiceRecallMessageResult() interface{} {
+	return chat.NewChatServiceRecallMessageResult()
 }
 
 func listBotsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -471,7 +746,6 @@ func findSingleByUsersHandler(ctx context.Context, handler interface{}, arg, res
 	realResult.Success = success
 	return nil
 }
-
 func newChatServiceFindSingleByUsersArgs() interface{} {
 	return chat.NewChatServiceFindSingleByUsersArgs()
 }
@@ -510,6 +784,16 @@ func (p *kClient) CreateGroup(ctx context.Context, req *chat.CreateGroupRequest)
 	return _result.GetSuccess(), nil
 }
 
+func (p *kClient) GetGroupInfo(ctx context.Context, req *chat.GetGroupInfoRequest) (r *chat.GetGroupInfoResponse, err error) {
+	var _args chat.ChatServiceGetGroupInfoArgs
+	_args.Req = req
+	var _result chat.ChatServiceGetGroupInfoResult
+	if err = p.c.Call(ctx, "GetGroupInfo", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
 func (p *kClient) CreateSingleConversation(ctx context.Context, req *chat.CreateSingleConversationRequest) (r *chat.CreateSingleConversationResponse, err error) {
 	var _args chat.ChatServiceCreateSingleConversationArgs
 	_args.Req = req
@@ -530,7 +814,7 @@ func (p *kClient) ListConversations(ctx context.Context, req *chat.ListConversat
 	return _result.GetSuccess(), nil
 }
 
-func (p *kClient) JoinGroup(ctx context.Context, req *chat.JoinGroupRequest) (r *chat.CommonResponse, err error) {
+func (p *kClient) JoinGroup(ctx context.Context, req *chat.JoinGroupRequest) (r *chat.ConversationEventResponse, err error) {
 	var _args chat.ChatServiceJoinGroupArgs
 	_args.Req = req
 	var _result chat.ChatServiceJoinGroupResult
@@ -540,7 +824,7 @@ func (p *kClient) JoinGroup(ctx context.Context, req *chat.JoinGroupRequest) (r 
 	return _result.GetSuccess(), nil
 }
 
-func (p *kClient) InviteMember(ctx context.Context, req *chat.InviteMemberRequest) (r *chat.CommonResponse, err error) {
+func (p *kClient) InviteMember(ctx context.Context, req *chat.InviteMemberRequest) (r *chat.ConversationEventResponse, err error) {
 	var _args chat.ChatServiceInviteMemberArgs
 	_args.Req = req
 	var _result chat.ChatServiceInviteMemberResult
@@ -550,11 +834,91 @@ func (p *kClient) InviteMember(ctx context.Context, req *chat.InviteMemberReques
 	return _result.GetSuccess(), nil
 }
 
-func (p *kClient) LeaveGroup(ctx context.Context, req *chat.LeaveGroupRequest) (r *chat.CommonResponse, err error) {
+func (p *kClient) LeaveGroup(ctx context.Context, req *chat.LeaveGroupRequest) (r *chat.ConversationEventResponse, err error) {
 	var _args chat.ChatServiceLeaveGroupArgs
 	_args.Req = req
 	var _result chat.ChatServiceLeaveGroupResult
 	if err = p.c.Call(ctx, "LeaveGroup", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) TransferOwner(ctx context.Context, req *chat.TransferOwnerRequest) (r *chat.ConversationEventResponse, err error) {
+	var _args chat.ChatServiceTransferOwnerArgs
+	_args.Req = req
+	var _result chat.ChatServiceTransferOwnerResult
+	if err = p.c.Call(ctx, "TransferOwner", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) SetAdmin(ctx context.Context, req *chat.SetAdminRequest) (r *chat.ConversationEventResponse, err error) {
+	var _args chat.ChatServiceSetAdminArgs
+	_args.Req = req
+	var _result chat.ChatServiceSetAdminResult
+	if err = p.c.Call(ctx, "SetAdmin", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) RemoveAdmin(ctx context.Context, req *chat.RemoveAdminRequest) (r *chat.ConversationEventResponse, err error) {
+	var _args chat.ChatServiceRemoveAdminArgs
+	_args.Req = req
+	var _result chat.ChatServiceRemoveAdminResult
+	if err = p.c.Call(ctx, "RemoveAdmin", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) MuteMember(ctx context.Context, req *chat.MuteMemberRequest) (r *chat.ConversationEventResponse, err error) {
+	var _args chat.ChatServiceMuteMemberArgs
+	_args.Req = req
+	var _result chat.ChatServiceMuteMemberResult
+	if err = p.c.Call(ctx, "MuteMember", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) UnmuteMember(ctx context.Context, req *chat.UnmuteMemberRequest) (r *chat.ConversationEventResponse, err error) {
+	var _args chat.ChatServiceUnmuteMemberArgs
+	_args.Req = req
+	var _result chat.ChatServiceUnmuteMemberResult
+	if err = p.c.Call(ctx, "UnmuteMember", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) RemoveMember(ctx context.Context, req *chat.RemoveMemberRequest) (r *chat.ConversationEventResponse, err error) {
+	var _args chat.ChatServiceRemoveMemberArgs
+	_args.Req = req
+	var _result chat.ChatServiceRemoveMemberResult
+	if err = p.c.Call(ctx, "RemoveMember", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) SetGroupMuteAll(ctx context.Context, req *chat.SetGroupMuteAllRequest) (r *chat.ConversationEventResponse, err error) {
+	var _args chat.ChatServiceSetGroupMuteAllArgs
+	_args.Req = req
+	var _result chat.ChatServiceSetGroupMuteAllResult
+	if err = p.c.Call(ctx, "SetGroupMuteAll", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) UpdateGroupAnnouncement(ctx context.Context, req *chat.UpdateGroupAnnouncementRequest) (r *chat.ConversationEventResponse, err error) {
+	var _args chat.ChatServiceUpdateGroupAnnouncementArgs
+	_args.Req = req
+	var _result chat.ChatServiceUpdateGroupAnnouncementResult
+	if err = p.c.Call(ctx, "UpdateGroupAnnouncement", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil
@@ -575,6 +939,26 @@ func (p *kClient) ListMessages(ctx context.Context, req *chat.ListMessagesReques
 	_args.Req = req
 	var _result chat.ChatServiceListMessagesResult
 	if err = p.c.Call(ctx, "ListMessages", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) MarkConversationRead(ctx context.Context, req *chat.MarkConversationReadRequest) (r *chat.CommonResponse, err error) {
+	var _args chat.ChatServiceMarkConversationReadArgs
+	_args.Req = req
+	var _result chat.ChatServiceMarkConversationReadResult
+	if err = p.c.Call(ctx, "MarkConversationRead", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) RecallMessage(ctx context.Context, req *chat.RecallMessageRequest) (r *chat.MessageRecalledEventResponse, err error) {
+	var _args chat.ChatServiceRecallMessageArgs
+	_args.Req = req
+	var _result chat.ChatServiceRecallMessageResult
+	if err = p.c.Call(ctx, "RecallMessage", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

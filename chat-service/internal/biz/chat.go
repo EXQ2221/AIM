@@ -2,7 +2,9 @@ package biz
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -18,16 +20,23 @@ var (
 	ErrBadRequest           = errors.New("bad_request: invalid request")
 	ErrConversationNotFound = errors.New("not_found: conversation not found")
 	ErrGroupNotFound        = errors.New("not_found: group not found")
+	ErrMessageNotFound      = errors.New("not_found: message not found")
 	ErrNotMember            = errors.New("forbidden: user is not a member of this conversation")
 	ErrOwnerCannotLeave     = errors.New("forbidden: owner cannot leave group before ownership transfer")
 	ErrSingleSelfChat       = errors.New("bad_request: cannot create single conversation with yourself")
 	ErrSingleTargetInvalid  = errors.New("forbidden: target user is not available")
 	ErrSingleFriendRequired = errors.New("forbidden: single conversation requires active friendship")
 	ErrMessageEmpty         = errors.New("bad_request: message content is empty")
-	ErrMessageUnsupported   = errors.New("bad_request: only text message is supported")
+	ErrMessageUnsupported   = errors.New("bad_request: unsupported message type")
+	ErrMessageInvalid       = errors.New("bad_request: invalid message content")
+	ErrReplyTargetInvalid   = errors.New("bad_request: invalid reply target")
+	ErrMessageRecallDenied  = errors.New("forbidden: only the sender can recall this message")
+	ErrGroupAdminRequired   = errors.New("forbidden: only owner or admin can perform this action")
 	ErrMemberMuted          = errors.New("forbidden: member is muted")
 	ErrGroupMutedAll        = errors.New("forbidden: group is muted for members")
 )
+
+const replyPreviewLimit = 80
 
 type ChatService struct {
 	ConversationRepo     repository.ConversationRepository
@@ -141,6 +150,29 @@ func (s *ChatService) CreateGroup(ctx context.Context, input CreateGroupInput) (
 		return nil, err
 	}
 
+	return groupToView(group, conversation.ConversationID), nil
+}
+
+func (s *ChatService) GetGroupInfo(ctx context.Context, operatorID uint64, conversationID string) (*GroupView, error) {
+	if operatorID == 0 {
+		return nil, ErrBadRequest
+	}
+
+	conversation, err := s.requireGroupConversation(ctx, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.requireMember(ctx, conversation.ID, operatorID); err != nil {
+		return nil, err
+	}
+
+	group, err := s.GroupRepo.GetByConversationID(ctx, conversation.ID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrGroupNotFound
+		}
+		return nil, err
+	}
 	return groupToView(group, conversation.ConversationID), nil
 }
 
@@ -278,7 +310,8 @@ func (s *ChatService) ListConversations(ctx context.Context, userID uint64) ([]C
 			LastMessageAt:         lastMessageAt,
 			LastMessageSenderID:   row.LastMessageSenderID,
 			LastMessageSenderType: row.LastMessageSenderType,
-			LastMessageContent:    row.LastMessageContent,
+			LastMessageContent:    conversationLastMessageContent(row),
+			MuteAll:               row.MuteAll,
 			Role:                  row.Role,
 			IsPinned:              row.IsPinned,
 			IsMuted:               row.IsMuted,
@@ -293,90 +326,186 @@ func (s *ChatService) ListConversations(ctx context.Context, userID uint64) ([]C
 	return result, nil
 }
 
-func (s *ChatService) JoinGroup(ctx context.Context, operatorID uint64, conversationID string) error {
+func (s *ChatService) JoinGroup(ctx context.Context, operatorID uint64, conversationID string) (*ConversationEventView, error) {
 	conversation, err := s.requireGroupConversation(ctx, conversationID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if operatorID == 0 {
-		return ErrBadRequest
+		return nil, ErrBadRequest
 	}
 
-	member, err := s.MemberRepo.GetUserMember(ctx, conversation.ID, operatorID)
-	if err == nil {
-		if member.Status != model.MemberStatusRemoved {
-			return nil
+	var event *ConversationEventView
+	err = s.TxManager.WithinTransaction(ctx, func(tx *gorm.DB) error {
+		memberRepo := s.MemberRepo.WithTx(tx)
+		messageRepo := s.MessageRepo.WithTx(tx)
+		conversationRepo := s.ConversationRepo.WithTx(tx)
+
+		member, getErr := memberRepo.GetUserMember(ctx, conversation.ID, operatorID)
+		if getErr == nil {
+			if member.Status != model.MemberStatusRemoved {
+				return nil
+			}
+			member.Status = model.MemberStatusNormal
+			member.Role = model.MemberRoleMember
+			member.JoinedAt = time.Now()
+			if updateErr := memberRepo.Update(ctx, member); updateErr != nil {
+				return updateErr
+			}
+		} else if !errors.Is(getErr, gorm.ErrRecordNotFound) {
+			return getErr
+		} else {
+			if createErr := memberRepo.Create(ctx, &model.ConversationMember{
+				ConversationID: conversation.ID,
+				MemberType:     model.MemberTypeUser,
+				MemberID:       operatorID,
+				Role:           model.MemberRoleMember,
+				Status:         model.MemberStatusNormal,
+				JoinedAt:       time.Now(),
+			}); createErr != nil {
+				return createErr
+			}
 		}
-		member.Status = model.MemberStatusNormal
-		member.Role = model.MemberRoleMember
-		member.JoinedAt = time.Now()
-		return s.MemberRepo.Update(ctx, member)
-	}
-	if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
 
-	return s.MemberRepo.Create(ctx, &model.ConversationMember{
-		ConversationID: conversation.ID,
-		MemberType:     model.MemberTypeUser,
-		MemberID:       operatorID,
-		Role:           model.MemberRoleMember,
-		Status:         model.MemberStatusNormal,
-		JoinedAt:       time.Now(),
+		systemMessage, recipientUserIDs, eventErr := s.createSystemMessageTx(
+			ctx,
+			conversation,
+			conversationRepo,
+			memberRepo,
+			messageRepo,
+			model.SystemEventMemberJoined,
+			operatorID,
+			[]uint64{operatorID},
+		)
+		if eventErr != nil {
+			return eventErr
+		}
+		view := messageToView(systemMessage, conversation.ConversationID)
+		event = &ConversationEventView{Message: &view, RecipientUserIDs: recipientUserIDs}
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return event, nil
 }
 
-func (s *ChatService) InviteMember(ctx context.Context, input InviteMemberInput, conversationID string) error {
+func (s *ChatService) InviteMember(ctx context.Context, input InviteMemberInput, conversationID string) (*ConversationEventView, error) {
 	if input.OperatorID == 0 || input.TargetUserID == 0 {
-		return ErrBadRequest
+		return nil, ErrBadRequest
 	}
 	conversation, err := s.requireGroupConversation(ctx, conversationID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if _, err := s.requireMember(ctx, conversation.ID, input.OperatorID); err != nil {
-		return err
+		return nil, err
 	}
 
-	existing, err := s.MemberRepo.GetUserMember(ctx, conversation.ID, input.TargetUserID)
-	if err == nil && existing.Status != model.MemberStatusRemoved {
+	var event *ConversationEventView
+	err = s.TxManager.WithinTransaction(ctx, func(tx *gorm.DB) error {
+		memberRepo := s.MemberRepo.WithTx(tx)
+		messageRepo := s.MessageRepo.WithTx(tx)
+		conversationRepo := s.ConversationRepo.WithTx(tx)
+
+		existing, getErr := memberRepo.GetUserMember(ctx, conversation.ID, input.TargetUserID)
+		if getErr == nil {
+			if existing.Status != model.MemberStatusRemoved {
+				return nil
+			}
+			existing.Status = model.MemberStatusNormal
+			existing.Role = model.MemberRoleMember
+			existing.JoinedAt = time.Now()
+			if updateErr := memberRepo.Update(ctx, existing); updateErr != nil {
+				return updateErr
+			}
+		} else if !errors.Is(getErr, gorm.ErrRecordNotFound) {
+			return getErr
+		} else {
+			if createErr := memberRepo.Create(ctx, &model.ConversationMember{
+				ConversationID: conversation.ID,
+				MemberType:     model.MemberTypeUser,
+				MemberID:       input.TargetUserID,
+				Role:           model.MemberRoleMember,
+				Status:         model.MemberStatusNormal,
+				JoinedAt:       time.Now(),
+			}); createErr != nil {
+				return createErr
+			}
+		}
+
+		systemMessage, recipientUserIDs, eventErr := s.createSystemMessageTx(
+			ctx,
+			conversation,
+			conversationRepo,
+			memberRepo,
+			messageRepo,
+			model.SystemEventMemberInvited,
+			input.OperatorID,
+			[]uint64{input.TargetUserID},
+		)
+		if eventErr != nil {
+			return eventErr
+		}
+		view := messageToView(systemMessage, conversation.ConversationID)
+		event = &ConversationEventView{Message: &view, RecipientUserIDs: recipientUserIDs}
 		return nil
-	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	}
-
-	now := time.Now()
-	if existing != nil && existing.Status == model.MemberStatusRemoved {
-		return s.MemberRepo.GetDB().WithContext(ctx).
-			Exec("UPDATE conversation_members SET status=?, role=?, joined_at=? WHERE id=?",
-				model.MemberStatusNormal, model.MemberRoleMember, now, existing.ID).Error
-	}
-
-	return s.MemberRepo.Create(ctx, &model.ConversationMember{
-		ConversationID: conversation.ID,
-		MemberType:     model.MemberTypeUser,
-		MemberID:       input.TargetUserID,
-		Role:           model.MemberRoleMember,
-		Status:         model.MemberStatusNormal,
-		JoinedAt:       now,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return event, nil
 }
 
-func (s *ChatService) LeaveGroup(ctx context.Context, operatorID uint64, conversationID string) error {
+func (s *ChatService) LeaveGroup(ctx context.Context, operatorID uint64, conversationID string) (*ConversationEventView, error) {
 	conversation, err := s.requireGroupConversation(ctx, conversationID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	member, err := s.requireMember(ctx, conversation.ID, operatorID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if member.Role == model.MemberRoleOwner {
-		return ErrOwnerCannotLeave
+		return nil, ErrOwnerCannotLeave
 	}
-	member.Status = model.MemberStatusRemoved
-	return s.MemberRepo.Update(ctx, member)
+
+	var event *ConversationEventView
+	err = s.TxManager.WithinTransaction(ctx, func(tx *gorm.DB) error {
+		memberRepo := s.MemberRepo.WithTx(tx)
+		messageRepo := s.MessageRepo.WithTx(tx)
+		conversationRepo := s.ConversationRepo.WithTx(tx)
+
+		leavingMember, getErr := memberRepo.GetUserMember(ctx, conversation.ID, operatorID)
+		if getErr != nil {
+			return getErr
+		}
+		leavingMember.Status = model.MemberStatusRemoved
+		if updateErr := memberRepo.Update(ctx, leavingMember); updateErr != nil {
+			return updateErr
+		}
+
+		systemMessage, recipientUserIDs, eventErr := s.createSystemMessageTx(
+			ctx,
+			conversation,
+			conversationRepo,
+			memberRepo,
+			messageRepo,
+			model.SystemEventMemberLeft,
+			operatorID,
+			[]uint64{operatorID},
+		)
+		if eventErr != nil {
+			return eventErr
+		}
+		view := messageToView(systemMessage, conversation.ConversationID)
+		event = &ConversationEventView{Message: &view, RecipientUserIDs: recipientUserIDs}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return event, nil
 }
 
 func (s *ChatService) ListMembers(ctx context.Context, operatorID uint64, conversationID string) ([]MemberListView, error) {
@@ -403,6 +532,10 @@ func (s *ChatService) ListMembers(ctx context.Context, operatorID uint64, conver
 				Status:     string(member.Status),
 				JoinedAt:   member.JoinedAt.Unix(),
 				MemberType: string(model.MemberTypeUser),
+			}
+			if member.MuteUntil != nil {
+				value := member.MuteUntil.Unix()
+				view.MuteUntil = &value
 			}
 			if s.UserClient != nil {
 				user, uErr := s.UserClient.GetUser(ctx, member.MemberID)
@@ -487,22 +620,120 @@ func (s *ChatService) ListMessages(ctx context.Context, operatorID uint64, conve
 
 	result := make([]MessageView, 0, len(messages))
 	for _, message := range messages {
-		result = append(result, messageToView(&message, conversation.ConversationID))
+		view := messageToView(&message, conversation.ConversationID)
+		result = append(result, view)
+	}
+	if err := s.decorateMessageReadState(ctx, conversation, operatorID, result); err != nil {
+		return nil, err
+	}
+	if err := s.decorateMessageReplies(ctx, result); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
 
-func (s *ChatService) CreateMessage(ctx context.Context, operatorID uint64, conversationID string, content string, replyToID *uint64) (*MessageView, error) {
-	content = strings.TrimSpace(content)
+func (s *ChatService) MarkConversationRead(ctx context.Context, input MarkConversationReadInput) error {
+	if input.OperatorID == 0 || strings.TrimSpace(input.ConversationID) == "" || input.LastReadMessageID == 0 {
+		return ErrBadRequest
+	}
+
+	conversation, err := s.requireConversation(ctx, input.ConversationID)
+	if err != nil {
+		return err
+	}
+
+	member, err := s.requireMember(ctx, conversation.ID, input.OperatorID)
+	if err != nil {
+		return err
+	}
+	if member.MemberType != model.MemberTypeUser {
+		return ErrBadRequest
+	}
+
+	message, err := s.MessageRepo.GetByID(ctx, input.LastReadMessageID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrMessageNotFound
+		}
+		return err
+	}
+	if message.ConversationID != conversation.ID {
+		return ErrBadRequest
+	}
+	if member.LastReadMessageID != nil && *member.LastReadMessageID >= input.LastReadMessageID {
+		return nil
+	}
+
+	return s.MemberRepo.UpdateLastReadMessageID(ctx, conversation.ID, input.OperatorID, input.LastReadMessageID)
+}
+
+func (s *ChatService) RecallMessage(ctx context.Context, input RecallMessageInput) (*MessageRecalledEventView, error) {
+	if input.OperatorID == 0 || strings.TrimSpace(input.ConversationID) == "" || input.MessageID == 0 {
+		return nil, ErrBadRequest
+	}
+
+	conversation, err := s.requireConversation(ctx, input.ConversationID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.requireMember(ctx, conversation.ID, input.OperatorID); err != nil {
+		return nil, err
+	}
+
+	message, err := s.MessageRepo.GetByID(ctx, input.MessageID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrMessageNotFound
+		}
+		return nil, err
+	}
+	if message.ConversationID != conversation.ID {
+		return nil, ErrBadRequest
+	}
+	if message.SenderType != model.SenderTypeUser || message.SenderID != input.OperatorID {
+		return nil, ErrMessageRecallDenied
+	}
+	if message.Status == model.MessageStatusRecalled {
+		recipientUserIDs, err := s.MemberRepo.ListUserMemberIDs(ctx, conversation.ID)
+		if err != nil {
+			return nil, err
+		}
+		return &MessageRecalledEventView{
+			MessageID:        message.ID,
+			ConversationID:   conversation.ConversationID,
+			RecipientUserIDs: recipientUserIDs,
+		}, nil
+	}
+	if message.Status != model.MessageStatusNormal {
+		return nil, ErrBadRequest
+	}
+
+	err = s.TxManager.WithinTransaction(ctx, func(tx *gorm.DB) error {
+		messageRepo := s.MessageRepo.WithTx(tx)
+		return messageRepo.UpdateStatus(ctx, message.ID, model.MessageStatusRecalled)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	recipientUserIDs, err := s.MemberRepo.ListUserMemberIDs(ctx, conversation.ID)
+	if err != nil {
+		return nil, err
+	}
+	return &MessageRecalledEventView{
+		MessageID:        message.ID,
+		ConversationID:   conversation.ConversationID,
+		RecipientUserIDs: recipientUserIDs,
+	}, nil
+}
+
+func (s *ChatService) CreateMessage(ctx context.Context, operatorID uint64, conversationID string, content string, replyToID *uint64, messageType string) (*MessageView, error) {
 	conversation, err := s.requireConversation(ctx, conversationID)
 	if err != nil {
 		return nil, err
 	}
 	if operatorID == 0 {
 		return nil, ErrBadRequest
-	}
-	if content == "" {
-		return nil, ErrMessageEmpty
 	}
 	member, err := s.requireMember(ctx, conversation.ID, operatorID)
 	if err != nil {
@@ -511,14 +742,32 @@ func (s *ChatService) CreateMessage(ctx context.Context, operatorID uint64, conv
 	if err := s.checkSendPermission(ctx, conversation, member); err != nil {
 		return nil, err
 	}
+	normalizedType, normalizedContent, err := normalizeMessagePayload(messageType, content)
+	if err != nil {
+		return nil, err
+	}
+	var replyPreview *ReplyPreviewView
+	if replyToID != nil {
+		replyMessage, err := s.MessageRepo.GetByID(ctx, *replyToID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrReplyTargetInvalid
+			}
+			return nil, err
+		}
+		if replyMessage.ConversationID != conversation.ID {
+			return nil, ErrReplyTargetInvalid
+		}
+		replyPreview = buildReplyPreviewView(replyMessage)
+	}
 
 	now := time.Now()
 	message := &model.Message{
 		ConversationID: conversation.ID,
 		SenderID:       operatorID,
 		SenderType:     model.SenderTypeUser,
-		MessageType:    model.MessageTypeText,
-		Content:        content,
+		MessageType:    normalizedType,
+		Content:        normalizedContent,
 		ReplyToID:      replyToID,
 		Status:         model.MessageStatusNormal,
 		CreatedAt:      now,
@@ -541,11 +790,12 @@ func (s *ChatService) CreateMessage(ctx context.Context, operatorID uint64, conv
 			ConversationID:   message.ConversationID,
 			RequestMessageID: message.ID,
 			UserID:           message.SenderID,
-			Content:          message.Content,
+			Content:          model.ExtractTextMessageContent(message.Content),
 		})
 	}
 
 	view := messageToView(message, conversation.ConversationID)
+	view.ReplyTo = replyPreview
 	return &view, nil
 }
 
@@ -723,6 +973,17 @@ func (s *ChatService) buildConversationView(ctx context.Context, viewerID uint64
 		IsMuted:        member.IsMuted,
 		UpdatedAt:      conversation.UpdatedAt.Unix(),
 	}
+	if conversation.Type == model.ConversationTypeGroup {
+		group, err := s.GroupRepo.GetByConversationID(ctx, conversation.ID)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrGroupNotFound
+			}
+			return nil, err
+		}
+		value := group.MuteAll
+		view.MuteAll = &value
+	}
 	if err := s.decorateSingleConversation(ctx, viewerID, view); err != nil {
 		return nil, err
 	}
@@ -808,15 +1069,91 @@ func groupToView(group *model.GroupInfo, conversationID string) *GroupView {
 	if group == nil {
 		return nil
 	}
+	var announcementUpdatedAt *int64
+	if group.AnnouncementUpdatedAt != nil {
+		value := group.AnnouncementUpdatedAt.Unix()
+		announcementUpdatedAt = &value
+	}
 	return &GroupView{
-		ConversationID: conversationID,
-		Type:           string(model.ConversationTypeGroup),
-		Name:           group.Name,
-		Avatar:         group.Avatar,
-		Announcement:   group.Announcement,
-		OwnerID:        group.OwnerID,
-		JoinPolicy:     string(group.JoinPolicy),
-		CreatedAt:      group.CreatedAt.Unix(),
+		ConversationID:        conversationID,
+		Type:                  string(model.ConversationTypeGroup),
+		Name:                  group.Name,
+		Avatar:                group.Avatar,
+		Announcement:          group.Announcement,
+		AnnouncementUpdatedBy: group.AnnouncementUpdatedBy,
+		AnnouncementUpdatedAt: announcementUpdatedAt,
+		OwnerID:               group.OwnerID,
+		JoinPolicy:            string(group.JoinPolicy),
+		CreatedAt:             group.CreatedAt.Unix(),
+	}
+}
+
+func normalizeMessagePayload(messageType string, content string) (model.MessageType, string, error) {
+	normalizedType := model.MessageType(strings.ToUpper(strings.TrimSpace(messageType)))
+	if normalizedType == "" {
+		normalizedType = model.MessageTypeText
+	}
+
+	switch normalizedType {
+	case model.MessageTypeText:
+		normalizedContent, err := model.NormalizeTextMessageContent(content)
+		if err != nil {
+			return "", "", ErrMessageInvalid
+		}
+		if model.ExtractTextMessageContent(normalizedContent) == "" {
+			return "", "", ErrMessageEmpty
+		}
+		return normalizedType, normalizedContent, nil
+	case model.MessageTypeImage:
+		var payload model.ImageMessageContent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err != nil {
+			return "", "", ErrMessageInvalid
+		}
+		payload.URL = strings.TrimSpace(payload.URL)
+		payload.Name = strings.TrimSpace(payload.Name)
+		payload.MimeType = strings.TrimSpace(payload.MimeType)
+		if payload.URL == "" || payload.Name == "" || payload.MimeType == "" {
+			return "", "", ErrMessageInvalid
+		}
+		normalizedContent, err := json.Marshal(payload)
+		if err != nil {
+			return "", "", ErrMessageInvalid
+		}
+		return normalizedType, string(normalizedContent), nil
+	case model.MessageTypeFile:
+		var payload model.FileMessageContent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err != nil {
+			return "", "", ErrMessageInvalid
+		}
+		payload.URL = strings.TrimSpace(payload.URL)
+		payload.Name = strings.TrimSpace(payload.Name)
+		payload.MimeType = strings.TrimSpace(payload.MimeType)
+		if payload.URL == "" || payload.Name == "" || payload.MimeType == "" || payload.Size <= 0 {
+			return "", "", ErrMessageInvalid
+		}
+		normalizedContent, err := json.Marshal(payload)
+		if err != nil {
+			return "", "", ErrMessageInvalid
+		}
+		return normalizedType, string(normalizedContent), nil
+	case model.MessageTypeVoice:
+		var payload model.VoiceMessageContent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err != nil {
+			return "", "", ErrMessageInvalid
+		}
+		payload.URL = strings.TrimSpace(payload.URL)
+		payload.Name = strings.TrimSpace(payload.Name)
+		payload.MimeType = strings.TrimSpace(payload.MimeType)
+		if payload.URL == "" || payload.Name == "" || payload.MimeType == "" || payload.DurationMS <= 0 {
+			return "", "", ErrMessageInvalid
+		}
+		normalizedContent, err := json.Marshal(payload)
+		if err != nil {
+			return "", "", ErrMessageInvalid
+		}
+		return normalizedType, string(normalizedContent), nil
+	default:
+		return "", "", ErrMessageUnsupported
 	}
 }
 
@@ -827,9 +1164,300 @@ func messageToView(message *model.Message, conversationID string) MessageView {
 		SenderID:       message.SenderID,
 		SenderType:     string(message.SenderType),
 		MessageType:    string(message.MessageType),
-		Content:        message.Content,
+		Content:        visibleMessageContent(message),
 		ReplyToID:      message.ReplyToID,
 		Status:         string(message.Status),
 		CreatedAt:      message.CreatedAt.Unix(),
 	}
+}
+
+func buildReplyPreviewView(message *model.Message) *ReplyPreviewView {
+	if message == nil {
+		return nil
+	}
+	return &ReplyPreviewView{
+		MessageID:      message.ID,
+		SenderID:       message.SenderID,
+		SenderType:     string(message.SenderType),
+		MessageType:    string(message.MessageType),
+		ContentPreview: model.ReplyContentPreviewWithStatus(message.Status, message.MessageType, message.Content, replyPreviewLimit),
+	}
+}
+
+func visibleMessageContent(message *model.Message) string {
+	if message == nil {
+		return ""
+	}
+	if message.Status == model.MessageStatusRecalled {
+		return ""
+	}
+	return message.Content
+}
+
+func conversationLastMessageContent(row repository.ConversationListRow) string {
+	if strings.EqualFold(row.LastMessageStatus, string(model.MessageStatusRecalled)) {
+		return model.RecalledMessagePlaceholder
+	}
+	return row.LastMessageContent
+}
+
+func (s *ChatService) decorateMessageReplies(ctx context.Context, messages []MessageView) error {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	replyIDs := make([]uint64, 0)
+	seen := make(map[uint64]struct{})
+	for _, message := range messages {
+		if message.ReplyToID == nil || *message.ReplyToID == 0 {
+			continue
+		}
+		if _, ok := seen[*message.ReplyToID]; ok {
+			continue
+		}
+		seen[*message.ReplyToID] = struct{}{}
+		replyIDs = append(replyIDs, *message.ReplyToID)
+	}
+	if len(replyIDs) == 0 {
+		return nil
+	}
+
+	replyMessages, err := s.MessageRepo.GetByIDs(ctx, replyIDs)
+	if err != nil {
+		return err
+	}
+
+	replyMap := make(map[uint64]*ReplyPreviewView, len(replyMessages))
+	for index := range replyMessages {
+		replyMessage := replyMessages[index]
+		replyMap[replyMessage.ID] = buildReplyPreviewView(&replyMessage)
+	}
+
+	for index := range messages {
+		replyToID := messages[index].ReplyToID
+		if replyToID == nil || *replyToID == 0 {
+			continue
+		}
+		messages[index].ReplyTo = replyMap[*replyToID]
+	}
+	return nil
+}
+
+func (s *ChatService) createSystemMessageTx(
+	ctx context.Context,
+	conversation *model.Conversation,
+	conversationRepo repository.ConversationRepository,
+	memberRepo repository.MemberRepository,
+	messageRepo repository.MessageRepository,
+	eventType string,
+	actorUserID uint64,
+	targetUserIDs []uint64,
+) (*model.Message, []uint64, error) {
+	if conversation == nil {
+		return nil, nil, ErrConversationNotFound
+	}
+
+	text := s.renderSystemMessageTextV2(ctx, eventType, actorUserID, targetUserIDs)
+	payload, err := json.Marshal(model.SystemMessageContent{
+		EventType:     eventType,
+		ActorUserID:   actorUserID,
+		TargetUserIDs: append([]uint64(nil), targetUserIDs...),
+		Text:          text,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	now := time.Now()
+	message := &model.Message{
+		ConversationID: conversation.ID,
+		SenderID:       0,
+		SenderType:     model.SenderTypeSystem,
+		MessageType:    model.MessageTypeSystem,
+		Content:        string(payload),
+		Status:         model.MessageStatusNormal,
+		CreatedAt:      now,
+	}
+	if err := messageRepo.Create(ctx, message); err != nil {
+		return nil, nil, err
+	}
+	if err := conversationRepo.UpdateLastMessage(ctx, conversation.ID, message.ID, message.CreatedAt); err != nil {
+		return nil, nil, err
+	}
+
+	recipientUserIDs, err := memberRepo.ListUserMemberIDs(ctx, conversation.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return message, recipientUserIDs, nil
+}
+
+func (s *ChatService) renderSystemMessageText(ctx context.Context, eventType string, actorUserID uint64, targetUserIDs []uint64) string {
+	actorName := s.lookupUserDisplayName(ctx, actorUserID)
+	targetNames := make([]string, 0, len(targetUserIDs))
+	for _, targetUserID := range targetUserIDs {
+		targetNames = append(targetNames, s.lookupUserDisplayName(ctx, targetUserID))
+	}
+	targetText := strings.Join(targetNames, ", ")
+
+	switch eventType {
+	case model.SystemEventMemberJoined:
+		return fmt.Sprintf("%s 加入了群聊", actorName)
+	case model.SystemEventMemberLeft:
+		return fmt.Sprintf("%s 退出了群聊", actorName)
+	case model.SystemEventMemberInvited:
+		if targetText == "" {
+			return fmt.Sprintf("%s 邀请了新成员加入群聊", actorName)
+		}
+		return fmt.Sprintf("%s 邀请 %s 加入了群聊", actorName, targetText)
+	case model.SystemEventMemberRemoved:
+		if targetText == "" {
+			return fmt.Sprintf("%s 移除了群成员", actorName)
+		}
+		return fmt.Sprintf("%s 将 %s 移出了群聊", actorName, targetText)
+	case model.SystemEventMemberMuted:
+		if targetText == "" {
+			return fmt.Sprintf("%s 禁言了一名成员", actorName)
+		}
+		return fmt.Sprintf("%s 禁言了 %s", actorName, targetText)
+	case model.SystemEventMemberUnmuted:
+		if targetText == "" {
+			return fmt.Sprintf("%s 解除了一名成员的禁言", actorName)
+		}
+		return fmt.Sprintf("%s 解除了 %s 的禁言", actorName, targetText)
+	case model.SystemEventGroupMuted:
+		return fmt.Sprintf("%s 开启了全员禁言", actorName)
+	case model.SystemEventGroupUnmuted:
+		return fmt.Sprintf("%s 关闭了全员禁言", actorName)
+	case model.SystemEventAdminAdded:
+		if targetText == "" {
+			return fmt.Sprintf("%s 设置了一名管理员", actorName)
+		}
+		return fmt.Sprintf("%s 将 %s 设为了管理员", actorName, targetText)
+	case model.SystemEventAdminRemoved:
+		if targetText == "" {
+			return fmt.Sprintf("%s 取消了一名管理员", actorName)
+		}
+		return fmt.Sprintf("%s 取消了 %s 的管理员身份", actorName, targetText)
+	case model.SystemEventOwnerTransferred:
+		if targetText == "" {
+			return fmt.Sprintf("%s 转让了群主", actorName)
+		}
+		return fmt.Sprintf("%s 将群主转让给了 %s", actorName, targetText)
+	default:
+		return "群系统消息"
+	}
+}
+
+func (s *ChatService) renderSystemMessageTextV2(ctx context.Context, eventType string, actorUserID uint64, targetUserIDs []uint64) string {
+	actorName := s.lookupUserDisplayName(ctx, actorUserID)
+	targetNames := make([]string, 0, len(targetUserIDs))
+	for _, targetUserID := range targetUserIDs {
+		targetNames = append(targetNames, s.lookupUserDisplayName(ctx, targetUserID))
+	}
+	targetText := strings.Join(targetNames, ", ")
+
+	switch eventType {
+	case model.SystemEventMemberJoined:
+		return fmt.Sprintf("%s joined the group", actorName)
+	case model.SystemEventMemberLeft:
+		return fmt.Sprintf("%s left the group", actorName)
+	case model.SystemEventMemberInvited:
+		if targetText == "" {
+			return fmt.Sprintf("%s invited a new member", actorName)
+		}
+		return fmt.Sprintf("%s invited %s to the group", actorName, targetText)
+	case model.SystemEventMemberRemoved:
+		if targetText == "" {
+			return fmt.Sprintf("%s removed a member", actorName)
+		}
+		return fmt.Sprintf("%s removed %s from the group", actorName, targetText)
+	case model.SystemEventMemberMuted:
+		if targetText == "" {
+			return fmt.Sprintf("%s muted a member", actorName)
+		}
+		return fmt.Sprintf("%s muted %s", actorName, targetText)
+	case model.SystemEventMemberUnmuted:
+		if targetText == "" {
+			return fmt.Sprintf("%s unmuted a member", actorName)
+		}
+		return fmt.Sprintf("%s unmuted %s", actorName, targetText)
+	case model.SystemEventGroupMuted:
+		return fmt.Sprintf("%s enabled mute all", actorName)
+	case model.SystemEventGroupUnmuted:
+		return fmt.Sprintf("%s disabled mute all", actorName)
+	case model.SystemEventAdminAdded:
+		if targetText == "" {
+			return fmt.Sprintf("%s set a new admin", actorName)
+		}
+		return fmt.Sprintf("%s set %s as admin", actorName, targetText)
+	case model.SystemEventAdminRemoved:
+		if targetText == "" {
+			return fmt.Sprintf("%s removed an admin", actorName)
+		}
+		return fmt.Sprintf("%s removed admin role from %s", actorName, targetText)
+	case model.SystemEventOwnerTransferred:
+		if targetText == "" {
+			return fmt.Sprintf("%s transferred ownership", actorName)
+		}
+		return fmt.Sprintf("%s transferred ownership to %s", actorName, targetText)
+	case model.SystemEventAnnouncementUpdated:
+		return fmt.Sprintf("%s updated the group announcement", actorName)
+	default:
+		return "Group system message"
+	}
+}
+
+func (s *ChatService) lookupUserDisplayName(ctx context.Context, userID uint64) string {
+	if userID == 0 {
+		return "System"
+	}
+	if s.UserClient != nil {
+		user, err := s.UserClient.GetUser(ctx, userID)
+		if err == nil && user != nil {
+			if nickname := strings.TrimSpace(user.Nickname); nickname != "" {
+				return nickname
+			}
+		}
+	}
+	return fmt.Sprintf("User %d", userID)
+}
+
+func (s *ChatService) decorateMessageReadState(ctx context.Context, conversation *model.Conversation, operatorID uint64, messages []MessageView) error {
+	if conversation == nil || len(messages) == 0 {
+		return nil
+	}
+
+	userMembers, err := s.MemberRepo.ListUserMembers(ctx, conversation.ID)
+	if err != nil {
+		return err
+	}
+
+	switch conversation.Type {
+	case model.ConversationTypeSingle:
+		var peerLastReadMessageID *uint64
+		for _, member := range userMembers {
+			if member.MemberID == operatorID {
+				continue
+			}
+			peerLastReadMessageID = member.LastReadMessageID
+			break
+		}
+		for index := range messages {
+			readByPeer := peerLastReadMessageID != nil && *peerLastReadMessageID >= messages[index].ID
+			messages[index].ReadByPeer = &readByPeer
+		}
+	case model.ConversationTypeGroup:
+		for index := range messages {
+			var readCount int32
+			for _, member := range userMembers {
+				if member.LastReadMessageID != nil && *member.LastReadMessageID >= messages[index].ID {
+					readCount++
+				}
+			}
+			messages[index].ReadCount = &readCount
+		}
+	}
+
+	return nil
 }

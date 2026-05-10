@@ -13,20 +13,83 @@ type CreateSingleConversationInput struct {
 	TargetID   uint64
 }
 
+type UpdateGroupAnnouncementInput struct {
+	OperatorID     uint64
+	ConversationID string
+	Announcement   string
+}
+
 type InviteMemberInput struct {
-	OperatorID  uint64
+	OperatorID   uint64
 	TargetUserID uint64
 }
 
-type GroupView struct {
+type TransferOwnerInput struct {
+	OperatorID     uint64
 	ConversationID string
-	Type           string
-	Name           string
-	Avatar         string
-	Announcement   string
-	OwnerID        uint64
-	JoinPolicy     string
-	CreatedAt      int64
+	TargetUserID   uint64
+}
+
+type SetAdminInput struct {
+	OperatorID     uint64
+	ConversationID string
+	TargetUserID   uint64
+}
+
+type RemoveAdminInput struct {
+	OperatorID     uint64
+	ConversationID string
+	TargetUserID   uint64
+}
+
+type MuteMemberInput struct {
+	OperatorID     uint64
+	ConversationID string
+	TargetUserID   uint64
+	MuteUntil      int64
+}
+
+type UnmuteMemberInput struct {
+	OperatorID     uint64
+	ConversationID string
+	TargetUserID   uint64
+}
+
+type RemoveMemberInput struct {
+	OperatorID     uint64
+	ConversationID string
+	TargetUserID   uint64
+}
+
+type SetGroupMuteAllInput struct {
+	OperatorID     uint64
+	ConversationID string
+	MuteAll        bool
+}
+
+type MarkConversationReadInput struct {
+	OperatorID        uint64
+	ConversationID    string
+	LastReadMessageID uint64
+}
+
+type RecallMessageInput struct {
+	OperatorID     uint64
+	ConversationID string
+	MessageID      uint64
+}
+
+type GroupView struct {
+	ConversationID        string
+	Type                  string
+	Name                  string
+	Avatar                string
+	Announcement          string
+	AnnouncementUpdatedBy *uint64
+	AnnouncementUpdatedAt *int64
+	OwnerID               uint64
+	JoinPolicy            string
+	CreatedAt             int64
 }
 
 type ConversationView struct {
@@ -40,6 +103,7 @@ type ConversationView struct {
 	LastMessageSenderType string
 	LastMessageSenderName string
 	LastMessageContent    string
+	MuteAll               *bool
 	Role                  string
 	IsPinned              bool
 	IsMuted               bool
@@ -68,6 +132,7 @@ type MemberListView struct {
 	Aliases         []string
 	Enabled         *bool
 	PermissionScope string
+	MuteUntil       *int64
 }
 
 type MessageView struct {
@@ -78,8 +143,30 @@ type MessageView struct {
 	MessageType    string
 	Content        string
 	ReplyToID      *uint64
+	ReplyTo        *ReplyPreviewView
 	Status         string
 	CreatedAt      int64
+	ReadByPeer     *bool
+	ReadCount      *int32
+}
+
+type ReplyPreviewView struct {
+	MessageID      uint64
+	SenderID       uint64
+	SenderType     string
+	MessageType    string
+	ContentPreview string
+}
+
+type ConversationEventView struct {
+	Message          *MessageView
+	RecipientUserIDs []uint64
+}
+
+type MessageRecalledEventView struct {
+	MessageID        uint64
+	ConversationID   string
+	RecipientUserIDs []uint64
 }
 
 type AddConversationBotInput struct {

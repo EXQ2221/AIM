@@ -18,7 +18,10 @@ type ConversationListRow struct {
 	LastMessageAt         *time.Time
 	LastMessageSenderID   *uint64
 	LastMessageSenderType string
+	LastMessageType       string
+	LastMessageStatus     string
 	LastMessageContent    string
+	MuteAll               *bool
 	Role                  string
 	IsPinned              bool
 	IsMuted               bool
@@ -38,6 +41,7 @@ type ConversationRepository interface {
 type GroupRepository interface {
 	WithTx(tx *gorm.DB) GroupRepository
 	Create(ctx context.Context, group *model.GroupInfo) error
+	Update(ctx context.Context, group *model.GroupInfo) error
 	GetByConversationID(ctx context.Context, conversationID uint64) (*model.GroupInfo, error)
 }
 
@@ -45,6 +49,7 @@ type MemberRepository interface {
 	WithTx(tx *gorm.DB) MemberRepository
 	Create(ctx context.Context, member *model.ConversationMember) error
 	Update(ctx context.Context, member *model.ConversationMember) error
+	UpdateLastReadMessageID(ctx context.Context, conversationID, userID, lastReadMessageID uint64) error
 	GetUserMember(ctx context.Context, conversationID, userID uint64) (*model.ConversationMember, error)
 	IsUserMember(ctx context.Context, conversationID, userID uint64) (bool, error)
 	ListUserMembers(ctx context.Context, conversationID uint64) ([]model.ConversationMember, error)
@@ -59,6 +64,9 @@ type MemberRepository interface {
 type MessageRepository interface {
 	WithTx(tx *gorm.DB) MessageRepository
 	Create(ctx context.Context, message *model.Message) error
+	GetByID(ctx context.Context, id uint64) (*model.Message, error)
+	GetByIDs(ctx context.Context, ids []uint64) ([]model.Message, error)
+	UpdateStatus(ctx context.Context, id uint64, status model.MessageStatus) error
 	ListByConversationID(ctx context.Context, conversationID uint64, beforeID *uint64, limit int) ([]model.Message, error)
 }
 
@@ -127,8 +135,9 @@ func (r *GormConversationRepository) ListByUserID(ctx context.Context, userID ui
 	var rows []ConversationListRow
 	err := r.db.WithContext(ctx).
 		Table("conversation_members AS cm").
-		Select(`c.conversation_id, c.type, c.title, c.avatar, c.last_message_id, c.last_message_at, m.sender_id AS last_message_sender_id, m.sender_type AS last_message_sender_type, m.content AS last_message_content, cm.role, cm.is_pinned, cm.is_muted, c.updated_at`).
+		Select(`c.conversation_id, c.type, c.title, c.avatar, c.last_message_id, c.last_message_at, m.sender_id AS last_message_sender_id, m.sender_type AS last_message_sender_type, m.message_type AS last_message_type, m.status AS last_message_status, m.content AS last_message_content, g.mute_all AS mute_all, cm.role, cm.is_pinned, cm.is_muted, c.updated_at`).
 		Joins("JOIN conversations AS c ON c.id = cm.conversation_id AND c.deleted_at IS NULL").
+		Joins("LEFT JOIN group_infos AS g ON g.conversation_id = c.id").
 		Joins("LEFT JOIN messages AS m ON m.id = c.last_message_id AND m.deleted_at IS NULL").
 		Where("cm.member_type = ? AND cm.member_id = ? AND cm.status <> ?", model.MemberTypeUser, userID, model.MemberStatusRemoved).
 		Order("c.last_message_at DESC, c.updated_at DESC").
@@ -162,6 +171,10 @@ func (r *GormGroupRepository) Create(ctx context.Context, group *model.GroupInfo
 	return r.db.WithContext(ctx).Create(group).Error
 }
 
+func (r *GormGroupRepository) Update(ctx context.Context, group *model.GroupInfo) error {
+	return r.db.WithContext(ctx).Save(group).Error
+}
+
 func (r *GormGroupRepository) GetByConversationID(ctx context.Context, conversationID uint64) (*model.GroupInfo, error) {
 	var group model.GroupInfo
 	if err := r.db.WithContext(ctx).Where("conversation_id = ?", conversationID).First(&group).Error; err != nil {
@@ -188,6 +201,16 @@ func (r *GormMemberRepository) Create(ctx context.Context, member *model.Convers
 
 func (r *GormMemberRepository) Update(ctx context.Context, member *model.ConversationMember) error {
 	return r.db.WithContext(ctx).Save(member).Error
+}
+
+func (r *GormMemberRepository) UpdateLastReadMessageID(ctx context.Context, conversationID, userID, lastReadMessageID uint64) error {
+	return r.db.WithContext(ctx).
+		Model(&model.ConversationMember{}).
+		Where("conversation_id = ? AND member_type = ? AND member_id = ? AND status <> ?", conversationID, model.MemberTypeUser, userID, model.MemberStatusRemoved).
+		Updates(map[string]any{
+			"last_read_message_id": lastReadMessageID,
+			"updated_at":           time.Now(),
+		}).Error
 }
 
 func (r *GormMemberRepository) GetDB() *gorm.DB {
@@ -289,6 +312,36 @@ func (r *GormMessageRepository) WithTx(tx *gorm.DB) MessageRepository {
 
 func (r *GormMessageRepository) Create(ctx context.Context, message *model.Message) error {
 	return r.db.WithContext(ctx).Create(message).Error
+}
+
+func (r *GormMessageRepository) GetByID(ctx context.Context, id uint64) (*model.Message, error) {
+	var message model.Message
+	if err := r.db.WithContext(ctx).First(&message, id).Error; err != nil {
+		return nil, err
+	}
+	return &message, nil
+}
+
+func (r *GormMessageRepository) GetByIDs(ctx context.Context, ids []uint64) ([]model.Message, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+
+	var messages []model.Message
+	err := r.db.WithContext(ctx).
+		Where("id IN ?", ids).
+		Find(&messages).Error
+	return messages, err
+}
+
+func (r *GormMessageRepository) UpdateStatus(ctx context.Context, id uint64, status model.MessageStatus) error {
+	return r.db.WithContext(ctx).
+		Model(&model.Message{}).
+		Where("id = ?", id).
+		Updates(map[string]any{
+			"status":     status,
+			"updated_at": time.Now(),
+		}).Error
 }
 
 func (r *GormMessageRepository) ListByConversationID(ctx context.Context, conversationID uint64, beforeID *uint64, limit int) ([]model.Message, error) {

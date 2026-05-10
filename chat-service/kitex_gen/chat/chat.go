@@ -159,14 +159,16 @@ var fieldIDToName_CreateGroupRequest = map[int16]string{
 }
 
 type GroupInfo struct {
-	ConversationId string `thrift:"conversation_id,1" frugal:"1,default,string" json:"conversation_id"`
-	Type           string `thrift:"type,2" frugal:"2,default,string" json:"type"`
-	Name           string `thrift:"name,3" frugal:"3,default,string" json:"name"`
-	Avatar         string `thrift:"avatar,4" frugal:"4,default,string" json:"avatar"`
-	Announcement   string `thrift:"announcement,5" frugal:"5,default,string" json:"announcement"`
-	OwnerId        int64  `thrift:"owner_id,6" frugal:"6,default,i64" json:"owner_id"`
-	JoinPolicy     string `thrift:"join_policy,7" frugal:"7,default,string" json:"join_policy"`
-	CreatedAt      int64  `thrift:"created_at,8" frugal:"8,default,i64" json:"created_at"`
+	ConversationId        string `thrift:"conversation_id,1" frugal:"1,default,string" json:"conversation_id"`
+	Type                  string `thrift:"type,2" frugal:"2,default,string" json:"type"`
+	Name                  string `thrift:"name,3" frugal:"3,default,string" json:"name"`
+	Avatar                string `thrift:"avatar,4" frugal:"4,default,string" json:"avatar"`
+	Announcement          string `thrift:"announcement,5" frugal:"5,default,string" json:"announcement"`
+	OwnerId               int64  `thrift:"owner_id,6" frugal:"6,default,i64" json:"owner_id"`
+	JoinPolicy            string `thrift:"join_policy,7" frugal:"7,default,string" json:"join_policy"`
+	CreatedAt             int64  `thrift:"created_at,8" frugal:"8,default,i64" json:"created_at"`
+	AnnouncementUpdatedBy *int64 `thrift:"announcement_updated_by,9,optional" frugal:"9,optional,i64" json:"announcement_updated_by,omitempty"`
+	AnnouncementUpdatedAt *int64 `thrift:"announcement_updated_at,10,optional" frugal:"10,optional,i64" json:"announcement_updated_at,omitempty"`
 }
 
 func NewGroupInfo() *GroupInfo {
@@ -207,6 +209,24 @@ func (p *GroupInfo) GetJoinPolicy() (v string) {
 func (p *GroupInfo) GetCreatedAt() (v int64) {
 	return p.CreatedAt
 }
+
+var GroupInfo_AnnouncementUpdatedBy_DEFAULT int64
+
+func (p *GroupInfo) GetAnnouncementUpdatedBy() (v int64) {
+	if !p.IsSetAnnouncementUpdatedBy() {
+		return GroupInfo_AnnouncementUpdatedBy_DEFAULT
+	}
+	return *p.AnnouncementUpdatedBy
+}
+
+var GroupInfo_AnnouncementUpdatedAt_DEFAULT int64
+
+func (p *GroupInfo) GetAnnouncementUpdatedAt() (v int64) {
+	if !p.IsSetAnnouncementUpdatedAt() {
+		return GroupInfo_AnnouncementUpdatedAt_DEFAULT
+	}
+	return *p.AnnouncementUpdatedAt
+}
 func (p *GroupInfo) SetConversationId(val string) {
 	p.ConversationId = val
 }
@@ -231,6 +251,20 @@ func (p *GroupInfo) SetJoinPolicy(val string) {
 func (p *GroupInfo) SetCreatedAt(val int64) {
 	p.CreatedAt = val
 }
+func (p *GroupInfo) SetAnnouncementUpdatedBy(val *int64) {
+	p.AnnouncementUpdatedBy = val
+}
+func (p *GroupInfo) SetAnnouncementUpdatedAt(val *int64) {
+	p.AnnouncementUpdatedAt = val
+}
+
+func (p *GroupInfo) IsSetAnnouncementUpdatedBy() bool {
+	return p.AnnouncementUpdatedBy != nil
+}
+
+func (p *GroupInfo) IsSetAnnouncementUpdatedAt() bool {
+	return p.AnnouncementUpdatedAt != nil
+}
 
 func (p *GroupInfo) String() string {
 	if p == nil {
@@ -240,14 +274,16 @@ func (p *GroupInfo) String() string {
 }
 
 var fieldIDToName_GroupInfo = map[int16]string{
-	1: "conversation_id",
-	2: "type",
-	3: "name",
-	4: "avatar",
-	5: "announcement",
-	6: "owner_id",
-	7: "join_policy",
-	8: "created_at",
+	1:  "conversation_id",
+	2:  "type",
+	3:  "name",
+	4:  "avatar",
+	5:  "announcement",
+	6:  "owner_id",
+	7:  "join_policy",
+	8:  "created_at",
+	9:  "announcement_updated_by",
+	10: "announcement_updated_at",
 }
 
 type CreateGroupResponse struct {
@@ -285,6 +321,82 @@ func (p *CreateGroupResponse) String() string {
 }
 
 var fieldIDToName_CreateGroupResponse = map[int16]string{
+	1: "group",
+}
+
+type GetGroupInfoRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+}
+
+func NewGetGroupInfoRequest() *GetGroupInfoRequest {
+	return &GetGroupInfoRequest{}
+}
+
+func (p *GetGroupInfoRequest) InitDefault() {
+}
+
+func (p *GetGroupInfoRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *GetGroupInfoRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+func (p *GetGroupInfoRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *GetGroupInfoRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+
+func (p *GetGroupInfoRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("GetGroupInfoRequest(%+v)", *p)
+}
+
+var fieldIDToName_GetGroupInfoRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+}
+
+type GetGroupInfoResponse struct {
+	Group *GroupInfo `thrift:"group,1" frugal:"1,default,GroupInfo" json:"group"`
+}
+
+func NewGetGroupInfoResponse() *GetGroupInfoResponse {
+	return &GetGroupInfoResponse{}
+}
+
+func (p *GetGroupInfoResponse) InitDefault() {
+}
+
+var GetGroupInfoResponse_Group_DEFAULT *GroupInfo
+
+func (p *GetGroupInfoResponse) GetGroup() (v *GroupInfo) {
+	if !p.IsSetGroup() {
+		return GetGroupInfoResponse_Group_DEFAULT
+	}
+	return p.Group
+}
+func (p *GetGroupInfoResponse) SetGroup(val *GroupInfo) {
+	p.Group = val
+}
+
+func (p *GetGroupInfoResponse) IsSetGroup() bool {
+	return p.Group != nil
+}
+
+func (p *GetGroupInfoResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("GetGroupInfoResponse(%+v)", *p)
+}
+
+var fieldIDToName_GetGroupInfoResponse = map[int16]string{
 	1: "group",
 }
 
@@ -407,6 +519,7 @@ type ConversationInfo struct {
 	LastMessageSenderId   *int64 `thrift:"last_message_sender_id,11,optional" frugal:"11,optional,i64" json:"last_message_sender_id,omitempty"`
 	LastMessageSenderName string `thrift:"last_message_sender_name,12" frugal:"12,default,string" json:"last_message_sender_name"`
 	LastMessageContent    string `thrift:"last_message_content,13" frugal:"13,default,string" json:"last_message_content"`
+	MuteAll               *bool  `thrift:"mute_all,14,optional" frugal:"14,optional,bool" json:"mute_all,omitempty"`
 }
 
 func NewConversationInfo() *ConversationInfo {
@@ -482,6 +595,15 @@ func (p *ConversationInfo) GetLastMessageSenderName() (v string) {
 func (p *ConversationInfo) GetLastMessageContent() (v string) {
 	return p.LastMessageContent
 }
+
+var ConversationInfo_MuteAll_DEFAULT bool
+
+func (p *ConversationInfo) GetMuteAll() (v bool) {
+	if !p.IsSetMuteAll() {
+		return ConversationInfo_MuteAll_DEFAULT
+	}
+	return *p.MuteAll
+}
 func (p *ConversationInfo) SetConversationId(val string) {
 	p.ConversationId = val
 }
@@ -521,6 +643,9 @@ func (p *ConversationInfo) SetLastMessageSenderName(val string) {
 func (p *ConversationInfo) SetLastMessageContent(val string) {
 	p.LastMessageContent = val
 }
+func (p *ConversationInfo) SetMuteAll(val *bool) {
+	p.MuteAll = val
+}
 
 func (p *ConversationInfo) IsSetLastMessageId() bool {
 	return p.LastMessageId != nil
@@ -532,6 +657,10 @@ func (p *ConversationInfo) IsSetLastMessageAt() bool {
 
 func (p *ConversationInfo) IsSetLastMessageSenderId() bool {
 	return p.LastMessageSenderId != nil
+}
+
+func (p *ConversationInfo) IsSetMuteAll() bool {
+	return p.MuteAll != nil
 }
 
 func (p *ConversationInfo) String() string {
@@ -555,6 +684,7 @@ var fieldIDToName_ConversationInfo = map[int16]string{
 	11: "last_message_sender_id",
 	12: "last_message_sender_name",
 	13: "last_message_content",
+	14: "mute_all",
 }
 
 type ListConversationsResponse struct {
@@ -760,6 +890,7 @@ type MemberInfo struct {
 	Aliases         []string `thrift:"aliases,10,optional" frugal:"10,optional,list<string>" json:"aliases,omitempty"`
 	Enabled         *bool    `thrift:"enabled,11,optional" frugal:"11,optional,bool" json:"enabled,omitempty"`
 	PermissionScope *string  `thrift:"permission_scope,12,optional" frugal:"12,optional,string" json:"permission_scope,omitempty"`
+	MuteUntil       *int64   `thrift:"mute_until,13,optional" frugal:"13,optional,i64" json:"mute_until,omitempty"`
 }
 
 func NewMemberInfo() *MemberInfo {
@@ -841,6 +972,15 @@ func (p *MemberInfo) GetPermissionScope() (v string) {
 	}
 	return *p.PermissionScope
 }
+
+var MemberInfo_MuteUntil_DEFAULT int64
+
+func (p *MemberInfo) GetMuteUntil() (v int64) {
+	if !p.IsSetMuteUntil() {
+		return MemberInfo_MuteUntil_DEFAULT
+	}
+	return *p.MuteUntil
+}
 func (p *MemberInfo) SetUserId(val int64) {
 	p.UserId = val
 }
@@ -877,6 +1017,9 @@ func (p *MemberInfo) SetEnabled(val *bool) {
 func (p *MemberInfo) SetPermissionScope(val *string) {
 	p.PermissionScope = val
 }
+func (p *MemberInfo) SetMuteUntil(val *int64) {
+	p.MuteUntil = val
+}
 
 func (p *MemberInfo) IsSetBotId() bool {
 	return p.BotId != nil
@@ -896,6 +1039,10 @@ func (p *MemberInfo) IsSetEnabled() bool {
 
 func (p *MemberInfo) IsSetPermissionScope() bool {
 	return p.PermissionScope != nil
+}
+
+func (p *MemberInfo) IsSetMuteUntil() bool {
+	return p.MuteUntil != nil
 }
 
 func (p *MemberInfo) String() string {
@@ -918,6 +1065,7 @@ var fieldIDToName_MemberInfo = map[int16]string{
 	10: "aliases",
 	11: "enabled",
 	12: "permission_scope",
+	13: "mute_until",
 }
 
 type ListMembersResponse struct {
@@ -1014,16 +1162,113 @@ var fieldIDToName_ListMessagesRequest = map[int16]string{
 	4: "limit",
 }
 
-type MessageInfo struct {
-	Id             int64  `thrift:"id,1" frugal:"1,default,i64" json:"id"`
+type MarkConversationReadRequest struct {
+	OperatorId        int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId    string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	LastReadMessageId int64  `thrift:"last_read_message_id,3" frugal:"3,default,i64" json:"last_read_message_id"`
+}
+
+func NewMarkConversationReadRequest() *MarkConversationReadRequest {
+	return &MarkConversationReadRequest{}
+}
+
+func (p *MarkConversationReadRequest) InitDefault() {
+}
+
+func (p *MarkConversationReadRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *MarkConversationReadRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *MarkConversationReadRequest) GetLastReadMessageId() (v int64) {
+	return p.LastReadMessageId
+}
+func (p *MarkConversationReadRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *MarkConversationReadRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *MarkConversationReadRequest) SetLastReadMessageId(val int64) {
+	p.LastReadMessageId = val
+}
+
+func (p *MarkConversationReadRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("MarkConversationReadRequest(%+v)", *p)
+}
+
+var fieldIDToName_MarkConversationReadRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "last_read_message_id",
+}
+
+type RecallMessageRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
 	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
-	SenderId       int64  `thrift:"sender_id,3" frugal:"3,default,i64" json:"sender_id"`
-	SenderType     string `thrift:"sender_type,4" frugal:"4,default,string" json:"sender_type"`
-	MessageType    string `thrift:"message_type,5" frugal:"5,default,string" json:"message_type"`
-	Content        string `thrift:"content,6" frugal:"6,default,string" json:"content"`
-	ReplyToId      *int64 `thrift:"reply_to_id,7,optional" frugal:"7,optional,i64" json:"reply_to_id,omitempty"`
-	Status         string `thrift:"status,8" frugal:"8,default,string" json:"status"`
-	CreatedAt      int64  `thrift:"created_at,9" frugal:"9,default,i64" json:"created_at"`
+	MessageId      int64  `thrift:"message_id,3" frugal:"3,default,i64" json:"message_id"`
+}
+
+func NewRecallMessageRequest() *RecallMessageRequest {
+	return &RecallMessageRequest{}
+}
+
+func (p *RecallMessageRequest) InitDefault() {
+}
+
+func (p *RecallMessageRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *RecallMessageRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *RecallMessageRequest) GetMessageId() (v int64) {
+	return p.MessageId
+}
+func (p *RecallMessageRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *RecallMessageRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *RecallMessageRequest) SetMessageId(val int64) {
+	p.MessageId = val
+}
+
+func (p *RecallMessageRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("RecallMessageRequest(%+v)", *p)
+}
+
+var fieldIDToName_RecallMessageRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "message_id",
+}
+
+type MessageInfo struct {
+	Id             int64             `thrift:"id,1" frugal:"1,default,i64" json:"id"`
+	ConversationId string            `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	SenderId       int64             `thrift:"sender_id,3" frugal:"3,default,i64" json:"sender_id"`
+	SenderType     string            `thrift:"sender_type,4" frugal:"4,default,string" json:"sender_type"`
+	MessageType    string            `thrift:"message_type,5" frugal:"5,default,string" json:"message_type"`
+	Content        string            `thrift:"content,6" frugal:"6,default,string" json:"content"`
+	ReplyToId      *int64            `thrift:"reply_to_id,7,optional" frugal:"7,optional,i64" json:"reply_to_id,omitempty"`
+	Status         string            `thrift:"status,8" frugal:"8,default,string" json:"status"`
+	CreatedAt      int64             `thrift:"created_at,9" frugal:"9,default,i64" json:"created_at"`
+	ReadByPeer     *bool             `thrift:"read_by_peer,10,optional" frugal:"10,optional,bool" json:"read_by_peer,omitempty"`
+	ReadCount      *int32            `thrift:"read_count,11,optional" frugal:"11,optional,i32" json:"read_count,omitempty"`
+	ReplyTo        *ReplyPreviewInfo `thrift:"reply_to,12,optional" frugal:"12,optional,ReplyPreviewInfo" json:"reply_to,omitempty"`
 }
 
 func NewMessageInfo() *MessageInfo {
@@ -1073,6 +1318,33 @@ func (p *MessageInfo) GetStatus() (v string) {
 func (p *MessageInfo) GetCreatedAt() (v int64) {
 	return p.CreatedAt
 }
+
+var MessageInfo_ReadByPeer_DEFAULT bool
+
+func (p *MessageInfo) GetReadByPeer() (v bool) {
+	if !p.IsSetReadByPeer() {
+		return MessageInfo_ReadByPeer_DEFAULT
+	}
+	return *p.ReadByPeer
+}
+
+var MessageInfo_ReadCount_DEFAULT int32
+
+func (p *MessageInfo) GetReadCount() (v int32) {
+	if !p.IsSetReadCount() {
+		return MessageInfo_ReadCount_DEFAULT
+	}
+	return *p.ReadCount
+}
+
+var MessageInfo_ReplyTo_DEFAULT *ReplyPreviewInfo
+
+func (p *MessageInfo) GetReplyTo() (v *ReplyPreviewInfo) {
+	if !p.IsSetReplyTo() {
+		return MessageInfo_ReplyTo_DEFAULT
+	}
+	return p.ReplyTo
+}
 func (p *MessageInfo) SetId(val int64) {
 	p.Id = val
 }
@@ -1100,9 +1372,30 @@ func (p *MessageInfo) SetStatus(val string) {
 func (p *MessageInfo) SetCreatedAt(val int64) {
 	p.CreatedAt = val
 }
+func (p *MessageInfo) SetReadByPeer(val *bool) {
+	p.ReadByPeer = val
+}
+func (p *MessageInfo) SetReadCount(val *int32) {
+	p.ReadCount = val
+}
+func (p *MessageInfo) SetReplyTo(val *ReplyPreviewInfo) {
+	p.ReplyTo = val
+}
 
 func (p *MessageInfo) IsSetReplyToId() bool {
 	return p.ReplyToId != nil
+}
+
+func (p *MessageInfo) IsSetReadByPeer() bool {
+	return p.ReadByPeer != nil
+}
+
+func (p *MessageInfo) IsSetReadCount() bool {
+	return p.ReadCount != nil
+}
+
+func (p *MessageInfo) IsSetReplyTo() bool {
+	return p.ReplyTo != nil
 }
 
 func (p *MessageInfo) String() string {
@@ -1113,15 +1406,654 @@ func (p *MessageInfo) String() string {
 }
 
 var fieldIDToName_MessageInfo = map[int16]string{
-	1: "id",
+	1:  "id",
+	2:  "conversation_id",
+	3:  "sender_id",
+	4:  "sender_type",
+	5:  "message_type",
+	6:  "content",
+	7:  "reply_to_id",
+	8:  "status",
+	9:  "created_at",
+	10: "read_by_peer",
+	11: "read_count",
+	12: "reply_to",
+}
+
+type ReplyPreviewInfo struct {
+	MessageId      int64  `thrift:"message_id,1" frugal:"1,default,i64" json:"message_id"`
+	SenderId       int64  `thrift:"sender_id,2" frugal:"2,default,i64" json:"sender_id"`
+	SenderType     string `thrift:"sender_type,3" frugal:"3,default,string" json:"sender_type"`
+	MessageType    string `thrift:"message_type,4" frugal:"4,default,string" json:"message_type"`
+	ContentPreview string `thrift:"content_preview,5" frugal:"5,default,string" json:"content_preview"`
+}
+
+func NewReplyPreviewInfo() *ReplyPreviewInfo {
+	return &ReplyPreviewInfo{}
+}
+
+func (p *ReplyPreviewInfo) InitDefault() {
+}
+
+func (p *ReplyPreviewInfo) GetMessageId() (v int64) {
+	return p.MessageId
+}
+
+func (p *ReplyPreviewInfo) GetSenderId() (v int64) {
+	return p.SenderId
+}
+
+func (p *ReplyPreviewInfo) GetSenderType() (v string) {
+	return p.SenderType
+}
+
+func (p *ReplyPreviewInfo) GetMessageType() (v string) {
+	return p.MessageType
+}
+
+func (p *ReplyPreviewInfo) GetContentPreview() (v string) {
+	return p.ContentPreview
+}
+func (p *ReplyPreviewInfo) SetMessageId(val int64) {
+	p.MessageId = val
+}
+func (p *ReplyPreviewInfo) SetSenderId(val int64) {
+	p.SenderId = val
+}
+func (p *ReplyPreviewInfo) SetSenderType(val string) {
+	p.SenderType = val
+}
+func (p *ReplyPreviewInfo) SetMessageType(val string) {
+	p.MessageType = val
+}
+func (p *ReplyPreviewInfo) SetContentPreview(val string) {
+	p.ContentPreview = val
+}
+
+func (p *ReplyPreviewInfo) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ReplyPreviewInfo(%+v)", *p)
+}
+
+var fieldIDToName_ReplyPreviewInfo = map[int16]string{
+	1: "message_id",
+	2: "sender_id",
+	3: "sender_type",
+	4: "message_type",
+	5: "content_preview",
+}
+
+type ConversationEventResponse struct {
+	Success          bool         `thrift:"success,1" frugal:"1,default,bool" json:"success"`
+	Message          string       `thrift:"message,2" frugal:"2,default,string" json:"message"`
+	EventMessage     *MessageInfo `thrift:"event_message,3,optional" frugal:"3,optional,MessageInfo" json:"event_message,omitempty"`
+	RecipientUserIds []int64      `thrift:"recipient_user_ids,4,optional" frugal:"4,optional,list<i64>" json:"recipient_user_ids,omitempty"`
+}
+
+func NewConversationEventResponse() *ConversationEventResponse {
+	return &ConversationEventResponse{}
+}
+
+func (p *ConversationEventResponse) InitDefault() {
+}
+
+func (p *ConversationEventResponse) GetSuccess() (v bool) {
+	return p.Success
+}
+
+func (p *ConversationEventResponse) GetMessage() (v string) {
+	return p.Message
+}
+
+var ConversationEventResponse_EventMessage_DEFAULT *MessageInfo
+
+func (p *ConversationEventResponse) GetEventMessage() (v *MessageInfo) {
+	if !p.IsSetEventMessage() {
+		return ConversationEventResponse_EventMessage_DEFAULT
+	}
+	return p.EventMessage
+}
+
+var ConversationEventResponse_RecipientUserIds_DEFAULT []int64
+
+func (p *ConversationEventResponse) GetRecipientUserIds() (v []int64) {
+	if !p.IsSetRecipientUserIds() {
+		return ConversationEventResponse_RecipientUserIds_DEFAULT
+	}
+	return p.RecipientUserIds
+}
+func (p *ConversationEventResponse) SetSuccess(val bool) {
+	p.Success = val
+}
+func (p *ConversationEventResponse) SetMessage(val string) {
+	p.Message = val
+}
+func (p *ConversationEventResponse) SetEventMessage(val *MessageInfo) {
+	p.EventMessage = val
+}
+func (p *ConversationEventResponse) SetRecipientUserIds(val []int64) {
+	p.RecipientUserIds = val
+}
+
+func (p *ConversationEventResponse) IsSetEventMessage() bool {
+	return p.EventMessage != nil
+}
+
+func (p *ConversationEventResponse) IsSetRecipientUserIds() bool {
+	return p.RecipientUserIds != nil
+}
+
+func (p *ConversationEventResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ConversationEventResponse(%+v)", *p)
+}
+
+var fieldIDToName_ConversationEventResponse = map[int16]string{
+	1: "success",
+	2: "message",
+	3: "event_message",
+	4: "recipient_user_ids",
+}
+
+type MessageRecalledEventInfo struct {
+	MessageId      int64  `thrift:"message_id,1" frugal:"1,default,i64" json:"message_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+}
+
+func NewMessageRecalledEventInfo() *MessageRecalledEventInfo {
+	return &MessageRecalledEventInfo{}
+}
+
+func (p *MessageRecalledEventInfo) InitDefault() {
+}
+
+func (p *MessageRecalledEventInfo) GetMessageId() (v int64) {
+	return p.MessageId
+}
+
+func (p *MessageRecalledEventInfo) GetConversationId() (v string) {
+	return p.ConversationId
+}
+func (p *MessageRecalledEventInfo) SetMessageId(val int64) {
+	p.MessageId = val
+}
+func (p *MessageRecalledEventInfo) SetConversationId(val string) {
+	p.ConversationId = val
+}
+
+func (p *MessageRecalledEventInfo) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("MessageRecalledEventInfo(%+v)", *p)
+}
+
+var fieldIDToName_MessageRecalledEventInfo = map[int16]string{
+	1: "message_id",
 	2: "conversation_id",
-	3: "sender_id",
-	4: "sender_type",
-	5: "message_type",
-	6: "content",
-	7: "reply_to_id",
-	8: "status",
-	9: "created_at",
+}
+
+type MessageRecalledEventResponse struct {
+	Success          bool                      `thrift:"success,1" frugal:"1,default,bool" json:"success"`
+	Message          string                    `thrift:"message,2" frugal:"2,default,string" json:"message"`
+	Event            *MessageRecalledEventInfo `thrift:"event,3,optional" frugal:"3,optional,MessageRecalledEventInfo" json:"event,omitempty"`
+	RecipientUserIds []int64                   `thrift:"recipient_user_ids,4,optional" frugal:"4,optional,list<i64>" json:"recipient_user_ids,omitempty"`
+}
+
+func NewMessageRecalledEventResponse() *MessageRecalledEventResponse {
+	return &MessageRecalledEventResponse{}
+}
+
+func (p *MessageRecalledEventResponse) InitDefault() {
+}
+
+func (p *MessageRecalledEventResponse) GetSuccess() (v bool) {
+	return p.Success
+}
+
+func (p *MessageRecalledEventResponse) GetMessage() (v string) {
+	return p.Message
+}
+
+var MessageRecalledEventResponse_Event_DEFAULT *MessageRecalledEventInfo
+
+func (p *MessageRecalledEventResponse) GetEvent() (v *MessageRecalledEventInfo) {
+	if !p.IsSetEvent() {
+		return MessageRecalledEventResponse_Event_DEFAULT
+	}
+	return p.Event
+}
+
+var MessageRecalledEventResponse_RecipientUserIds_DEFAULT []int64
+
+func (p *MessageRecalledEventResponse) GetRecipientUserIds() (v []int64) {
+	if !p.IsSetRecipientUserIds() {
+		return MessageRecalledEventResponse_RecipientUserIds_DEFAULT
+	}
+	return p.RecipientUserIds
+}
+func (p *MessageRecalledEventResponse) SetSuccess(val bool) {
+	p.Success = val
+}
+func (p *MessageRecalledEventResponse) SetMessage(val string) {
+	p.Message = val
+}
+func (p *MessageRecalledEventResponse) SetEvent(val *MessageRecalledEventInfo) {
+	p.Event = val
+}
+func (p *MessageRecalledEventResponse) SetRecipientUserIds(val []int64) {
+	p.RecipientUserIds = val
+}
+
+func (p *MessageRecalledEventResponse) IsSetEvent() bool {
+	return p.Event != nil
+}
+
+func (p *MessageRecalledEventResponse) IsSetRecipientUserIds() bool {
+	return p.RecipientUserIds != nil
+}
+
+func (p *MessageRecalledEventResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("MessageRecalledEventResponse(%+v)", *p)
+}
+
+var fieldIDToName_MessageRecalledEventResponse = map[int16]string{
+	1: "success",
+	2: "message",
+	3: "event",
+	4: "recipient_user_ids",
+}
+
+type TransferOwnerRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	TargetUserId   int64  `thrift:"target_user_id,3" frugal:"3,default,i64" json:"target_user_id"`
+}
+
+func NewTransferOwnerRequest() *TransferOwnerRequest {
+	return &TransferOwnerRequest{}
+}
+
+func (p *TransferOwnerRequest) InitDefault() {
+}
+
+func (p *TransferOwnerRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *TransferOwnerRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *TransferOwnerRequest) GetTargetUserId() (v int64) {
+	return p.TargetUserId
+}
+func (p *TransferOwnerRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *TransferOwnerRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *TransferOwnerRequest) SetTargetUserId(val int64) {
+	p.TargetUserId = val
+}
+
+func (p *TransferOwnerRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("TransferOwnerRequest(%+v)", *p)
+}
+
+var fieldIDToName_TransferOwnerRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "target_user_id",
+}
+
+type SetAdminRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	TargetUserId   int64  `thrift:"target_user_id,3" frugal:"3,default,i64" json:"target_user_id"`
+}
+
+func NewSetAdminRequest() *SetAdminRequest {
+	return &SetAdminRequest{}
+}
+
+func (p *SetAdminRequest) InitDefault() {
+}
+
+func (p *SetAdminRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *SetAdminRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *SetAdminRequest) GetTargetUserId() (v int64) {
+	return p.TargetUserId
+}
+func (p *SetAdminRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *SetAdminRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *SetAdminRequest) SetTargetUserId(val int64) {
+	p.TargetUserId = val
+}
+
+func (p *SetAdminRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SetAdminRequest(%+v)", *p)
+}
+
+var fieldIDToName_SetAdminRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "target_user_id",
+}
+
+type RemoveAdminRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	TargetUserId   int64  `thrift:"target_user_id,3" frugal:"3,default,i64" json:"target_user_id"`
+}
+
+func NewRemoveAdminRequest() *RemoveAdminRequest {
+	return &RemoveAdminRequest{}
+}
+
+func (p *RemoveAdminRequest) InitDefault() {
+}
+
+func (p *RemoveAdminRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *RemoveAdminRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *RemoveAdminRequest) GetTargetUserId() (v int64) {
+	return p.TargetUserId
+}
+func (p *RemoveAdminRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *RemoveAdminRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *RemoveAdminRequest) SetTargetUserId(val int64) {
+	p.TargetUserId = val
+}
+
+func (p *RemoveAdminRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("RemoveAdminRequest(%+v)", *p)
+}
+
+var fieldIDToName_RemoveAdminRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "target_user_id",
+}
+
+type MuteMemberRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	TargetUserId   int64  `thrift:"target_user_id,3" frugal:"3,default,i64" json:"target_user_id"`
+	MuteUntil      int64  `thrift:"mute_until,4" frugal:"4,default,i64" json:"mute_until"`
+}
+
+func NewMuteMemberRequest() *MuteMemberRequest {
+	return &MuteMemberRequest{}
+}
+
+func (p *MuteMemberRequest) InitDefault() {
+}
+
+func (p *MuteMemberRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *MuteMemberRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *MuteMemberRequest) GetTargetUserId() (v int64) {
+	return p.TargetUserId
+}
+
+func (p *MuteMemberRequest) GetMuteUntil() (v int64) {
+	return p.MuteUntil
+}
+func (p *MuteMemberRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *MuteMemberRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *MuteMemberRequest) SetTargetUserId(val int64) {
+	p.TargetUserId = val
+}
+func (p *MuteMemberRequest) SetMuteUntil(val int64) {
+	p.MuteUntil = val
+}
+
+func (p *MuteMemberRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("MuteMemberRequest(%+v)", *p)
+}
+
+var fieldIDToName_MuteMemberRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "target_user_id",
+	4: "mute_until",
+}
+
+type UnmuteMemberRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	TargetUserId   int64  `thrift:"target_user_id,3" frugal:"3,default,i64" json:"target_user_id"`
+}
+
+func NewUnmuteMemberRequest() *UnmuteMemberRequest {
+	return &UnmuteMemberRequest{}
+}
+
+func (p *UnmuteMemberRequest) InitDefault() {
+}
+
+func (p *UnmuteMemberRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *UnmuteMemberRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *UnmuteMemberRequest) GetTargetUserId() (v int64) {
+	return p.TargetUserId
+}
+func (p *UnmuteMemberRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *UnmuteMemberRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *UnmuteMemberRequest) SetTargetUserId(val int64) {
+	p.TargetUserId = val
+}
+
+func (p *UnmuteMemberRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("UnmuteMemberRequest(%+v)", *p)
+}
+
+var fieldIDToName_UnmuteMemberRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "target_user_id",
+}
+
+type RemoveMemberRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	TargetUserId   int64  `thrift:"target_user_id,3" frugal:"3,default,i64" json:"target_user_id"`
+}
+
+func NewRemoveMemberRequest() *RemoveMemberRequest {
+	return &RemoveMemberRequest{}
+}
+
+func (p *RemoveMemberRequest) InitDefault() {
+}
+
+func (p *RemoveMemberRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *RemoveMemberRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *RemoveMemberRequest) GetTargetUserId() (v int64) {
+	return p.TargetUserId
+}
+func (p *RemoveMemberRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *RemoveMemberRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *RemoveMemberRequest) SetTargetUserId(val int64) {
+	p.TargetUserId = val
+}
+
+func (p *RemoveMemberRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("RemoveMemberRequest(%+v)", *p)
+}
+
+var fieldIDToName_RemoveMemberRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "target_user_id",
+}
+
+type SetGroupMuteAllRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	MuteAll        bool   `thrift:"mute_all,3" frugal:"3,default,bool" json:"mute_all"`
+}
+
+func NewSetGroupMuteAllRequest() *SetGroupMuteAllRequest {
+	return &SetGroupMuteAllRequest{}
+}
+
+func (p *SetGroupMuteAllRequest) InitDefault() {
+}
+
+func (p *SetGroupMuteAllRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *SetGroupMuteAllRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *SetGroupMuteAllRequest) GetMuteAll() (v bool) {
+	return p.MuteAll
+}
+func (p *SetGroupMuteAllRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *SetGroupMuteAllRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *SetGroupMuteAllRequest) SetMuteAll(val bool) {
+	p.MuteAll = val
+}
+
+func (p *SetGroupMuteAllRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SetGroupMuteAllRequest(%+v)", *p)
+}
+
+var fieldIDToName_SetGroupMuteAllRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "mute_all",
+}
+
+type UpdateGroupAnnouncementRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	Announcement   string `thrift:"announcement,3" frugal:"3,default,string" json:"announcement"`
+}
+
+func NewUpdateGroupAnnouncementRequest() *UpdateGroupAnnouncementRequest {
+	return &UpdateGroupAnnouncementRequest{}
+}
+
+func (p *UpdateGroupAnnouncementRequest) InitDefault() {
+}
+
+func (p *UpdateGroupAnnouncementRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *UpdateGroupAnnouncementRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *UpdateGroupAnnouncementRequest) GetAnnouncement() (v string) {
+	return p.Announcement
+}
+func (p *UpdateGroupAnnouncementRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *UpdateGroupAnnouncementRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *UpdateGroupAnnouncementRequest) SetAnnouncement(val string) {
+	p.Announcement = val
+}
+
+func (p *UpdateGroupAnnouncementRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("UpdateGroupAnnouncementRequest(%+v)", *p)
+}
+
+var fieldIDToName_UpdateGroupAnnouncementRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "announcement",
 }
 
 type BotInfo struct {
@@ -1970,10 +2902,11 @@ var fieldIDToName_ListAICallLogsResponse = map[int16]string{
 }
 
 type CreateMessageRequest struct {
-	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
-	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
-	Content        string `thrift:"content,3" frugal:"3,default,string" json:"content"`
-	ReplyToId      *int64 `thrift:"reply_to_id,4,optional" frugal:"4,optional,i64" json:"reply_to_id,omitempty"`
+	OperatorId     int64   `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string  `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	Content        string  `thrift:"content,3" frugal:"3,default,string" json:"content"`
+	ReplyToId      *int64  `thrift:"reply_to_id,4,optional" frugal:"4,optional,i64" json:"reply_to_id,omitempty"`
+	MessageType    *string `thrift:"message_type,5,optional" frugal:"5,optional,string" json:"message_type,omitempty"`
 }
 
 func NewCreateMessageRequest() *CreateMessageRequest {
@@ -2003,6 +2936,15 @@ func (p *CreateMessageRequest) GetReplyToId() (v int64) {
 	}
 	return *p.ReplyToId
 }
+
+var CreateMessageRequest_MessageType_DEFAULT string
+
+func (p *CreateMessageRequest) GetMessageType() (v string) {
+	if !p.IsSetMessageType() {
+		return CreateMessageRequest_MessageType_DEFAULT
+	}
+	return *p.MessageType
+}
 func (p *CreateMessageRequest) SetOperatorId(val int64) {
 	p.OperatorId = val
 }
@@ -2015,9 +2957,16 @@ func (p *CreateMessageRequest) SetContent(val string) {
 func (p *CreateMessageRequest) SetReplyToId(val *int64) {
 	p.ReplyToId = val
 }
+func (p *CreateMessageRequest) SetMessageType(val *string) {
+	p.MessageType = val
+}
 
 func (p *CreateMessageRequest) IsSetReplyToId() bool {
 	return p.ReplyToId != nil
+}
+
+func (p *CreateMessageRequest) IsSetMessageType() bool {
+	return p.MessageType != nil
 }
 
 func (p *CreateMessageRequest) String() string {
@@ -2032,6 +2981,7 @@ var fieldIDToName_CreateMessageRequest = map[int16]string{
 	2: "conversation_id",
 	3: "content",
 	4: "reply_to_id",
+	5: "message_type",
 }
 
 type CreateMessageResponse struct {
@@ -2072,24 +3022,122 @@ var fieldIDToName_CreateMessageResponse = map[int16]string{
 	1: "message",
 }
 
+type FindSingleByUsersRequest struct {
+	OperatorId   int64 `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	TargetUserId int64 `thrift:"target_user_id,2" frugal:"2,default,i64" json:"target_user_id"`
+}
+
+func NewFindSingleByUsersRequest() *FindSingleByUsersRequest {
+	return &FindSingleByUsersRequest{}
+}
+
+func (p *FindSingleByUsersRequest) InitDefault() {
+}
+
+func (p *FindSingleByUsersRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *FindSingleByUsersRequest) GetTargetUserId() (v int64) {
+	return p.TargetUserId
+}
+func (p *FindSingleByUsersRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *FindSingleByUsersRequest) SetTargetUserId(val int64) {
+	p.TargetUserId = val
+}
+
+func (p *FindSingleByUsersRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("FindSingleByUsersRequest(%+v)", *p)
+}
+
+var fieldIDToName_FindSingleByUsersRequest = map[int16]string{
+	1: "operator_id",
+	2: "target_user_id",
+}
+
+type FindSingleByUsersResponse struct {
+	Conversation *ConversationInfo `thrift:"conversation,1,optional" frugal:"1,optional,ConversationInfo" json:"conversation,omitempty"`
+}
+
+func NewFindSingleByUsersResponse() *FindSingleByUsersResponse {
+	return &FindSingleByUsersResponse{}
+}
+
+func (p *FindSingleByUsersResponse) InitDefault() {
+}
+
+var FindSingleByUsersResponse_Conversation_DEFAULT *ConversationInfo
+
+func (p *FindSingleByUsersResponse) GetConversation() (v *ConversationInfo) {
+	if !p.IsSetConversation() {
+		return FindSingleByUsersResponse_Conversation_DEFAULT
+	}
+	return p.Conversation
+}
+func (p *FindSingleByUsersResponse) SetConversation(val *ConversationInfo) {
+	p.Conversation = val
+}
+
+func (p *FindSingleByUsersResponse) IsSetConversation() bool {
+	return p.Conversation != nil
+}
+
+func (p *FindSingleByUsersResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("FindSingleByUsersResponse(%+v)", *p)
+}
+
+var fieldIDToName_FindSingleByUsersResponse = map[int16]string{
+	1: "conversation",
+}
+
 type ChatService interface {
 	Health(ctx context.Context, req *HealthRequest) (r *HealthResponse, err error)
 
 	CreateGroup(ctx context.Context, req *CreateGroupRequest) (r *CreateGroupResponse, err error)
 
+	GetGroupInfo(ctx context.Context, req *GetGroupInfoRequest) (r *GetGroupInfoResponse, err error)
+
 	CreateSingleConversation(ctx context.Context, req *CreateSingleConversationRequest) (r *CreateSingleConversationResponse, err error)
 
 	ListConversations(ctx context.Context, req *ListConversationsRequest) (r *ListConversationsResponse, err error)
 
-	JoinGroup(ctx context.Context, req *JoinGroupRequest) (r *CommonResponse, err error)
+	JoinGroup(ctx context.Context, req *JoinGroupRequest) (r *ConversationEventResponse, err error)
 
-	InviteMember(ctx context.Context, req *InviteMemberRequest) (r *CommonResponse, err error)
+	InviteMember(ctx context.Context, req *InviteMemberRequest) (r *ConversationEventResponse, err error)
 
-	LeaveGroup(ctx context.Context, req *LeaveGroupRequest) (r *CommonResponse, err error)
+	LeaveGroup(ctx context.Context, req *LeaveGroupRequest) (r *ConversationEventResponse, err error)
+
+	TransferOwner(ctx context.Context, req *TransferOwnerRequest) (r *ConversationEventResponse, err error)
+
+	SetAdmin(ctx context.Context, req *SetAdminRequest) (r *ConversationEventResponse, err error)
+
+	RemoveAdmin(ctx context.Context, req *RemoveAdminRequest) (r *ConversationEventResponse, err error)
+
+	MuteMember(ctx context.Context, req *MuteMemberRequest) (r *ConversationEventResponse, err error)
+
+	UnmuteMember(ctx context.Context, req *UnmuteMemberRequest) (r *ConversationEventResponse, err error)
+
+	RemoveMember(ctx context.Context, req *RemoveMemberRequest) (r *ConversationEventResponse, err error)
+
+	SetGroupMuteAll(ctx context.Context, req *SetGroupMuteAllRequest) (r *ConversationEventResponse, err error)
+
+	UpdateGroupAnnouncement(ctx context.Context, req *UpdateGroupAnnouncementRequest) (r *ConversationEventResponse, err error)
 
 	ListMembers(ctx context.Context, req *ListMembersRequest) (r *ListMembersResponse, err error)
 
 	ListMessages(ctx context.Context, req *ListMessagesRequest) (r *ListMessagesResponse, err error)
+
+	MarkConversationRead(ctx context.Context, req *MarkConversationReadRequest) (r *CommonResponse, err error)
+
+	RecallMessage(ctx context.Context, req *RecallMessageRequest) (r *MessageRecalledEventResponse, err error)
 
 	ListBots(ctx context.Context, req *ListBotsRequest) (r *ListBotsResponse, err error)
 
@@ -2255,6 +3303,82 @@ func (p *ChatServiceCreateGroupResult) String() string {
 }
 
 var fieldIDToName_ChatServiceCreateGroupResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceGetGroupInfoArgs struct {
+	Req *GetGroupInfoRequest `thrift:"req,1" frugal:"1,default,GetGroupInfoRequest" json:"req"`
+}
+
+func NewChatServiceGetGroupInfoArgs() *ChatServiceGetGroupInfoArgs {
+	return &ChatServiceGetGroupInfoArgs{}
+}
+
+func (p *ChatServiceGetGroupInfoArgs) InitDefault() {
+}
+
+var ChatServiceGetGroupInfoArgs_Req_DEFAULT *GetGroupInfoRequest
+
+func (p *ChatServiceGetGroupInfoArgs) GetReq() (v *GetGroupInfoRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceGetGroupInfoArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceGetGroupInfoArgs) SetReq(val *GetGroupInfoRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceGetGroupInfoArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceGetGroupInfoArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceGetGroupInfoArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceGetGroupInfoArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceGetGroupInfoResult struct {
+	Success *GetGroupInfoResponse `thrift:"success,0,optional" frugal:"0,optional,GetGroupInfoResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceGetGroupInfoResult() *ChatServiceGetGroupInfoResult {
+	return &ChatServiceGetGroupInfoResult{}
+}
+
+func (p *ChatServiceGetGroupInfoResult) InitDefault() {
+}
+
+var ChatServiceGetGroupInfoResult_Success_DEFAULT *GetGroupInfoResponse
+
+func (p *ChatServiceGetGroupInfoResult) GetSuccess() (v *GetGroupInfoResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceGetGroupInfoResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceGetGroupInfoResult) SetSuccess(x interface{}) {
+	p.Success = x.(*GetGroupInfoResponse)
+}
+
+func (p *ChatServiceGetGroupInfoResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceGetGroupInfoResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceGetGroupInfoResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceGetGroupInfoResult = map[int16]string{
 	0: "success",
 }
 
@@ -2449,7 +3573,7 @@ var fieldIDToName_ChatServiceJoinGroupArgs = map[int16]string{
 }
 
 type ChatServiceJoinGroupResult struct {
-	Success *CommonResponse `thrift:"success,0,optional" frugal:"0,optional,CommonResponse" json:"success,omitempty"`
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
 }
 
 func NewChatServiceJoinGroupResult() *ChatServiceJoinGroupResult {
@@ -2459,16 +3583,16 @@ func NewChatServiceJoinGroupResult() *ChatServiceJoinGroupResult {
 func (p *ChatServiceJoinGroupResult) InitDefault() {
 }
 
-var ChatServiceJoinGroupResult_Success_DEFAULT *CommonResponse
+var ChatServiceJoinGroupResult_Success_DEFAULT *ConversationEventResponse
 
-func (p *ChatServiceJoinGroupResult) GetSuccess() (v *CommonResponse) {
+func (p *ChatServiceJoinGroupResult) GetSuccess() (v *ConversationEventResponse) {
 	if !p.IsSetSuccess() {
 		return ChatServiceJoinGroupResult_Success_DEFAULT
 	}
 	return p.Success
 }
 func (p *ChatServiceJoinGroupResult) SetSuccess(x interface{}) {
-	p.Success = x.(*CommonResponse)
+	p.Success = x.(*ConversationEventResponse)
 }
 
 func (p *ChatServiceJoinGroupResult) IsSetSuccess() bool {
@@ -2525,7 +3649,7 @@ var fieldIDToName_ChatServiceInviteMemberArgs = map[int16]string{
 }
 
 type ChatServiceInviteMemberResult struct {
-	Success *CommonResponse `thrift:"success,0,optional" frugal:"0,optional,CommonResponse" json:"success,omitempty"`
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
 }
 
 func NewChatServiceInviteMemberResult() *ChatServiceInviteMemberResult {
@@ -2535,16 +3659,16 @@ func NewChatServiceInviteMemberResult() *ChatServiceInviteMemberResult {
 func (p *ChatServiceInviteMemberResult) InitDefault() {
 }
 
-var ChatServiceInviteMemberResult_Success_DEFAULT *CommonResponse
+var ChatServiceInviteMemberResult_Success_DEFAULT *ConversationEventResponse
 
-func (p *ChatServiceInviteMemberResult) GetSuccess() (v *CommonResponse) {
+func (p *ChatServiceInviteMemberResult) GetSuccess() (v *ConversationEventResponse) {
 	if !p.IsSetSuccess() {
 		return ChatServiceInviteMemberResult_Success_DEFAULT
 	}
 	return p.Success
 }
 func (p *ChatServiceInviteMemberResult) SetSuccess(x interface{}) {
-	p.Success = x.(*CommonResponse)
+	p.Success = x.(*ConversationEventResponse)
 }
 
 func (p *ChatServiceInviteMemberResult) IsSetSuccess() bool {
@@ -2601,7 +3725,7 @@ var fieldIDToName_ChatServiceLeaveGroupArgs = map[int16]string{
 }
 
 type ChatServiceLeaveGroupResult struct {
-	Success *CommonResponse `thrift:"success,0,optional" frugal:"0,optional,CommonResponse" json:"success,omitempty"`
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
 }
 
 func NewChatServiceLeaveGroupResult() *ChatServiceLeaveGroupResult {
@@ -2611,16 +3735,16 @@ func NewChatServiceLeaveGroupResult() *ChatServiceLeaveGroupResult {
 func (p *ChatServiceLeaveGroupResult) InitDefault() {
 }
 
-var ChatServiceLeaveGroupResult_Success_DEFAULT *CommonResponse
+var ChatServiceLeaveGroupResult_Success_DEFAULT *ConversationEventResponse
 
-func (p *ChatServiceLeaveGroupResult) GetSuccess() (v *CommonResponse) {
+func (p *ChatServiceLeaveGroupResult) GetSuccess() (v *ConversationEventResponse) {
 	if !p.IsSetSuccess() {
 		return ChatServiceLeaveGroupResult_Success_DEFAULT
 	}
 	return p.Success
 }
 func (p *ChatServiceLeaveGroupResult) SetSuccess(x interface{}) {
-	p.Success = x.(*CommonResponse)
+	p.Success = x.(*ConversationEventResponse)
 }
 
 func (p *ChatServiceLeaveGroupResult) IsSetSuccess() bool {
@@ -2635,6 +3759,614 @@ func (p *ChatServiceLeaveGroupResult) String() string {
 }
 
 var fieldIDToName_ChatServiceLeaveGroupResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceTransferOwnerArgs struct {
+	Req *TransferOwnerRequest `thrift:"req,1" frugal:"1,default,TransferOwnerRequest" json:"req"`
+}
+
+func NewChatServiceTransferOwnerArgs() *ChatServiceTransferOwnerArgs {
+	return &ChatServiceTransferOwnerArgs{}
+}
+
+func (p *ChatServiceTransferOwnerArgs) InitDefault() {
+}
+
+var ChatServiceTransferOwnerArgs_Req_DEFAULT *TransferOwnerRequest
+
+func (p *ChatServiceTransferOwnerArgs) GetReq() (v *TransferOwnerRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceTransferOwnerArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceTransferOwnerArgs) SetReq(val *TransferOwnerRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceTransferOwnerArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceTransferOwnerArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceTransferOwnerArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceTransferOwnerArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceTransferOwnerResult struct {
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceTransferOwnerResult() *ChatServiceTransferOwnerResult {
+	return &ChatServiceTransferOwnerResult{}
+}
+
+func (p *ChatServiceTransferOwnerResult) InitDefault() {
+}
+
+var ChatServiceTransferOwnerResult_Success_DEFAULT *ConversationEventResponse
+
+func (p *ChatServiceTransferOwnerResult) GetSuccess() (v *ConversationEventResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceTransferOwnerResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceTransferOwnerResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConversationEventResponse)
+}
+
+func (p *ChatServiceTransferOwnerResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceTransferOwnerResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceTransferOwnerResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceTransferOwnerResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceSetAdminArgs struct {
+	Req *SetAdminRequest `thrift:"req,1" frugal:"1,default,SetAdminRequest" json:"req"`
+}
+
+func NewChatServiceSetAdminArgs() *ChatServiceSetAdminArgs {
+	return &ChatServiceSetAdminArgs{}
+}
+
+func (p *ChatServiceSetAdminArgs) InitDefault() {
+}
+
+var ChatServiceSetAdminArgs_Req_DEFAULT *SetAdminRequest
+
+func (p *ChatServiceSetAdminArgs) GetReq() (v *SetAdminRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceSetAdminArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceSetAdminArgs) SetReq(val *SetAdminRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceSetAdminArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceSetAdminArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceSetAdminArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceSetAdminArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceSetAdminResult struct {
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceSetAdminResult() *ChatServiceSetAdminResult {
+	return &ChatServiceSetAdminResult{}
+}
+
+func (p *ChatServiceSetAdminResult) InitDefault() {
+}
+
+var ChatServiceSetAdminResult_Success_DEFAULT *ConversationEventResponse
+
+func (p *ChatServiceSetAdminResult) GetSuccess() (v *ConversationEventResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceSetAdminResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceSetAdminResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConversationEventResponse)
+}
+
+func (p *ChatServiceSetAdminResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceSetAdminResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceSetAdminResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceSetAdminResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceRemoveAdminArgs struct {
+	Req *RemoveAdminRequest `thrift:"req,1" frugal:"1,default,RemoveAdminRequest" json:"req"`
+}
+
+func NewChatServiceRemoveAdminArgs() *ChatServiceRemoveAdminArgs {
+	return &ChatServiceRemoveAdminArgs{}
+}
+
+func (p *ChatServiceRemoveAdminArgs) InitDefault() {
+}
+
+var ChatServiceRemoveAdminArgs_Req_DEFAULT *RemoveAdminRequest
+
+func (p *ChatServiceRemoveAdminArgs) GetReq() (v *RemoveAdminRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceRemoveAdminArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceRemoveAdminArgs) SetReq(val *RemoveAdminRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceRemoveAdminArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceRemoveAdminArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceRemoveAdminArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceRemoveAdminArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceRemoveAdminResult struct {
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceRemoveAdminResult() *ChatServiceRemoveAdminResult {
+	return &ChatServiceRemoveAdminResult{}
+}
+
+func (p *ChatServiceRemoveAdminResult) InitDefault() {
+}
+
+var ChatServiceRemoveAdminResult_Success_DEFAULT *ConversationEventResponse
+
+func (p *ChatServiceRemoveAdminResult) GetSuccess() (v *ConversationEventResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceRemoveAdminResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceRemoveAdminResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConversationEventResponse)
+}
+
+func (p *ChatServiceRemoveAdminResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceRemoveAdminResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceRemoveAdminResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceRemoveAdminResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceMuteMemberArgs struct {
+	Req *MuteMemberRequest `thrift:"req,1" frugal:"1,default,MuteMemberRequest" json:"req"`
+}
+
+func NewChatServiceMuteMemberArgs() *ChatServiceMuteMemberArgs {
+	return &ChatServiceMuteMemberArgs{}
+}
+
+func (p *ChatServiceMuteMemberArgs) InitDefault() {
+}
+
+var ChatServiceMuteMemberArgs_Req_DEFAULT *MuteMemberRequest
+
+func (p *ChatServiceMuteMemberArgs) GetReq() (v *MuteMemberRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceMuteMemberArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceMuteMemberArgs) SetReq(val *MuteMemberRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceMuteMemberArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceMuteMemberArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceMuteMemberArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceMuteMemberArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceMuteMemberResult struct {
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceMuteMemberResult() *ChatServiceMuteMemberResult {
+	return &ChatServiceMuteMemberResult{}
+}
+
+func (p *ChatServiceMuteMemberResult) InitDefault() {
+}
+
+var ChatServiceMuteMemberResult_Success_DEFAULT *ConversationEventResponse
+
+func (p *ChatServiceMuteMemberResult) GetSuccess() (v *ConversationEventResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceMuteMemberResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceMuteMemberResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConversationEventResponse)
+}
+
+func (p *ChatServiceMuteMemberResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceMuteMemberResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceMuteMemberResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceMuteMemberResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceUnmuteMemberArgs struct {
+	Req *UnmuteMemberRequest `thrift:"req,1" frugal:"1,default,UnmuteMemberRequest" json:"req"`
+}
+
+func NewChatServiceUnmuteMemberArgs() *ChatServiceUnmuteMemberArgs {
+	return &ChatServiceUnmuteMemberArgs{}
+}
+
+func (p *ChatServiceUnmuteMemberArgs) InitDefault() {
+}
+
+var ChatServiceUnmuteMemberArgs_Req_DEFAULT *UnmuteMemberRequest
+
+func (p *ChatServiceUnmuteMemberArgs) GetReq() (v *UnmuteMemberRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceUnmuteMemberArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceUnmuteMemberArgs) SetReq(val *UnmuteMemberRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceUnmuteMemberArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceUnmuteMemberArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUnmuteMemberArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUnmuteMemberArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceUnmuteMemberResult struct {
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceUnmuteMemberResult() *ChatServiceUnmuteMemberResult {
+	return &ChatServiceUnmuteMemberResult{}
+}
+
+func (p *ChatServiceUnmuteMemberResult) InitDefault() {
+}
+
+var ChatServiceUnmuteMemberResult_Success_DEFAULT *ConversationEventResponse
+
+func (p *ChatServiceUnmuteMemberResult) GetSuccess() (v *ConversationEventResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceUnmuteMemberResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceUnmuteMemberResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConversationEventResponse)
+}
+
+func (p *ChatServiceUnmuteMemberResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceUnmuteMemberResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUnmuteMemberResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUnmuteMemberResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceRemoveMemberArgs struct {
+	Req *RemoveMemberRequest `thrift:"req,1" frugal:"1,default,RemoveMemberRequest" json:"req"`
+}
+
+func NewChatServiceRemoveMemberArgs() *ChatServiceRemoveMemberArgs {
+	return &ChatServiceRemoveMemberArgs{}
+}
+
+func (p *ChatServiceRemoveMemberArgs) InitDefault() {
+}
+
+var ChatServiceRemoveMemberArgs_Req_DEFAULT *RemoveMemberRequest
+
+func (p *ChatServiceRemoveMemberArgs) GetReq() (v *RemoveMemberRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceRemoveMemberArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceRemoveMemberArgs) SetReq(val *RemoveMemberRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceRemoveMemberArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceRemoveMemberArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceRemoveMemberArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceRemoveMemberArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceRemoveMemberResult struct {
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceRemoveMemberResult() *ChatServiceRemoveMemberResult {
+	return &ChatServiceRemoveMemberResult{}
+}
+
+func (p *ChatServiceRemoveMemberResult) InitDefault() {
+}
+
+var ChatServiceRemoveMemberResult_Success_DEFAULT *ConversationEventResponse
+
+func (p *ChatServiceRemoveMemberResult) GetSuccess() (v *ConversationEventResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceRemoveMemberResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceRemoveMemberResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConversationEventResponse)
+}
+
+func (p *ChatServiceRemoveMemberResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceRemoveMemberResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceRemoveMemberResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceRemoveMemberResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceSetGroupMuteAllArgs struct {
+	Req *SetGroupMuteAllRequest `thrift:"req,1" frugal:"1,default,SetGroupMuteAllRequest" json:"req"`
+}
+
+func NewChatServiceSetGroupMuteAllArgs() *ChatServiceSetGroupMuteAllArgs {
+	return &ChatServiceSetGroupMuteAllArgs{}
+}
+
+func (p *ChatServiceSetGroupMuteAllArgs) InitDefault() {
+}
+
+var ChatServiceSetGroupMuteAllArgs_Req_DEFAULT *SetGroupMuteAllRequest
+
+func (p *ChatServiceSetGroupMuteAllArgs) GetReq() (v *SetGroupMuteAllRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceSetGroupMuteAllArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceSetGroupMuteAllArgs) SetReq(val *SetGroupMuteAllRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceSetGroupMuteAllArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceSetGroupMuteAllArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceSetGroupMuteAllArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceSetGroupMuteAllArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceSetGroupMuteAllResult struct {
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceSetGroupMuteAllResult() *ChatServiceSetGroupMuteAllResult {
+	return &ChatServiceSetGroupMuteAllResult{}
+}
+
+func (p *ChatServiceSetGroupMuteAllResult) InitDefault() {
+}
+
+var ChatServiceSetGroupMuteAllResult_Success_DEFAULT *ConversationEventResponse
+
+func (p *ChatServiceSetGroupMuteAllResult) GetSuccess() (v *ConversationEventResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceSetGroupMuteAllResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceSetGroupMuteAllResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConversationEventResponse)
+}
+
+func (p *ChatServiceSetGroupMuteAllResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceSetGroupMuteAllResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceSetGroupMuteAllResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceSetGroupMuteAllResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceUpdateGroupAnnouncementArgs struct {
+	Req *UpdateGroupAnnouncementRequest `thrift:"req,1" frugal:"1,default,UpdateGroupAnnouncementRequest" json:"req"`
+}
+
+func NewChatServiceUpdateGroupAnnouncementArgs() *ChatServiceUpdateGroupAnnouncementArgs {
+	return &ChatServiceUpdateGroupAnnouncementArgs{}
+}
+
+func (p *ChatServiceUpdateGroupAnnouncementArgs) InitDefault() {
+}
+
+var ChatServiceUpdateGroupAnnouncementArgs_Req_DEFAULT *UpdateGroupAnnouncementRequest
+
+func (p *ChatServiceUpdateGroupAnnouncementArgs) GetReq() (v *UpdateGroupAnnouncementRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceUpdateGroupAnnouncementArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceUpdateGroupAnnouncementArgs) SetReq(val *UpdateGroupAnnouncementRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceUpdateGroupAnnouncementArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceUpdateGroupAnnouncementArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUpdateGroupAnnouncementArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUpdateGroupAnnouncementArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceUpdateGroupAnnouncementResult struct {
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceUpdateGroupAnnouncementResult() *ChatServiceUpdateGroupAnnouncementResult {
+	return &ChatServiceUpdateGroupAnnouncementResult{}
+}
+
+func (p *ChatServiceUpdateGroupAnnouncementResult) InitDefault() {
+}
+
+var ChatServiceUpdateGroupAnnouncementResult_Success_DEFAULT *ConversationEventResponse
+
+func (p *ChatServiceUpdateGroupAnnouncementResult) GetSuccess() (v *ConversationEventResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceUpdateGroupAnnouncementResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceUpdateGroupAnnouncementResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConversationEventResponse)
+}
+
+func (p *ChatServiceUpdateGroupAnnouncementResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceUpdateGroupAnnouncementResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUpdateGroupAnnouncementResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUpdateGroupAnnouncementResult = map[int16]string{
 	0: "success",
 }
 
@@ -2787,6 +4519,158 @@ func (p *ChatServiceListMessagesResult) String() string {
 }
 
 var fieldIDToName_ChatServiceListMessagesResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceMarkConversationReadArgs struct {
+	Req *MarkConversationReadRequest `thrift:"req,1" frugal:"1,default,MarkConversationReadRequest" json:"req"`
+}
+
+func NewChatServiceMarkConversationReadArgs() *ChatServiceMarkConversationReadArgs {
+	return &ChatServiceMarkConversationReadArgs{}
+}
+
+func (p *ChatServiceMarkConversationReadArgs) InitDefault() {
+}
+
+var ChatServiceMarkConversationReadArgs_Req_DEFAULT *MarkConversationReadRequest
+
+func (p *ChatServiceMarkConversationReadArgs) GetReq() (v *MarkConversationReadRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceMarkConversationReadArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceMarkConversationReadArgs) SetReq(val *MarkConversationReadRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceMarkConversationReadArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceMarkConversationReadArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceMarkConversationReadArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceMarkConversationReadArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceMarkConversationReadResult struct {
+	Success *CommonResponse `thrift:"success,0,optional" frugal:"0,optional,CommonResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceMarkConversationReadResult() *ChatServiceMarkConversationReadResult {
+	return &ChatServiceMarkConversationReadResult{}
+}
+
+func (p *ChatServiceMarkConversationReadResult) InitDefault() {
+}
+
+var ChatServiceMarkConversationReadResult_Success_DEFAULT *CommonResponse
+
+func (p *ChatServiceMarkConversationReadResult) GetSuccess() (v *CommonResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceMarkConversationReadResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceMarkConversationReadResult) SetSuccess(x interface{}) {
+	p.Success = x.(*CommonResponse)
+}
+
+func (p *ChatServiceMarkConversationReadResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceMarkConversationReadResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceMarkConversationReadResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceMarkConversationReadResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceRecallMessageArgs struct {
+	Req *RecallMessageRequest `thrift:"req,1" frugal:"1,default,RecallMessageRequest" json:"req"`
+}
+
+func NewChatServiceRecallMessageArgs() *ChatServiceRecallMessageArgs {
+	return &ChatServiceRecallMessageArgs{}
+}
+
+func (p *ChatServiceRecallMessageArgs) InitDefault() {
+}
+
+var ChatServiceRecallMessageArgs_Req_DEFAULT *RecallMessageRequest
+
+func (p *ChatServiceRecallMessageArgs) GetReq() (v *RecallMessageRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceRecallMessageArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceRecallMessageArgs) SetReq(val *RecallMessageRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceRecallMessageArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceRecallMessageArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceRecallMessageArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceRecallMessageArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceRecallMessageResult struct {
+	Success *MessageRecalledEventResponse `thrift:"success,0,optional" frugal:"0,optional,MessageRecalledEventResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceRecallMessageResult() *ChatServiceRecallMessageResult {
+	return &ChatServiceRecallMessageResult{}
+}
+
+func (p *ChatServiceRecallMessageResult) InitDefault() {
+}
+
+var ChatServiceRecallMessageResult_Success_DEFAULT *MessageRecalledEventResponse
+
+func (p *ChatServiceRecallMessageResult) GetSuccess() (v *MessageRecalledEventResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceRecallMessageResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceRecallMessageResult) SetSuccess(x interface{}) {
+	p.Success = x.(*MessageRecalledEventResponse)
+}
+
+func (p *ChatServiceRecallMessageResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceRecallMessageResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceRecallMessageResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceRecallMessageResult = map[int16]string{
 	0: "success",
 }
 
@@ -3246,74 +5130,6 @@ var fieldIDToName_ChatServiceCreateMessageResult = map[int16]string{
 	0: "success",
 }
 
-type FindSingleByUsersRequest struct {
-	OperatorId  int64 `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
-	TargetUserId int64 `thrift:"target_user_id,2" frugal:"2,default,i64" json:"target_user_id"`
-}
-
-func NewFindSingleByUsersRequest() *FindSingleByUsersRequest {
-	return &FindSingleByUsersRequest{}
-}
-
-func (p *FindSingleByUsersRequest) InitDefault() {
-}
-
-func (p *FindSingleByUsersRequest) GetOperatorId() (v int64) {
-	return p.OperatorId
-}
-
-func (p *FindSingleByUsersRequest) SetOperatorId(val int64) {
-	p.OperatorId = val
-}
-
-func (p *FindSingleByUsersRequest) GetTargetUserId() (v int64) {
-	return p.TargetUserId
-}
-
-func (p *FindSingleByUsersRequest) SetTargetUserId(val int64) {
-	p.TargetUserId = val
-}
-
-func (p *FindSingleByUsersRequest) String() string {
-	if p == nil {
-		return "<nil>"
-	}
-	return fmt.Sprintf("FindSingleByUsersRequest(%+v)", *p)
-}
-
-var fieldIDToName_FindSingleByUsersRequest = map[int16]string{
-	1: "operator_id",
-	2: "target_user_id",
-}
-
-type FindSingleByUsersResponse struct {
-	Conversation *ConversationInfo `thrift:"conversation,1,optional" frugal:"1,optional,ConversationInfo" json:"conversation,omitempty"`
-}
-
-func NewFindSingleByUsersResponse() *FindSingleByUsersResponse {
-	return &FindSingleByUsersResponse{}
-}
-
-func (p *FindSingleByUsersResponse) InitDefault() {
-}
-
-func (p *FindSingleByUsersResponse) GetConversation() (v *ConversationInfo) {
-	if !p.IsSetConversation() {
-		return FindSingleByUsersResponse_Conversation_DEFAULT
-	}
-	return p.Conversation
-}
-
-func (p *FindSingleByUsersResponse) SetConversation(val *ConversationInfo) {
-	p.Conversation = val
-}
-
-var FindSingleByUsersResponse_Conversation_DEFAULT *ConversationInfo
-
-func (p *FindSingleByUsersResponse) IsSetConversation() bool {
-	return p.Conversation != nil
-}
-
 type ChatServiceFindSingleByUsersArgs struct {
 	Req *FindSingleByUsersRequest `thrift:"req,1" frugal:"1,default,FindSingleByUsersRequest" json:"req"`
 }
@@ -3322,7 +5138,8 @@ func NewChatServiceFindSingleByUsersArgs() *ChatServiceFindSingleByUsersArgs {
 	return &ChatServiceFindSingleByUsersArgs{}
 }
 
-func (p *ChatServiceFindSingleByUsersArgs) InitDefault() {}
+func (p *ChatServiceFindSingleByUsersArgs) InitDefault() {
+}
 
 var ChatServiceFindSingleByUsersArgs_Req_DEFAULT *FindSingleByUsersRequest
 
@@ -3359,7 +5176,8 @@ func NewChatServiceFindSingleByUsersResult() *ChatServiceFindSingleByUsersResult
 	return &ChatServiceFindSingleByUsersResult{}
 }
 
-func (p *ChatServiceFindSingleByUsersResult) InitDefault() {}
+func (p *ChatServiceFindSingleByUsersResult) InitDefault() {
+}
 
 var ChatServiceFindSingleByUsersResult_Success_DEFAULT *FindSingleByUsersResponse
 

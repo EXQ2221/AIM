@@ -30,7 +30,7 @@ export const joinPolicies = [
   { value: "APPROVAL", label: "需审核" }
 ];
 
-export const wsReconnectDelays = [1000, 2000, 5000, 10000, 30000];
+export const wsReconnectDelays = [1000, 3000, 5000, 10000, 30000];
 
 export const cropViewportSize = 220;
 export const avatarOutputSize = 512;

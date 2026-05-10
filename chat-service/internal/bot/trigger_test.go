@@ -14,16 +14,16 @@ func TestShouldTriggerBot(t *testing.T) {
 	}{
 		{
 			name: "普通文本不触发",
-			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: "hello"},
+			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"hello"}`},
 		},
 		{
 			name: "任意开头 mention 进入候选触发",
-			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: "@aim hello"},
+			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"@aim hello"}`},
 			want: true,
 		},
 		{
 			name: "带冒号的 mention 也触发",
-			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: "@helper: hello"},
+			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"@helper: hello"}`},
 			want: true,
 		},
 		{

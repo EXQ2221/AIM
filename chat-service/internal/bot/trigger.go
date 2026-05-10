@@ -11,7 +11,7 @@ func ShouldTriggerBot(msg model.Message) bool {
 	if msg.MessageType != model.MessageTypeText {
 		return false
 	}
-	_, ok := leadingMentionToken(msg.Content)
+	_, ok := leadingMentionToken(model.ExtractTextMessageContent(msg.Content))
 	return ok
 }
 

@@ -28,9 +28,20 @@ struct GroupInfo {
   6: i64 owner_id
   7: string join_policy
   8: i64 created_at
+  9: optional i64 announcement_updated_by
+  10: optional i64 announcement_updated_at
 }
 
 struct CreateGroupResponse {
+  1: GroupInfo group
+}
+
+struct GetGroupInfoRequest {
+  1: i64 operator_id
+  2: string conversation_id
+}
+
+struct GetGroupInfoResponse {
   1: GroupInfo group
 }
 
@@ -61,6 +72,7 @@ struct ConversationInfo {
   11: optional i64 last_message_sender_id
   12: string last_message_sender_name
   13: string last_message_content
+  14: optional bool mute_all
 }
 
 struct ListConversationsResponse {
@@ -101,6 +113,7 @@ struct MemberInfo {
   10: optional list<string> aliases
   11: optional bool enabled
   12: optional string permission_scope
+  13: optional i64 mute_until
 }
 
 struct ListMembersResponse {
@@ -114,6 +127,18 @@ struct ListMessagesRequest {
   4: i32 limit
 }
 
+struct MarkConversationReadRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: i64 last_read_message_id
+}
+
+struct RecallMessageRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: i64 message_id
+}
+
 struct MessageInfo {
   1: i64 id
   2: string conversation_id
@@ -124,6 +149,85 @@ struct MessageInfo {
   7: optional i64 reply_to_id
   8: string status
   9: i64 created_at
+  10: optional bool read_by_peer
+  11: optional i32 read_count
+  12: optional ReplyPreviewInfo reply_to
+}
+
+struct ReplyPreviewInfo {
+  1: i64 message_id
+  2: i64 sender_id
+  3: string sender_type
+  4: string message_type
+  5: string content_preview
+}
+
+struct ConversationEventResponse {
+  1: bool success
+  2: string message
+  3: optional MessageInfo event_message
+  4: optional list<i64> recipient_user_ids
+}
+
+struct MessageRecalledEventInfo {
+  1: i64 message_id
+  2: string conversation_id
+}
+
+struct MessageRecalledEventResponse {
+  1: bool success
+  2: string message
+  3: optional MessageRecalledEventInfo event
+  4: optional list<i64> recipient_user_ids
+}
+
+struct TransferOwnerRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: i64 target_user_id
+}
+
+struct SetAdminRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: i64 target_user_id
+}
+
+struct RemoveAdminRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: i64 target_user_id
+}
+
+struct MuteMemberRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: i64 target_user_id
+  4: i64 mute_until
+}
+
+struct UnmuteMemberRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: i64 target_user_id
+}
+
+struct RemoveMemberRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: i64 target_user_id
+}
+
+struct SetGroupMuteAllRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: bool mute_all
+}
+
+struct UpdateGroupAnnouncementRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: string announcement
 }
 
 struct BotInfo {
@@ -228,6 +332,7 @@ struct CreateMessageRequest {
   2: string conversation_id
   3: string content
   4: optional i64 reply_to_id
+  5: optional string message_type
 }
 
 struct CreateMessageResponse {
@@ -246,13 +351,24 @@ struct FindSingleByUsersResponse {
 service ChatService {
   HealthResponse Health(1: HealthRequest req)
   CreateGroupResponse CreateGroup(1: CreateGroupRequest req)
+  GetGroupInfoResponse GetGroupInfo(1: GetGroupInfoRequest req)
   CreateSingleConversationResponse CreateSingleConversation(1: CreateSingleConversationRequest req)
   ListConversationsResponse ListConversations(1: ListConversationsRequest req)
-  CommonResponse JoinGroup(1: JoinGroupRequest req)
-  CommonResponse InviteMember(1: InviteMemberRequest req)
-  CommonResponse LeaveGroup(1: LeaveGroupRequest req)
+  ConversationEventResponse JoinGroup(1: JoinGroupRequest req)
+  ConversationEventResponse InviteMember(1: InviteMemberRequest req)
+  ConversationEventResponse LeaveGroup(1: LeaveGroupRequest req)
+  ConversationEventResponse TransferOwner(1: TransferOwnerRequest req)
+  ConversationEventResponse SetAdmin(1: SetAdminRequest req)
+  ConversationEventResponse RemoveAdmin(1: RemoveAdminRequest req)
+  ConversationEventResponse MuteMember(1: MuteMemberRequest req)
+  ConversationEventResponse UnmuteMember(1: UnmuteMemberRequest req)
+  ConversationEventResponse RemoveMember(1: RemoveMemberRequest req)
+  ConversationEventResponse SetGroupMuteAll(1: SetGroupMuteAllRequest req)
+  ConversationEventResponse UpdateGroupAnnouncement(1: UpdateGroupAnnouncementRequest req)
   ListMembersResponse ListMembers(1: ListMembersRequest req)
   ListMessagesResponse ListMessages(1: ListMessagesRequest req)
+  CommonResponse MarkConversationRead(1: MarkConversationReadRequest req)
+  MessageRecalledEventResponse RecallMessage(1: RecallMessageRequest req)
   ListBotsResponse ListBots(1: ListBotsRequest req)
   ListConversationBotsResponse ListConversationBots(1: ListConversationBotsRequest req)
   AddConversationBotResponse AddConversationBot(1: AddConversationBotRequest req)

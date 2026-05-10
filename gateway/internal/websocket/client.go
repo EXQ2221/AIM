@@ -135,6 +135,7 @@ func (c *Client) handleSendMessage(ctx context.Context, event IncomingEvent) {
 		ConversationId: payload.ConversationID,
 		Content:        payload.Content,
 		ReplyToId:      payload.ReplyToID,
+		MessageType:    nullableTrimmedString(payload.MessageType),
 	})
 	if err != nil {
 		c.sendFailedAck(event.ClientMsgID, errorCode(err.Error()), publicErrorMessage(err.Error()))
@@ -156,6 +157,14 @@ func (c *Client) handleSendMessage(ctx context.Context, event IncomingEvent) {
 	c.broadcastNewMessage(ctx, resp.Message)
 }
 
+func nullableTrimmedString(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
 func (c *Client) broadcastNewMessage(ctx context.Context, message *chatpb.MessageInfo) {
 	members, err := c.chatClient.ListMembers(ctx, &chatpb.ListMembersRequest{
 		OperatorId:     c.UserID,
@@ -174,7 +183,7 @@ func (c *Client) broadcastNewMessage(ctx context.Context, message *chatpb.Messag
 
 	c.hub.SendToUsers(userIDs, OutgoingEvent{
 		Type: EventNewMessage,
-		Data: toMessageInfo(message),
+		Data: ToMessageInfo(message),
 	})
 }
 

@@ -99,6 +99,7 @@ export type ConversationInfo = {
   lastMessageSenderId?: number | null;
   lastMessageSenderName: string;
   lastMessageContent: string;
+  muteAll?: boolean;
   role: string;
   isPinned: boolean;
   isMuted: boolean;
@@ -111,9 +112,48 @@ export type GroupInfo = {
   name: string;
   avatar: string;
   announcement: string;
+  announcementUpdatedBy?: number | null;
+  announcementUpdatedAt?: number | null;
   ownerId: number;
   joinPolicy: string;
   createdAt: number;
+};
+
+export type MessageType = "TEXT" | "IMAGE" | "FILE" | "VOICE" | "SYSTEM" | "BOT_REPLY" | string;
+
+export type TextMessageContent = {
+  text: string;
+};
+
+export type ImageMessageContent = {
+  url: string;
+  name: string;
+  size?: number;
+  mimeType: string;
+  width?: number;
+  height?: number;
+};
+
+export type FileMessageContent = {
+  url: string;
+  name: string;
+  size: number;
+  mimeType: string;
+};
+
+export type VoiceMessageContent = {
+  url: string;
+  name: string;
+  size?: number;
+  mimeType: string;
+  durationMs: number;
+};
+
+export type SystemMessageContent = {
+  eventType?: string;
+  actorUserId?: number;
+  targetUserIds?: number[];
+  text: string;
 };
 
 export type MemberInfo = {
@@ -129,6 +169,15 @@ export type MemberInfo = {
   aliases?: string[];
   enabled?: boolean;
   permissionScope?: string;
+  muteUntil?: number | null;
+};
+
+export type ReplyPreviewInfo = {
+  messageId: number;
+  senderId: number;
+  senderType: string;
+  messageType: MessageType;
+  contentPreview: string;
 };
 
 export type MessageInfo = {
@@ -136,13 +185,26 @@ export type MessageInfo = {
   conversationId: string;
   senderId: number;
   senderType: string;
-  messageType: string;
+  messageType: MessageType;
   content: string;
   replyToId?: number | null;
+  replyTo?: ReplyPreviewInfo | null;
   status: string;
   createdAt: number;
+  readByPeer?: boolean;
+  readCount?: number;
   pending?: boolean;
   clientMsgId?: string;
+};
+
+export type MessageRecalledEventInfo = {
+  messageId: number;
+  conversationId: string;
+};
+
+export type OutgoingMessagePayload = {
+  messageType: "TEXT" | "IMAGE" | "FILE" | "VOICE";
+  content: string;
 };
 
 export type WebSocketEvent =
@@ -163,6 +225,10 @@ export type WebSocketEvent =
   | {
       type: "NEW_MESSAGE";
       data: MessageInfo;
+    }
+  | {
+      type: "MESSAGE_RECALLED";
+      data: MessageRecalledEventInfo;
     }
   | {
       type: "FRIEND_SYNC";

@@ -8,14 +8,16 @@ type CreateGroupRequest struct {
 }
 
 type GroupInfo struct {
-	ConversationID string `json:"conversationId"`
-	Type           string `json:"type"`
-	Name           string `json:"name"`
-	Avatar         string `json:"avatar"`
-	Announcement   string `json:"announcement"`
-	OwnerID        int64  `json:"ownerId"`
-	JoinPolicy     string `json:"joinPolicy"`
-	CreatedAt      int64  `json:"createdAt"`
+	ConversationID        string `json:"conversationId"`
+	Type                  string `json:"type"`
+	Name                  string `json:"name"`
+	Avatar                string `json:"avatar"`
+	Announcement          string `json:"announcement"`
+	AnnouncementUpdatedBy *int64 `json:"announcementUpdatedBy,omitempty"`
+	AnnouncementUpdatedAt *int64 `json:"announcementUpdatedAt,omitempty"`
+	OwnerID               int64  `json:"ownerId"`
+	JoinPolicy            string `json:"joinPolicy"`
+	CreatedAt             int64  `json:"createdAt"`
 }
 
 type ConversationInfo struct {
@@ -28,6 +30,7 @@ type ConversationInfo struct {
 	LastMessageSenderID   *int64 `json:"lastMessageSenderId,omitempty"`
 	LastMessageSenderName string `json:"lastMessageSenderName"`
 	LastMessageContent    string `json:"lastMessageContent"`
+	MuteAll               *bool  `json:"muteAll,omitempty"`
 	Role                  string `json:"role"`
 	IsPinned              bool   `json:"isPinned"`
 	IsMuted               bool   `json:"isMuted"`
@@ -47,18 +50,39 @@ type MemberInfo struct {
 	Aliases         []string `json:"aliases,omitempty"`
 	Enabled         *bool    `json:"enabled,omitempty"`
 	PermissionScope *string  `json:"permissionScope,omitempty"`
+	MuteUntil       *int64   `json:"muteUntil,omitempty"`
 }
 
 type MessageInfo struct {
-	ID             int64  `json:"id"`
-	ConversationID string `json:"conversationId"`
+	ID             int64             `json:"id"`
+	ConversationID string            `json:"conversationId"`
+	SenderID       int64             `json:"senderId"`
+	SenderType     string            `json:"senderType"`
+	MessageType    string            `json:"messageType"`
+	Content        string            `json:"content"`
+	ReplyToID      *int64            `json:"replyToId,omitempty"`
+	ReplyTo        *ReplyPreviewInfo `json:"replyTo,omitempty"`
+	Status         string            `json:"status"`
+	CreatedAt      int64             `json:"createdAt"`
+	ReadByPeer     *bool             `json:"readByPeer,omitempty"`
+	ReadCount      *int32            `json:"readCount,omitempty"`
+}
+
+type ReplyPreviewInfo struct {
+	MessageID      int64  `json:"messageId"`
 	SenderID       int64  `json:"senderId"`
 	SenderType     string `json:"senderType"`
 	MessageType    string `json:"messageType"`
-	Content        string `json:"content"`
-	ReplyToID      *int64 `json:"replyToId,omitempty"`
-	Status         string `json:"status"`
-	CreatedAt      int64  `json:"createdAt"`
+	ContentPreview string `json:"contentPreview"`
+}
+
+type MarkConversationReadRequest struct {
+	LastReadMessageID int64 `json:"lastReadMessageId"`
+}
+
+type MessageRecalledEventInfo struct {
+	MessageID      int64  `json:"messageId"`
+	ConversationID string `json:"conversationId"`
 }
 
 type AddConversationBotRequest struct {
@@ -72,6 +96,22 @@ type AddConversationBotRequest struct {
 
 type InviteMemberRequest struct {
 	TargetUserID int64 `json:"targetUserId"`
+}
+
+type TransferOwnerRequest struct {
+	TargetUserID int64 `json:"targetUserId"`
+}
+
+type SetAdminRequest struct {
+	TargetUserID int64 `json:"targetUserId"`
+}
+
+type MuteMemberRequest struct {
+	MuteUntil int64 `json:"muteUntil"`
+}
+
+type UpdateGroupAnnouncementRequest struct {
+	Announcement string `json:"announcement"`
 }
 
 type BotInfo struct {

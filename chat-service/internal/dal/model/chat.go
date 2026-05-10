@@ -1,7 +1,10 @@
 package model
 
 import (
+	"encoding/json"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"gorm.io/gorm"
 )
@@ -42,17 +45,21 @@ const (
 )
 
 type GroupInfo struct {
-	ID             uint64          `gorm:"primaryKey;autoIncrement" json:"id"`
-	ConversationID uint64          `gorm:"not null;uniqueIndex" json:"conversationId"`
-	Name           string          `gorm:"type:varchar(128);not null" json:"name"`
-	Avatar         string          `gorm:"type:varchar(512)" json:"avatar"`
-	Announcement   string          `gorm:"type:text" json:"announcement"`
-	OwnerID        uint64          `gorm:"not null;index" json:"ownerId"`
-	JoinPolicy     GroupJoinPolicy `gorm:"type:varchar(32);not null;default:'INVITE_ONLY'" json:"joinPolicy"`
-	MuteAll        bool            `gorm:"not null;default:false" json:"muteAll"`
-	MaxMembers     int             `gorm:"not null;default:500" json:"maxMembers"`
-	CreatedAt      time.Time       `json:"createdAt"`
-	UpdatedAt      time.Time       `json:"updatedAt"`
+	ID                    uint64          `gorm:"primaryKey;autoIncrement" json:"id"`
+	ConversationID        uint64          `gorm:"not null;uniqueIndex" json:"conversationId"`
+	Name                  string          `gorm:"type:varchar(128);not null" json:"name"`
+	Avatar                string          `gorm:"type:varchar(512)" json:"avatar"`
+	Announcement          string          `gorm:"type:text" json:"announcement"`
+	AnnouncementUpdatedBy *uint64         `gorm:"index" json:"announcementUpdatedBy"`
+	AnnouncementUpdatedAt *time.Time      `json:"announcementUpdatedAt"`
+	OwnerID               uint64          `gorm:"not null;index" json:"ownerId"`
+	JoinPolicy            GroupJoinPolicy `gorm:"type:varchar(32);not null;default:'INVITE_ONLY'" json:"joinPolicy"`
+	MuteAll               bool            `gorm:"not null;default:false" json:"muteAll"`
+	MuteAllUpdatedBy      *uint64         `gorm:"index" json:"muteAllUpdatedBy"`
+	MuteAllUpdatedAt      *time.Time      `json:"muteAllUpdatedAt"`
+	MaxMembers            int             `gorm:"not null;default:500" json:"maxMembers"`
+	CreatedAt             time.Time       `json:"createdAt"`
+	UpdatedAt             time.Time       `json:"updatedAt"`
 }
 
 func (GroupInfo) TableName() string {
@@ -132,6 +139,8 @@ const (
 	MessageStatusFailed   MessageStatus = "FAILED"
 )
 
+const RecalledMessagePlaceholder = "消息已撤回"
+
 type Message struct {
 	ID             uint64         `gorm:"primaryKey;autoIncrement" json:"id"`
 	ConversationID uint64         `gorm:"not null;index:idx_conversation_created" json:"conversationId"`
@@ -150,4 +159,143 @@ type Message struct {
 
 func (Message) TableName() string {
 	return "messages"
+}
+
+type TextMessageContent struct {
+	Text string `json:"text"`
+}
+
+type ImageMessageContent struct {
+	URL      string `json:"url"`
+	Name     string `json:"name"`
+	Size     int64  `json:"size"`
+	MimeType string `json:"mimeType"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
+}
+
+type FileMessageContent struct {
+	URL      string `json:"url"`
+	Name     string `json:"name"`
+	Size     int64  `json:"size"`
+	MimeType string `json:"mimeType"`
+}
+
+type VoiceMessageContent struct {
+	URL        string `json:"url"`
+	Name       string `json:"name"`
+	Size       int64  `json:"size"`
+	MimeType   string `json:"mimeType"`
+	DurationMS int64  `json:"durationMs"`
+}
+
+type SystemMessageContent struct {
+	EventType     string   `json:"eventType"`
+	ActorUserID   uint64   `json:"actorUserId"`
+	TargetUserIDs []uint64 `json:"targetUserIds"`
+	Text          string   `json:"text"`
+}
+
+const (
+	SystemEventMemberJoined        = "MEMBER_JOINED"
+	SystemEventMemberLeft          = "MEMBER_LEFT"
+	SystemEventMemberInvited       = "MEMBER_INVITED"
+	SystemEventMemberRemoved       = "MEMBER_REMOVED"
+	SystemEventMemberMuted         = "MEMBER_MUTED"
+	SystemEventMemberUnmuted       = "MEMBER_UNMUTED"
+	SystemEventGroupMuted          = "GROUP_MUTED"
+	SystemEventGroupUnmuted        = "GROUP_UNMUTED"
+	SystemEventAdminAdded          = "ADMIN_ADDED"
+	SystemEventAdminRemoved        = "ADMIN_REMOVED"
+	SystemEventOwnerTransferred    = "OWNER_TRANSFERRED"
+	SystemEventAnnouncementUpdated = "ANNOUNCEMENT_UPDATED"
+)
+
+func NormalizeTextMessageContent(content string) (string, error) {
+	payload := TextMessageContent{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err == nil {
+		payload.Text = strings.TrimSpace(payload.Text)
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return "", err
+		}
+		return string(encoded), nil
+	}
+
+	payload.Text = strings.TrimSpace(content)
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+func ExtractTextMessageContent(content string) string {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return ""
+	}
+
+	var payload TextMessageContent
+	if err := json.Unmarshal([]byte(trimmed), &payload); err == nil {
+		return strings.TrimSpace(payload.Text)
+	}
+	return trimmed
+}
+
+func MessagePreview(messageType MessageType, content string) string {
+	switch messageType {
+	case MessageTypeImage:
+		return "[图片]"
+	case MessageTypeFile:
+		var payload FileMessageContent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err == nil {
+			if name := strings.TrimSpace(payload.Name); name != "" {
+				return name
+			}
+		}
+		return "[文件]"
+	case MessageTypeVoice:
+		return "[语音]"
+	case MessageTypeSystem:
+		var payload SystemMessageContent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err == nil {
+			return strings.TrimSpace(payload.Text)
+		}
+		return strings.TrimSpace(content)
+	case MessageTypeBotReply:
+		text := ExtractTextMessageContent(content)
+		if text != "" {
+			return text
+		}
+		return strings.TrimSpace(content)
+	case MessageTypeText:
+		fallthrough
+	default:
+		return ExtractTextMessageContent(content)
+	}
+}
+
+func MessagePreviewWithStatus(status MessageStatus, messageType MessageType, content string) string {
+	if status == MessageStatusRecalled {
+		return RecalledMessagePlaceholder
+	}
+	return MessagePreview(messageType, content)
+}
+
+func ReplyContentPreview(messageType MessageType, content string, limit int) string {
+	return TruncatePreview(MessagePreview(messageType, content), limit)
+}
+
+func ReplyContentPreviewWithStatus(status MessageStatus, messageType MessageType, content string, limit int) string {
+	return TruncatePreview(MessagePreviewWithStatus(status, messageType, content), limit)
+}
+
+func TruncatePreview(content string, limit int) string {
+	trimmed := strings.TrimSpace(content)
+	if limit <= 0 || utf8.RuneCountInString(trimmed) <= limit {
+		return trimmed
+	}
+	runes := []rune(trimmed)
+	return string(runes[:limit]) + "..."
 }

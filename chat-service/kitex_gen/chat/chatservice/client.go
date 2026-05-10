@@ -13,13 +13,24 @@ import (
 type Client interface {
 	Health(ctx context.Context, req *chat.HealthRequest, callOptions ...callopt.Option) (r *chat.HealthResponse, err error)
 	CreateGroup(ctx context.Context, req *chat.CreateGroupRequest, callOptions ...callopt.Option) (r *chat.CreateGroupResponse, err error)
+	GetGroupInfo(ctx context.Context, req *chat.GetGroupInfoRequest, callOptions ...callopt.Option) (r *chat.GetGroupInfoResponse, err error)
 	CreateSingleConversation(ctx context.Context, req *chat.CreateSingleConversationRequest, callOptions ...callopt.Option) (r *chat.CreateSingleConversationResponse, err error)
 	ListConversations(ctx context.Context, req *chat.ListConversationsRequest, callOptions ...callopt.Option) (r *chat.ListConversationsResponse, err error)
-	JoinGroup(ctx context.Context, req *chat.JoinGroupRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
-	InviteMember(ctx context.Context, req *chat.InviteMemberRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
-	LeaveGroup(ctx context.Context, req *chat.LeaveGroupRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
+	JoinGroup(ctx context.Context, req *chat.JoinGroupRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	InviteMember(ctx context.Context, req *chat.InviteMemberRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	LeaveGroup(ctx context.Context, req *chat.LeaveGroupRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	TransferOwner(ctx context.Context, req *chat.TransferOwnerRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	SetAdmin(ctx context.Context, req *chat.SetAdminRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	RemoveAdmin(ctx context.Context, req *chat.RemoveAdminRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	MuteMember(ctx context.Context, req *chat.MuteMemberRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	UnmuteMember(ctx context.Context, req *chat.UnmuteMemberRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	RemoveMember(ctx context.Context, req *chat.RemoveMemberRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	SetGroupMuteAll(ctx context.Context, req *chat.SetGroupMuteAllRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	UpdateGroupAnnouncement(ctx context.Context, req *chat.UpdateGroupAnnouncementRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
 	ListMembers(ctx context.Context, req *chat.ListMembersRequest, callOptions ...callopt.Option) (r *chat.ListMembersResponse, err error)
 	ListMessages(ctx context.Context, req *chat.ListMessagesRequest, callOptions ...callopt.Option) (r *chat.ListMessagesResponse, err error)
+	MarkConversationRead(ctx context.Context, req *chat.MarkConversationReadRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
+	RecallMessage(ctx context.Context, req *chat.RecallMessageRequest, callOptions ...callopt.Option) (r *chat.MessageRecalledEventResponse, err error)
 	ListBots(ctx context.Context, req *chat.ListBotsRequest, callOptions ...callopt.Option) (r *chat.ListBotsResponse, err error)
 	ListConversationBots(ctx context.Context, req *chat.ListConversationBotsRequest, callOptions ...callopt.Option) (r *chat.ListConversationBotsResponse, err error)
 	AddConversationBot(ctx context.Context, req *chat.AddConversationBotRequest, callOptions ...callopt.Option) (r *chat.AddConversationBotResponse, err error)
@@ -68,6 +79,11 @@ func (p *kChatServiceClient) CreateGroup(ctx context.Context, req *chat.CreateGr
 	return p.kClient.CreateGroup(ctx, req)
 }
 
+func (p *kChatServiceClient) GetGroupInfo(ctx context.Context, req *chat.GetGroupInfoRequest, callOptions ...callopt.Option) (r *chat.GetGroupInfoResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetGroupInfo(ctx, req)
+}
+
 func (p *kChatServiceClient) CreateSingleConversation(ctx context.Context, req *chat.CreateSingleConversationRequest, callOptions ...callopt.Option) (r *chat.CreateSingleConversationResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.CreateSingleConversation(ctx, req)
@@ -78,19 +94,59 @@ func (p *kChatServiceClient) ListConversations(ctx context.Context, req *chat.Li
 	return p.kClient.ListConversations(ctx, req)
 }
 
-func (p *kChatServiceClient) JoinGroup(ctx context.Context, req *chat.JoinGroupRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error) {
+func (p *kChatServiceClient) JoinGroup(ctx context.Context, req *chat.JoinGroupRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.JoinGroup(ctx, req)
 }
 
-func (p *kChatServiceClient) InviteMember(ctx context.Context, req *chat.InviteMemberRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error) {
+func (p *kChatServiceClient) InviteMember(ctx context.Context, req *chat.InviteMemberRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.InviteMember(ctx, req)
 }
 
-func (p *kChatServiceClient) LeaveGroup(ctx context.Context, req *chat.LeaveGroupRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error) {
+func (p *kChatServiceClient) LeaveGroup(ctx context.Context, req *chat.LeaveGroupRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.LeaveGroup(ctx, req)
+}
+
+func (p *kChatServiceClient) TransferOwner(ctx context.Context, req *chat.TransferOwnerRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.TransferOwner(ctx, req)
+}
+
+func (p *kChatServiceClient) SetAdmin(ctx context.Context, req *chat.SetAdminRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.SetAdmin(ctx, req)
+}
+
+func (p *kChatServiceClient) RemoveAdmin(ctx context.Context, req *chat.RemoveAdminRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.RemoveAdmin(ctx, req)
+}
+
+func (p *kChatServiceClient) MuteMember(ctx context.Context, req *chat.MuteMemberRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.MuteMember(ctx, req)
+}
+
+func (p *kChatServiceClient) UnmuteMember(ctx context.Context, req *chat.UnmuteMemberRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.UnmuteMember(ctx, req)
+}
+
+func (p *kChatServiceClient) RemoveMember(ctx context.Context, req *chat.RemoveMemberRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.RemoveMember(ctx, req)
+}
+
+func (p *kChatServiceClient) SetGroupMuteAll(ctx context.Context, req *chat.SetGroupMuteAllRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.SetGroupMuteAll(ctx, req)
+}
+
+func (p *kChatServiceClient) UpdateGroupAnnouncement(ctx context.Context, req *chat.UpdateGroupAnnouncementRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.UpdateGroupAnnouncement(ctx, req)
 }
 
 func (p *kChatServiceClient) ListMembers(ctx context.Context, req *chat.ListMembersRequest, callOptions ...callopt.Option) (r *chat.ListMembersResponse, err error) {
@@ -101,6 +157,16 @@ func (p *kChatServiceClient) ListMembers(ctx context.Context, req *chat.ListMemb
 func (p *kChatServiceClient) ListMessages(ctx context.Context, req *chat.ListMessagesRequest, callOptions ...callopt.Option) (r *chat.ListMessagesResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.ListMessages(ctx, req)
+}
+
+func (p *kChatServiceClient) MarkConversationRead(ctx context.Context, req *chat.MarkConversationReadRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.MarkConversationRead(ctx, req)
+}
+
+func (p *kChatServiceClient) RecallMessage(ctx context.Context, req *chat.RecallMessageRequest, callOptions ...callopt.Option) (r *chat.MessageRecalledEventResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.RecallMessage(ctx, req)
 }
 
 func (p *kChatServiceClient) ListBots(ctx context.Context, req *chat.ListBotsRequest, callOptions ...callopt.Option) (r *chat.ListBotsResponse, err error) {

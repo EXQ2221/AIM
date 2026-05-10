@@ -320,6 +320,19 @@ func (r *fakeMembershipMemberRepo) Update(ctx context.Context, member *model.Con
 	return nil
 }
 
+func (r *fakeMembershipMemberRepo) UpdateLastReadMessageID(ctx context.Context, conversationID, userID, lastReadMessageID uint64) error {
+	member, err := r.GetUserMember(ctx, conversationID, userID)
+	if err != nil {
+		return err
+	}
+	member.LastReadMessageID = &[]uint64{lastReadMessageID}[0]
+	return r.Update(ctx, member)
+}
+
+func (r *fakeMembershipMemberRepo) GetDB() *gorm.DB {
+	return nil
+}
+
 func (r *fakeMembershipMemberRepo) GetUserMember(ctx context.Context, conversationID, userID uint64) (*model.ConversationMember, error) {
 	return nil, gorm.ErrRecordNotFound
 }

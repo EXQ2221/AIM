@@ -159,6 +159,41 @@ func TestListConversationsUsesBotNameForLastBotReply(t *testing.T) {
 	}
 }
 
+func TestListConversationsUsesRecalledPlaceholderForLastMessage(t *testing.T) {
+	conversationRepo := newFakeConversationRepo()
+	conversationRepo.listRows = []repository.ConversationListRow{
+		{
+			ConversationID:        "c_group",
+			Type:                  string(model.ConversationTypeGroup),
+			Title:                 "test1",
+			LastMessageSenderID:   uint64Ptr(10001),
+			LastMessageSenderType: string(model.SenderTypeUser),
+			LastMessageStatus:     string(model.MessageStatusRecalled),
+			LastMessageContent:    `{"text":"secret"}`,
+			UpdatedAt:             time.Now(),
+		},
+	}
+	service := NewChatService(
+		conversationRepo,
+		newFakeGroupRepo(),
+		newFakeMemberRepo(),
+		newFakeMessageRepo(),
+		&fakeTxManager{},
+		nil,
+	)
+
+	conversations, err := service.ListConversations(context.Background(), 10001)
+	if err != nil {
+		t.Fatalf("ListConversations returned error: %v", err)
+	}
+	if len(conversations) != 1 {
+		t.Fatalf("expected one conversation, got %d", len(conversations))
+	}
+	if conversations[0].LastMessageContent != model.RecalledMessagePlaceholder {
+		t.Fatalf("expected recalled placeholder, got %+v", conversations[0])
+	}
+}
+
 func TestListAICallLogsReturnsConversationLogs(t *testing.T) {
 	conversationRepo := newFakeConversationRepo()
 	memberRepo := newFakeMemberRepo()
@@ -223,7 +258,7 @@ func TestListAICallLogsReturnsConversationLogs(t *testing.T) {
 
 func TestCreateMessageRejectsNonMember(t *testing.T) {
 	service := newMessageTestService(model.MemberRoleMember, model.MemberStatusNormal, false)
-	_, err := service.CreateMessage(context.Background(), 20002, "c_test", "hello", nil)
+	_, err := service.CreateMessage(context.Background(), 20002, "c_test", "hello", nil, "")
 	if !errors.Is(err, ErrNotMember) {
 		t.Fatalf("expected ErrNotMember, got %v", err)
 	}
@@ -231,7 +266,7 @@ func TestCreateMessageRejectsNonMember(t *testing.T) {
 
 func TestCreateMessageRejectsMutedMember(t *testing.T) {
 	service := newMessageTestService(model.MemberRoleMember, model.MemberStatusMuted, false)
-	_, err := service.CreateMessage(context.Background(), 10001, "c_test", "hello", nil)
+	_, err := service.CreateMessage(context.Background(), 10001, "c_test", "hello", nil, "")
 	if !errors.Is(err, ErrMemberMuted) {
 		t.Fatalf("expected ErrMemberMuted, got %v", err)
 	}
@@ -239,7 +274,7 @@ func TestCreateMessageRejectsMutedMember(t *testing.T) {
 
 func TestCreateMessageRejectsGroupMuteAllForMember(t *testing.T) {
 	service := newMessageTestService(model.MemberRoleMember, model.MemberStatusNormal, true)
-	_, err := service.CreateMessage(context.Background(), 10001, "c_test", "hello", nil)
+	_, err := service.CreateMessage(context.Background(), 10001, "c_test", "hello", nil, "")
 	if !errors.Is(err, ErrGroupMutedAll) {
 		t.Fatalf("expected ErrGroupMutedAll, got %v", err)
 	}
@@ -263,15 +298,155 @@ func TestCreateMessageCreatesMessageAndUpdatesConversation(t *testing.T) {
 		JoinedAt:       time.Now(),
 	})
 
-	message, err := service.CreateMessage(context.Background(), 10001, "c_test", "hello", nil)
+	message, err := service.CreateMessage(context.Background(), 10001, "c_test", "hello", nil, "")
 	if err != nil {
 		t.Fatalf("CreateMessage returned error: %v", err)
 	}
-	if message.ID == 0 || message.Content != "hello" || message.MessageType != string(model.MessageTypeText) {
+	if message.ID == 0 || model.ExtractTextMessageContent(message.Content) != "hello" || message.MessageType != string(model.MessageTypeText) {
 		t.Fatalf("unexpected message view: %+v", message)
 	}
 	if conversationRepo.lastMessageID != message.ID || conversationRepo.lastConversationID != 1 {
 		t.Fatalf("conversation last message not updated, got conversation=%d message=%d", conversationRepo.lastConversationID, conversationRepo.lastMessageID)
+	}
+}
+
+func TestRecallMessageMarksStatusAndReturnsRecipients(t *testing.T) {
+	conversationRepo := newFakeConversationRepo()
+	groupRepo := newFakeGroupRepo()
+	memberRepo := newFakeMemberRepo()
+	messageRepo := newFakeMessageRepo()
+	service := NewChatService(conversationRepo, groupRepo, memberRepo, messageRepo, &fakeTxManager{}, nil)
+
+	conversationRepo.conversations[1] = &model.Conversation{ID: 1, ConversationID: "c_test", Type: model.ConversationTypeGroup}
+	_ = memberRepo.Create(context.Background(), &model.ConversationMember{
+		ConversationID: 1,
+		MemberType:     model.MemberTypeUser,
+		MemberID:       10001,
+		Role:           model.MemberRoleOwner,
+		Status:         model.MemberStatusNormal,
+		JoinedAt:       time.Now(),
+	})
+	_ = memberRepo.Create(context.Background(), &model.ConversationMember{
+		ConversationID: 1,
+		MemberType:     model.MemberTypeUser,
+		MemberID:       10002,
+		Role:           model.MemberRoleMember,
+		Status:         model.MemberStatusNormal,
+		JoinedAt:       time.Now(),
+	})
+	_ = messageRepo.Create(context.Background(), &model.Message{
+		ConversationID: 1,
+		SenderID:       10001,
+		SenderType:     model.SenderTypeUser,
+		MessageType:    model.MessageTypeText,
+		Content:        `{"text":"hello"}`,
+		Status:         model.MessageStatusNormal,
+		CreatedAt:      time.Now(),
+	})
+
+	event, err := service.RecallMessage(context.Background(), RecallMessageInput{
+		OperatorID:     10001,
+		ConversationID: "c_test",
+		MessageID:      1,
+	})
+	if err != nil {
+		t.Fatalf("RecallMessage returned error: %v", err)
+	}
+	if event == nil || event.MessageID != 1 || event.ConversationID != "c_test" {
+		t.Fatalf("unexpected recall event: %+v", event)
+	}
+	if len(event.RecipientUserIDs) != 2 || event.RecipientUserIDs[0] != 10001 || event.RecipientUserIDs[1] != 10002 {
+		t.Fatalf("unexpected recipients: %+v", event)
+	}
+	message, err := messageRepo.GetByID(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("message missing after recall: %v", err)
+	}
+	if message.Status != model.MessageStatusRecalled {
+		t.Fatalf("expected recalled status, got %+v", message)
+	}
+}
+
+func TestRecallMessageRejectsNonSender(t *testing.T) {
+	conversationRepo := newFakeConversationRepo()
+	groupRepo := newFakeGroupRepo()
+	memberRepo := newFakeMemberRepo()
+	messageRepo := newFakeMessageRepo()
+	service := NewChatService(conversationRepo, groupRepo, memberRepo, messageRepo, &fakeTxManager{}, nil)
+
+	conversationRepo.conversations[1] = &model.Conversation{ID: 1, ConversationID: "c_test", Type: model.ConversationTypeGroup}
+	_ = memberRepo.Create(context.Background(), &model.ConversationMember{
+		ConversationID: 1,
+		MemberType:     model.MemberTypeUser,
+		MemberID:       10002,
+		Role:           model.MemberRoleMember,
+		Status:         model.MemberStatusNormal,
+		JoinedAt:       time.Now(),
+	})
+	_ = messageRepo.Create(context.Background(), &model.Message{
+		ConversationID: 1,
+		SenderID:       10001,
+		SenderType:     model.SenderTypeUser,
+		MessageType:    model.MessageTypeText,
+		Content:        `{"text":"hello"}`,
+		Status:         model.MessageStatusNormal,
+		CreatedAt:      time.Now(),
+	})
+
+	_, err := service.RecallMessage(context.Background(), RecallMessageInput{
+		OperatorID:     10002,
+		ConversationID: "c_test",
+		MessageID:      1,
+	})
+	if !errors.Is(err, ErrMessageRecallDenied) {
+		t.Fatalf("expected ErrMessageRecallDenied, got %v", err)
+	}
+}
+
+func TestCreateMessageSupportsImageFileAndVoice(t *testing.T) {
+	service := newMessageTestService(model.MemberRoleOwner, model.MemberStatusNormal, false)
+
+	imageMessage, err := service.CreateMessage(context.Background(), 10001, "c_test", `{"url":"https://cdn.example.com/a.png","name":"a.png","size":123,"mimeType":"image/png","width":640,"height":480}`, nil, "IMAGE")
+	if err != nil {
+		t.Fatalf("CreateMessage(image) returned error: %v", err)
+	}
+	if imageMessage.MessageType != string(model.MessageTypeImage) {
+		t.Fatalf("unexpected image message: %+v", imageMessage)
+	}
+
+	fileMessage, err := service.CreateMessage(context.Background(), 10001, "c_test", `{"url":"https://cdn.example.com/report.pdf","name":"report.pdf","size":2048,"mimeType":"application/pdf"}`, nil, "FILE")
+	if err != nil {
+		t.Fatalf("CreateMessage(file) returned error: %v", err)
+	}
+	if fileMessage.MessageType != string(model.MessageTypeFile) {
+		t.Fatalf("unexpected file message: %+v", fileMessage)
+	}
+
+	voiceMessage, err := service.CreateMessage(context.Background(), 10001, "c_test", `{"url":"https://cdn.example.com/voice.m4a","name":"voice.m4a","size":1024,"mimeType":"audio/mp4","durationMs":5600}`, nil, "VOICE")
+	if err != nil {
+		t.Fatalf("CreateMessage(voice) returned error: %v", err)
+	}
+	if voiceMessage.MessageType != string(model.MessageTypeVoice) {
+		t.Fatalf("unexpected voice message: %+v", voiceMessage)
+	}
+}
+
+func TestCreateMessageRejectsInvalidMediaPayload(t *testing.T) {
+	service := newMessageTestService(model.MemberRoleOwner, model.MemberStatusNormal, false)
+
+	_, err := service.CreateMessage(context.Background(), 10001, "c_test", `{"url":"","name":"a.png","mimeType":"image/png"}`, nil, "IMAGE")
+	if !errors.Is(err, ErrMessageInvalid) {
+		t.Fatalf("expected ErrMessageInvalid for image payload, got %v", err)
+	}
+
+	_, err = service.CreateMessage(context.Background(), 10001, "c_test", `{"url":"https://cdn.example.com/report.pdf","name":"report.pdf","size":0,"mimeType":"application/pdf"}`, nil, "FILE")
+	if !errors.Is(err, ErrMessageInvalid) {
+		t.Fatalf("expected ErrMessageInvalid for file payload, got %v", err)
+	}
+
+	_, err = service.CreateMessage(context.Background(), 10001, "c_test", `{"url":"https://cdn.example.com/voice.m4a","name":"voice.m4a","mimeType":"audio/mp4","durationMs":0}`, nil, "VOICE")
+	if !errors.Is(err, ErrMessageInvalid) {
+		t.Fatalf("expected ErrMessageInvalid for voice payload, got %v", err)
 	}
 }
 
@@ -309,11 +484,11 @@ func TestCreateMessageSupportsSingleConversation(t *testing.T) {
 		JoinedAt:       time.Now(),
 	})
 
-	message, err := service.CreateMessage(context.Background(), 10001, "c_single", "hello", nil)
+	message, err := service.CreateMessage(context.Background(), 10001, "c_single", "hello", nil, "")
 	if err != nil {
 		t.Fatalf("CreateMessage returned error: %v", err)
 	}
-	if message.ConversationID != "c_single" || message.Content != "hello" {
+	if message.ConversationID != "c_single" || model.ExtractTextMessageContent(message.Content) != "hello" {
 		t.Fatalf("unexpected single message view: %+v", message)
 	}
 }
@@ -349,9 +524,202 @@ func TestCreateMessageRejectsSingleConversationAfterFriendDeleted(t *testing.T) 
 		JoinedAt:       time.Now(),
 	})
 
-	_, err := service.CreateMessage(context.Background(), 10001, "c_single", "hello", nil)
+	_, err := service.CreateMessage(context.Background(), 10001, "c_single", "hello", nil, "")
 	if !errors.Is(err, ErrSingleFriendRequired) {
 		t.Fatalf("expected ErrSingleFriendRequired, got %v", err)
+	}
+}
+
+func TestMarkConversationReadUpdatesCurrentUserLastReadForwardOnly(t *testing.T) {
+	conversationRepo := newFakeConversationRepo()
+	groupRepo := newFakeGroupRepo()
+	memberRepo := newFakeMemberRepo()
+	messageRepo := newFakeMessageRepo()
+	service := NewChatService(conversationRepo, groupRepo, memberRepo, messageRepo, &fakeTxManager{}, nil)
+
+	conversationRepo.conversations[1] = &model.Conversation{ID: 1, ConversationID: "c_test", Type: model.ConversationTypeGroup}
+	groupRepo.groups[1] = &model.GroupInfo{ConversationID: 1, OwnerID: 10001}
+	initialLastRead := uint64(5)
+	_ = memberRepo.Create(context.Background(), &model.ConversationMember{
+		ConversationID:    1,
+		MemberType:        model.MemberTypeUser,
+		MemberID:          10001,
+		Role:              model.MemberRoleOwner,
+		Status:            model.MemberStatusNormal,
+		LastReadMessageID: &initialLastRead,
+		JoinedAt:          time.Now(),
+	})
+	messageRepo.messages = append(messageRepo.messages,
+		&model.Message{ID: 7, ConversationID: 1},
+		&model.Message{ID: 9, ConversationID: 1},
+	)
+
+	if err := service.MarkConversationRead(context.Background(), MarkConversationReadInput{
+		OperatorID:        10001,
+		ConversationID:    "c_test",
+		LastReadMessageID: 9,
+	}); err != nil {
+		t.Fatalf("MarkConversationRead returned error: %v", err)
+	}
+
+	member, err := memberRepo.GetUserMember(context.Background(), 1, 10001)
+	if err != nil {
+		t.Fatalf("expected updated member, got %v", err)
+	}
+	if member.LastReadMessageID == nil || *member.LastReadMessageID != 9 {
+		t.Fatalf("expected lastReadMessageID=9, got %+v", member.LastReadMessageID)
+	}
+
+	if err := service.MarkConversationRead(context.Background(), MarkConversationReadInput{
+		OperatorID:        10001,
+		ConversationID:    "c_test",
+		LastReadMessageID: 7,
+	}); err != nil {
+		t.Fatalf("MarkConversationRead second call returned error: %v", err)
+	}
+	if member.LastReadMessageID == nil || *member.LastReadMessageID != 9 {
+		t.Fatalf("expected lastReadMessageID to stay at 9, got %+v", member.LastReadMessageID)
+	}
+}
+
+func TestMarkConversationReadRejectsMessageFromOtherConversation(t *testing.T) {
+	conversationRepo := newFakeConversationRepo()
+	groupRepo := newFakeGroupRepo()
+	memberRepo := newFakeMemberRepo()
+	messageRepo := newFakeMessageRepo()
+	service := NewChatService(conversationRepo, groupRepo, memberRepo, messageRepo, &fakeTxManager{}, nil)
+
+	conversationRepo.conversations[1] = &model.Conversation{ID: 1, ConversationID: "c_test", Type: model.ConversationTypeGroup}
+	groupRepo.groups[1] = &model.GroupInfo{ConversationID: 1, OwnerID: 10001}
+	_ = memberRepo.Create(context.Background(), &model.ConversationMember{
+		ConversationID: 1,
+		MemberType:     model.MemberTypeUser,
+		MemberID:       10001,
+		Role:           model.MemberRoleOwner,
+		Status:         model.MemberStatusNormal,
+		JoinedAt:       time.Now(),
+	})
+	messageRepo.messages = append(messageRepo.messages, &model.Message{ID: 9, ConversationID: 2})
+
+	err := service.MarkConversationRead(context.Background(), MarkConversationReadInput{
+		OperatorID:        10001,
+		ConversationID:    "c_test",
+		LastReadMessageID: 9,
+	})
+	if !errors.Is(err, ErrBadRequest) {
+		t.Fatalf("expected ErrBadRequest, got %v", err)
+	}
+}
+
+func TestListMessagesReturnsSingleReadByPeer(t *testing.T) {
+	conversationRepo := newFakeConversationRepo()
+	memberRepo := newFakeMemberRepo()
+	messageRepo := newFakeMessageRepo()
+	service := NewChatService(conversationRepo, newFakeGroupRepo(), memberRepo, messageRepo, &fakeTxManager{}, nil)
+
+	conversationRepo.conversations[1] = &model.Conversation{ID: 1, ConversationID: "c_single", Type: model.ConversationTypeSingle}
+	peerLastRead := uint64(15)
+	_ = memberRepo.Create(context.Background(), &model.ConversationMember{
+		ConversationID: 1,
+		MemberType:     model.MemberTypeUser,
+		MemberID:       10001,
+		Role:           model.MemberRoleMember,
+		Status:         model.MemberStatusNormal,
+		JoinedAt:       time.Now(),
+	})
+	_ = memberRepo.Create(context.Background(), &model.ConversationMember{
+		ConversationID:    1,
+		MemberType:        model.MemberTypeUser,
+		MemberID:          10002,
+		Role:              model.MemberRoleMember,
+		Status:            model.MemberStatusNormal,
+		LastReadMessageID: &peerLastRead,
+		JoinedAt:          time.Now(),
+	})
+	messageRepo.messages = append(messageRepo.messages,
+		&model.Message{ID: 10, ConversationID: 1, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"hello"}`},
+		&model.Message{ID: 20, ConversationID: 1, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"later"}`},
+	)
+
+	messages, err := service.ListMessages(context.Background(), 10001, "c_single", nil, 30)
+	if err != nil {
+		t.Fatalf("ListMessages returned error: %v", err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(messages))
+	}
+	if messages[0].ReadByPeer == nil || !*messages[0].ReadByPeer {
+		t.Fatalf("expected first message to be read by peer, got %+v", messages[0].ReadByPeer)
+	}
+	if messages[1].ReadByPeer == nil || *messages[1].ReadByPeer {
+		t.Fatalf("expected second message to be unread by peer, got %+v", messages[1].ReadByPeer)
+	}
+}
+
+func TestListMessagesReturnsGroupReadCount(t *testing.T) {
+	conversationRepo := newFakeConversationRepo()
+	groupRepo := newFakeGroupRepo()
+	memberRepo := newFakeMemberRepo()
+	messageRepo := newFakeMessageRepo()
+	service := NewChatService(conversationRepo, groupRepo, memberRepo, messageRepo, &fakeTxManager{}, nil)
+
+	conversationRepo.conversations[1] = &model.Conversation{ID: 1, ConversationID: "c_group", Type: model.ConversationTypeGroup}
+	groupRepo.groups[1] = &model.GroupInfo{ConversationID: 1, OwnerID: 10001}
+	lastReadA := uint64(12)
+	lastReadB := uint64(11)
+	lastReadRemoved := uint64(99)
+	_ = memberRepo.Create(context.Background(), &model.ConversationMember{
+		ConversationID:    1,
+		MemberType:        model.MemberTypeUser,
+		MemberID:          10001,
+		Role:              model.MemberRoleOwner,
+		Status:            model.MemberStatusNormal,
+		LastReadMessageID: &lastReadA,
+		JoinedAt:          time.Now(),
+	})
+	_ = memberRepo.Create(context.Background(), &model.ConversationMember{
+		ConversationID:    1,
+		MemberType:        model.MemberTypeUser,
+		MemberID:          10002,
+		Role:              model.MemberRoleMember,
+		Status:            model.MemberStatusNormal,
+		LastReadMessageID: &lastReadB,
+		JoinedAt:          time.Now(),
+	})
+	_ = memberRepo.Create(context.Background(), &model.ConversationMember{
+		ConversationID:    1,
+		MemberType:        model.MemberTypeUser,
+		MemberID:          10003,
+		Role:              model.MemberRoleMember,
+		Status:            model.MemberStatusRemoved,
+		LastReadMessageID: &lastReadRemoved,
+		JoinedAt:          time.Now(),
+	})
+	_ = memberRepo.Create(context.Background(), &model.ConversationMember{
+		ConversationID: 1,
+		MemberType:     model.MemberTypeBot,
+		MemberID:       20001,
+		Role:           model.MemberRoleBot,
+		Status:         model.MemberStatusNormal,
+		JoinedAt:       time.Now(),
+	})
+	messageRepo.messages = append(messageRepo.messages,
+		&model.Message{ID: 10, ConversationID: 1, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"hello"}`},
+		&model.Message{ID: 12, ConversationID: 1, SenderID: 10002, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"later"}`},
+	)
+
+	messages, err := service.ListMessages(context.Background(), 10001, "c_group", nil, 30)
+	if err != nil {
+		t.Fatalf("ListMessages returned error: %v", err)
+	}
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(messages))
+	}
+	if messages[0].ReadCount == nil || *messages[0].ReadCount != 2 {
+		t.Fatalf("expected first message readCount=2, got %+v", messages[0].ReadCount)
+	}
+	if messages[1].ReadCount == nil || *messages[1].ReadCount != 1 {
+		t.Fatalf("expected second message readCount=1, got %+v", messages[1].ReadCount)
 	}
 }
 
@@ -361,7 +729,7 @@ func TestCreateMessageTriggersBotAsyncAfterUserMessageCreated(t *testing.T) {
 	service.SetBotService(handler)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	message, err := service.CreateMessage(ctx, 10001, "c_test", "@AIM hello", nil)
+	message, err := service.CreateMessage(ctx, 10001, "c_test", "@AIM hello", nil, "")
 	if err != nil {
 		t.Fatalf("CreateMessage returned error: %v", err)
 	}
@@ -383,7 +751,7 @@ func TestCreateMessageDoesNotTriggerBotWhenMessageCreationFails(t *testing.T) {
 	handler := newFakeBotMentionHandler()
 	service.SetBotService(handler)
 
-	_, err := service.CreateMessage(context.Background(), 20002, "c_test", "@AIM hello", nil)
+	_, err := service.CreateMessage(context.Background(), 20002, "c_test", "@AIM hello", nil, "")
 	if !errors.Is(err, ErrNotMember) {
 		t.Fatalf("expected ErrNotMember, got %v", err)
 	}
@@ -396,11 +764,11 @@ func TestCreateMessageBotFailureDoesNotFailUserMessage(t *testing.T) {
 	handler.returnErr = errors.New("llm failed")
 	service.SetBotService(handler)
 
-	message, err := service.CreateMessage(context.Background(), 10001, "c_test", "@bot hello", nil)
+	message, err := service.CreateMessage(context.Background(), 10001, "c_test", "@bot hello", nil, "")
 	if err != nil {
 		t.Fatalf("CreateMessage returned error: %v", err)
 	}
-	if message.ID == 0 || message.Content != "@bot hello" {
+	if message.ID == 0 || model.ExtractTextMessageContent(message.Content) != "@bot hello" {
 		t.Fatalf("unexpected message: %+v", message)
 	}
 	_ = handler.waitRequest(t)
@@ -413,7 +781,7 @@ func TestCreateMessageBotPanicIsRecovered(t *testing.T) {
 	handler := &panicBotMentionHandler{called: make(chan struct{}, 1)}
 	service.SetBotService(handler)
 
-	if _, err := service.CreateMessage(context.Background(), 10001, "c_test", "@AIM hello", nil); err != nil {
+	if _, err := service.CreateMessage(context.Background(), 10001, "c_test", "@AIM hello", nil, ""); err != nil {
 		t.Fatalf("CreateMessage returned error: %v", err)
 	}
 
@@ -544,6 +912,15 @@ func (r *fakeGroupRepo) Create(ctx context.Context, group *model.GroupInfo) erro
 	return nil
 }
 
+func (r *fakeGroupRepo) Update(ctx context.Context, group *model.GroupInfo) error {
+	if group == nil {
+		return nil
+	}
+	group.UpdatedAt = time.Now()
+	r.groups[group.ConversationID] = group
+	return nil
+}
+
 func (r *fakeGroupRepo) GetByConversationID(ctx context.Context, conversationID uint64) (*model.GroupInfo, error) {
 	group, ok := r.groups[conversationID]
 	if !ok {
@@ -583,6 +960,20 @@ func (r *fakeMemberRepo) Create(ctx context.Context, member *model.ConversationM
 
 func (r *fakeMemberRepo) Update(ctx context.Context, member *model.ConversationMember) error {
 	r.members[memberKey{conversationID: member.ConversationID, memberType: member.MemberType, memberID: member.MemberID}] = member
+	return nil
+}
+
+func (r *fakeMemberRepo) UpdateLastReadMessageID(ctx context.Context, conversationID, userID, lastReadMessageID uint64) error {
+	member, err := r.GetUserMember(ctx, conversationID, userID)
+	if err != nil {
+		return err
+	}
+	member.LastReadMessageID = uint64Ptr(lastReadMessageID)
+	r.members[memberKey{conversationID: conversationID, memberType: model.MemberTypeUser, memberID: userID}] = member
+	return nil
+}
+
+func (r *fakeMemberRepo) GetDB() *gorm.DB {
 	return nil
 }
 
@@ -682,6 +1073,43 @@ func (r *fakeMessageRepo) Create(ctx context.Context, message *model.Message) er
 	r.nextID++
 	r.messages = append(r.messages, message)
 	return nil
+}
+
+func (r *fakeMessageRepo) GetByID(ctx context.Context, id uint64) (*model.Message, error) {
+	for _, message := range r.messages {
+		if message.ID == id {
+			return message, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *fakeMessageRepo) GetByIDs(ctx context.Context, ids []uint64) ([]model.Message, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	idSet := make(map[uint64]struct{}, len(ids))
+	for _, id := range ids {
+		idSet[id] = struct{}{}
+	}
+	result := make([]model.Message, 0, len(ids))
+	for _, message := range r.messages {
+		if _, ok := idSet[message.ID]; ok {
+			result = append(result, *message)
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeMessageRepo) UpdateStatus(ctx context.Context, id uint64, status model.MessageStatus) error {
+	for _, message := range r.messages {
+		if message.ID == id {
+			message.Status = status
+			message.UpdatedAt = time.Now()
+			return nil
+		}
+	}
+	return gorm.ErrRecordNotFound
 }
 
 func (r *fakeMessageRepo) ListByConversationID(ctx context.Context, conversationID uint64, beforeID *uint64, limit int) ([]model.Message, error) {

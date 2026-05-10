@@ -8,10 +8,11 @@ import (
 )
 
 const (
-	EventConnected   = "CONNECTED"
-	EventSendMessage = "SEND_MESSAGE"
-	EventMessageAck  = "MESSAGE_ACK"
-	EventNewMessage  = "NEW_MESSAGE"
+	EventConnected       = "CONNECTED"
+	EventSendMessage     = "SEND_MESSAGE"
+	EventMessageAck      = "MESSAGE_ACK"
+	EventNewMessage      = "NEW_MESSAGE"
+	EventMessageRecalled = "MESSAGE_RECALLED"
 )
 
 type IncomingEvent struct {
@@ -32,6 +33,7 @@ type ConnectedData struct {
 
 type SendMessageData struct {
 	ConversationID string `json:"conversationId"`
+	MessageType    string `json:"messageType,omitempty"`
 	Content        string `json:"content"`
 	ReplyToID      *int64 `json:"replyToId,omitempty"`
 }
@@ -44,20 +46,46 @@ type MessageAckData struct {
 }
 
 type MessageInfo struct {
-	ID             int64  `json:"id"`
-	ConversationID string `json:"conversationId"`
+	ID             int64             `json:"id"`
+	ConversationID string            `json:"conversationId"`
+	SenderID       int64             `json:"senderId"`
+	SenderType     string            `json:"senderType"`
+	MessageType    string            `json:"messageType"`
+	Content        string            `json:"content"`
+	ReplyToID      *int64            `json:"replyToId,omitempty"`
+	ReplyTo        *ReplyPreviewInfo `json:"replyTo,omitempty"`
+	Status         string            `json:"status"`
+	CreatedAt      int64             `json:"createdAt"`
+	ReadByPeer     *bool             `json:"readByPeer,omitempty"`
+	ReadCount      *int32            `json:"readCount,omitempty"`
+}
+
+type ReplyPreviewInfo struct {
+	MessageID      int64  `json:"messageId"`
 	SenderID       int64  `json:"senderId"`
 	SenderType     string `json:"senderType"`
 	MessageType    string `json:"messageType"`
-	Content        string `json:"content"`
-	ReplyToID      *int64 `json:"replyToId,omitempty"`
-	Status         string `json:"status"`
-	CreatedAt      int64  `json:"createdAt"`
+	ContentPreview string `json:"contentPreview"`
 }
 
-func toMessageInfo(message *chatpb.MessageInfo) MessageInfo {
+type MessageRecalledInfo struct {
+	MessageID      int64  `json:"messageId"`
+	ConversationID string `json:"conversationId"`
+}
+
+func ToMessageInfo(message *chatpb.MessageInfo) MessageInfo {
 	if message == nil {
 		return MessageInfo{}
+	}
+	var replyTo *ReplyPreviewInfo
+	if message.ReplyTo != nil {
+		replyTo = &ReplyPreviewInfo{
+			MessageID:      message.ReplyTo.MessageId,
+			SenderID:       message.ReplyTo.SenderId,
+			SenderType:     message.ReplyTo.SenderType,
+			MessageType:    message.ReplyTo.MessageType,
+			ContentPreview: message.ReplyTo.ContentPreview,
+		}
 	}
 	return MessageInfo{
 		ID:             message.Id,
@@ -67,8 +95,11 @@ func toMessageInfo(message *chatpb.MessageInfo) MessageInfo {
 		MessageType:    message.MessageType,
 		Content:        message.Content,
 		ReplyToID:      message.ReplyToId,
+		ReplyTo:        replyTo,
 		Status:         message.Status,
 		CreatedAt:      message.CreatedAt,
+		ReadByPeer:     message.ReadByPeer,
+		ReadCount:      message.ReadCount,
 	}
 }
 
