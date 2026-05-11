@@ -3122,3 +3122,186 @@ Result
 
 - 复测命令：powershell -ExecutionPolicy Bypass -File scripts/api_smoke.ps1
 - 复测结果：Total=35, Passed=35, Failed=0。
+
+## [2026-05-11] App.tsx 安全化 + 首轮文件拆分
+- 先恢复 rontend/src/App.tsx 到稳定基线（修复此前不安全中间态）。
+- 全部写回 UTF-8 编码。
+- 完成首轮拆分：
+  - 新增 rontend/src/app/views/auth-view.tsx（AuthView）
+  - 新增 rontend/src/app/views/conversation-panel.tsx（ConversationPanel）
+  - 新增 rontend/src/app/views/chat-panel.tsx（ChatPanel）
+- App.tsx 改为引入上述组件，主编排结构保留。
+- 构建验证：
+pm run build --prefix frontend 通过。
+
+## [2026-05-11] App.tsx 第二轮拆分完成
+- 新增：rontend/src/app/views/detail-panel.tsx，将 DetailPanel 及其相关子组件整体迁出 App.tsx。
+- App.tsx 改为引用 DetailPanel，主文件聚焦状态编排。
+- 修复拆分后的依赖：补齐 detail-panel.tsx 所需图标与本地 helper。
+- 构建验证：
+pm run build --prefix frontend 通过。
+- 行数变化：App.tsx 从 3487 行降至 1599 行。
+
+## [2026-05-11] 按功能/接口域拆分（进行中）
+- 不是仅移动组件：已开始抽离核心运行时逻辑与接口域边界。
+- 新增：rontend/src/app/helpers/chat-runtime.ts
+  - 包含消息撤回应用、会话撤回应用、已读展示、通知偏好、禁言判断等运行时 helper。
+- App.tsx 已改为从 helper 导入上述逻辑（避免继续堆在主文件）。
+- App.tsx 当前行数：1519。
+- 构建验证：
+pm run build --prefix frontend 通过。
+
+## [2026-05-11] 按后端接口域继续拆分（friends + bots）
+- 新增：rontend/src/app/domains/friend-domain.ts
+  - 抽离好友相关动作：创建分组、加好友、处理申请、更新好友、删除好友。
+- 新增：rontend/src/app/domains/bot-domain.ts
+  - 抽离 Bot/日志相关动作：拉取可用 bot、会话 bot、AI 调用日志、添加/移除 bot。
+- App.tsx 已改为调用域函数，不再内联这两块业务动作。
+- 过程修复：清理了一次 import 误删问题并恢复可编译。
+- 构建验证：
+pm run build --prefix frontend 通过。
+- 当前 App.tsx 行数：1515。
+
+## [2026-05-11] 按后端接口域继续拆分（conversation + auth）
+- 新增：rontend/src/app/domains/conversation-domain.ts
+  - 抽离会话/群相关动作：建群、入群、退群、邀请成员、转让群主、管理/禁言成员、全员禁言、公告更新、会话状态刷新。
+- 新增：rontend/src/app/domains/auth-domain.ts
+  - 抽离账号会话相关动作：撤销会话、全部下线、头像上传。
+- App.tsx 对应 handler 已改为调用域函数（保留编排层职责）。
+- 修复一处类型签名不匹配（efreshSelectedGroupInfo 返回值）。
+- 构建验证：
+pm run build --prefix frontend 通过。
+- 当前 App.tsx 行数：1377。
+
+## [2026-05-11] App.tsx 最小修复 + realtime 接回（不回退）
+- 问题修复：
+  - 清理 `frontend/src/App.tsx` 中残留字面量异常字符（`...]);`r`n`），修复语法断点。
+- 保持拆分成果前提下的最小恢复：
+  - 恢复 `App.tsx` 缺失的关键 `useEffect` 生命周期（bootstrap、会话切换、消息初载、滚动与已读联动）。
+  - 恢复 `handleSocketEvent` 事件处理（`MESSAGE_ACK` / `NEW_MESSAGE` / `MESSAGE_RECALLED` / `FRIEND_SYNC`）。
+  - 接入已新增的 `frontend/src/app/domains/realtime-domain.ts`：
+    - 通过 `useRealtimeConnection` 获取 `wsStatus`、`socketRef`
+    - `onMessage` 绑定 `handleSocketEvent`
+    - `onRecover` 绑定 `recoverRealtimeState`
+  - 仅补齐逻辑层，不恢复已拆走的旧大组件代码。
+- 构建验证：
+  - `npm.cmd run build --prefix frontend` 通过。
+- 结果：
+  - 当前版本维持“组件/域拆分”结构，不回退到 3000+ 行旧版；
+  - 实时链路与发送路径恢复可编译可运行状态。
+## [2026-05-11] App.tsx 继续拆分（realtime 事件 + 会话生命周期）
+- 新增：`frontend/src/app/domains/realtime-event-domain.ts`
+  - 抽离 WebSocket 事件处理器构建逻辑 `buildRealtimeEventHandler`。
+  - 覆盖事件：`CONNECTED` / `MESSAGE_ACK` / `NEW_MESSAGE` / `MESSAGE_RECALLED` / `FRIEND_SYNC`。
+  - `App.tsx` 改为依赖注入（refs + setters + actions），不再内联大段分支逻辑。
+- 新增：`frontend/src/app/domains/conversation-lifecycle-domain.ts`
+  - 抽离 `useConversationLifecycle` hook。
+  - 统一承接：bootstrap、会话切换重置、消息自动滚动、会话初载与已读联动。
+- `App.tsx` 调整：
+  - 使用 `useConversationLifecycle(...)` 替代 4 段内联 `useEffect`。
+  - 使用 `buildRealtimeEventHandler(...)` 替代内联 `handleSocketEvent` 实现。
+- 兼容性修复：
+  - 修复 `PendingMessageEntry` 导入来源类型错误。
+  - 修复 `showToast` 参数类型为 `ToastTone`。
+  - 修复 `setSelectedGroupInfo` 泛型为 `GroupInfo | null`。
+- 构建验证：
+  - `npm.cmd run build --prefix frontend` 通过（两轮拆分后均通过）。
+- 结果：
+  - 功能链路保持不变，App 主文件继续瘦身，结构进一步按“编排层 + 领域逻辑层”拆分。
+## [2026-05-11] App.tsx 继续拆分（notification + realtime-state）
+- 新增：`frontend/src/app/domains/notification-domain.ts`
+  - 抽离通知相关状态与行为：`notificationStatus`、`notificationsEnabled`、`showMessageNotification`、`handleToggleNotifications`。
+  - 保留现有通知权限与提示逻辑，不改行为，仅改结构。
+- 新增：`frontend/src/app/domains/realtime-state-domain.ts`
+  - 抽离实时状态核心动作：`markConversationRead`、`refreshCurrentConversationMessages`、`recoverRealtimeState`。
+  - `App.tsx` 改为调用 `useRealtimeState(...)` 获取上述能力。
+- `App.tsx` 调整：
+  - 移除内联通知状态与请求逻辑。
+  - 移除内联已读标记/实时恢复逻辑。
+  - 继续保留编排层角色，领域实现下沉到 domain。
+- 构建验证：
+  - `npm.cmd run build --prefix frontend` 通过。
+- 结果：
+  - 功能保持不变，主文件进一步瘦身，按“视图/领域/编排”分层更清晰。
+## [2026-05-11] App.tsx 继续拆分（facade 绑定层）
+- 新增：`frontend/src/app/facades/domain-bindings.ts`
+  - 抽离 domain deps 组装：
+    - `createConversationDomainDeps`
+    - `createAuthDomainDeps`
+    - `createFriendDomainDeps`
+    - `createBotDomainDeps`
+- `App.tsx` 调整：
+  - `conversation/auth/friend/bot` 四组 deps 由 facade 统一创建。
+  - 好友与 bot 相关 action 调用改为复用 `friendDomainDeps` / `botDomainDeps`，去掉重复 inline 对象。
+  - 为避免引用抖动导致 effect 重复触发，四组 deps 全部用 `useMemo` 包装。
+- 构建验证：
+  - `npm.cmd run build --prefix frontend` 通过。
+- 结果：
+  - App 的“胶水层”重复代码进一步下降，结构更接近“编排层 + 领域层 + 绑定层”。
+## [2026-05-11] App.tsx 继续拆分（message-actions）
+- 新增：`frontend/src/app/domains/message-actions-domain.ts`
+  - 抽离消息相关动作：
+    - `handleSendMessage`
+    - `handleLoadOlder`
+    - `handleRecallMessage`
+  - 保留原有行为与发包结构（`SEND_MESSAGE` + `contentPayload`）不变。
+- `App.tsx` 调整：
+  - 改为通过 `useMessageActions(...)` 注入依赖并获取 handler。
+  - 清理拆分后不再使用的 import（`OutgoingMessagePayload`、`reconcilePendingMessage`、`sortMessages`、`scrollMessagesToBottom` 等）。
+- 过程修复：
+  - 修复 `PendingMessageEntry` 类型来源（应从 `app/types.ts` 导入）。
+- 构建验证：
+  - `npm.cmd run build --prefix frontend` 通过。
+- 结果：
+  - App 主文件继续瘦身，消息动作逻辑下沉到 domain 层，结构更稳定。
+## [2026-05-11] App.tsx 继续拆分（chat-interaction）
+- 新增：`frontend/src/app/domains/chat-interaction-domain.ts`
+  - 抽离会话交互相关逻辑：
+    - `handleOpenChatWithFriend`
+    - `handleMention`
+    - `handleReplyMessage`
+    - `applyRecalledMessageEvent`
+- `App.tsx` 调整：
+  - 通过 `useChatInteractionDomain(...)` 注入依赖并获取交互 handler。
+  - `useMessageActions` 与 realtime 事件处理继续复用 `applyRecalledMessageEvent`。
+  - 清理迁移后冗余 import（旧 helper/类型引用）。
+  - 删除未使用的本地 `refreshSelectedConversationState`（无调用，功能不受影响）。
+- 过程修复：
+  - 修复 `applyRecalledMessageEvent` 的声明顺序（避免“used before declaration”类型报错）。
+- 构建验证：
+  - `npm.cmd run build --prefix frontend` 通过。
+- 结果：
+  - 交互逻辑完成下沉，App 进一步聚焦编排层。
+## [2026-05-11] App.tsx 继续拆分（session-flow）
+- 新增：`frontend/src/app/domains/session-flow-domain.ts`
+  - 抽离会话登录流：
+    - `bootstrap`
+    - `handleLogin`
+    - `handleRegister`
+    - `handleLogout`
+- `App.tsx` 调整：
+  - 使用 `useSessionFlow(...)` 获取登录/注册/登出与引导逻辑。
+  - `useConversationLifecycle` 继续复用 `bootstrap`。
+  - `authDomainDeps` 继续复用 `handleLogout`（兼容 `logoutAllAction`）。
+  - 清理未使用导入：`APIError`。
+- 过程修复：
+  - 修正 `useSessionFlow` 与 `useRealtimeConnection` 的调用顺序（先拿到 `socketRef` 再注入 session-flow）。
+- 构建验证：
+  - `npm.cmd run build --prefix frontend` 通过。
+- 结果：
+  - App 主文件中认证会话流进一步下沉，主文件更专注编排。
+## [2026-05-11] App.tsx 继续拆分（bot-panel）
+- 新增：`frontend/src/app/domains/bot-panel-domain.ts`
+  - 抽离 Bot/日志面板相关编排：
+    - `refreshAICallLogs`
+    - `handleAddBot`
+    - `handleRemoveBot`
+    - `bots/logs` 面板对应 3 段 `useEffect`（含重置与默认 quota 逻辑）
+- `App.tsx` 调整：
+  - 删除内联 `refreshAvailableBots / refreshConversationBots / refreshAICallLogs` 回调。
+  - 删除内联 bot/logs 三段副作用，改由 `useBotPanelDomain(...)` 统一承接。
+  - 清理不再使用的 `bot-domain` 直接导入。
+- 构建验证：
+  - `npm.cmd run build --prefix frontend` 通过。
+- 结果：
+  - Bot 与日志页逻辑进一步下沉，App 主文件编排职责更清晰。
