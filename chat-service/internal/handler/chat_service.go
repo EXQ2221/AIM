@@ -269,6 +269,25 @@ func (h *ChatServiceImpl) ListBots(ctx context.Context, req *chatpb.ListBotsRequ
 	return &chatpb.ListBotsResponse{Bots: result}, nil
 }
 
+func (h *ChatServiceImpl) CreateCustomBot(ctx context.Context, req *chatpb.CreateCustomBotRequest) (*chatpb.CreateCustomBotResponse, error) {
+	item, err := h.Service.CreateCustomBot(ctx, biz.CreateCustomBotInput{
+		OperatorID:      uint64(req.OperatorId),
+		Name:            req.Name,
+		MentionName:     req.MentionName,
+		Aliases:         req.Aliases,
+		Description:     req.Description,
+		APIBaseURL:      req.ApiBaseUrl,
+		APIKey:          req.ApiKey,
+		ModelName:       req.ModelName,
+		SupportedModels: req.SupportedModels,
+		SystemPrompt:    req.GetSystemPrompt(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &chatpb.CreateCustomBotResponse{Bot: toBotPB(*item)}, nil
+}
+
 func (h *ChatServiceImpl) ListConversationBots(ctx context.Context, req *chatpb.ListConversationBotsRequest) (*chatpb.ListConversationBotsResponse, error) {
 	bots, err := h.Service.ListConversationBots(ctx, uint64(req.OperatorId), req.ConversationId)
 	if err != nil {

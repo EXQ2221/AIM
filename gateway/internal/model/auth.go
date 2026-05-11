@@ -71,3 +71,7 @@ type UploadAvatarResponse struct {
 	File   UploadedFileInfo `json:"file"`
 	User   UserInfo         `json:"user"`
 }
+
+type UploadMediaResponse struct {
+	File UploadedFileInfo `json:"file"`
+}

@@ -1,4 +1,4 @@
-package biz
+﻿package biz
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"example.com/aim/chat-service/internal/dal/model"
 	"example.com/aim/chat-service/internal/repository"
 	"example.com/aim/chat-service/internal/rpc"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -264,7 +265,7 @@ func (s *ChatService) FindSingleConversationByUsers(ctx context.Context, operato
 		return nil, ErrSingleSelfChat
 	}
 
-	// 先查已有会话
+	// 鍏堟煡宸叉湁浼氳瘽
 	conv, err := s.ConversationRepo.FindSingleByUsers(ctx, operatorID, targetUserID)
 	switch {
 	case err == nil:
@@ -273,7 +274,6 @@ func (s *ChatService) FindSingleConversationByUsers(ctx context.Context, operato
 		return nil, err
 	}
 
-	// 不存在则自动创建（兼容好友通过非标准路径添加的场景）
 	view, err := s.CreateSingleConversation(ctx, CreateSingleConversationInput{
 		OperatorID: operatorID,
 		TargetID:   targetUserID,
@@ -1088,7 +1088,7 @@ func groupToView(group *model.GroupInfo, conversationID string) *GroupView {
 	}
 }
 
-func normalizeMessagePayload(messageType string, content string) (model.MessageType, string, error) {
+func normalizeMessagePayload(messageType string, content string) (model.MessageType, datatypes.JSON, error) {
 	normalizedType := model.MessageType(strings.ToUpper(strings.TrimSpace(messageType)))
 	if normalizedType == "" {
 		normalizedType = model.MessageTypeText
@@ -1098,62 +1098,63 @@ func normalizeMessagePayload(messageType string, content string) (model.MessageT
 	case model.MessageTypeText:
 		normalizedContent, err := model.NormalizeTextMessageContent(content)
 		if err != nil {
-			return "", "", ErrMessageInvalid
+			return "", nil, ErrMessageInvalid
 		}
 		if model.ExtractTextMessageContent(normalizedContent) == "" {
-			return "", "", ErrMessageEmpty
+			return "", nil, ErrMessageEmpty
 		}
 		return normalizedType, normalizedContent, nil
 	case model.MessageTypeImage:
 		var payload model.ImageMessageContent
 		if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err != nil {
-			return "", "", ErrMessageInvalid
+			return "", nil, ErrMessageInvalid
 		}
 		payload.URL = strings.TrimSpace(payload.URL)
 		payload.Name = strings.TrimSpace(payload.Name)
 		payload.MimeType = strings.TrimSpace(payload.MimeType)
+		payload.Text = strings.TrimSpace(payload.Text)
 		if payload.URL == "" || payload.Name == "" || payload.MimeType == "" {
-			return "", "", ErrMessageInvalid
+			return "", nil, ErrMessageInvalid
 		}
 		normalizedContent, err := json.Marshal(payload)
 		if err != nil {
-			return "", "", ErrMessageInvalid
+			return "", nil, ErrMessageInvalid
 		}
-		return normalizedType, string(normalizedContent), nil
+		return normalizedType, datatypes.JSON(normalizedContent), nil
 	case model.MessageTypeFile:
 		var payload model.FileMessageContent
 		if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err != nil {
-			return "", "", ErrMessageInvalid
+			return "", nil, ErrMessageInvalid
 		}
 		payload.URL = strings.TrimSpace(payload.URL)
 		payload.Name = strings.TrimSpace(payload.Name)
 		payload.MimeType = strings.TrimSpace(payload.MimeType)
 		if payload.URL == "" || payload.Name == "" || payload.MimeType == "" || payload.Size <= 0 {
-			return "", "", ErrMessageInvalid
+			return "", nil, ErrMessageInvalid
 		}
 		normalizedContent, err := json.Marshal(payload)
 		if err != nil {
-			return "", "", ErrMessageInvalid
+			return "", nil, ErrMessageInvalid
 		}
-		return normalizedType, string(normalizedContent), nil
+		return normalizedType, datatypes.JSON(normalizedContent), nil
 	case model.MessageTypeVoice:
 		var payload model.VoiceMessageContent
 		if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err != nil {
-			return "", "", ErrMessageInvalid
+			return "", nil, ErrMessageInvalid
 		}
 		payload.URL = strings.TrimSpace(payload.URL)
 		payload.Name = strings.TrimSpace(payload.Name)
 		payload.MimeType = strings.TrimSpace(payload.MimeType)
 		if payload.URL == "" || payload.Name == "" || payload.MimeType == "" || payload.DurationMS <= 0 {
-			return "", "", ErrMessageInvalid
+			return "", nil, ErrMessageInvalid
 		}
 		normalizedContent, err := json.Marshal(payload)
 		if err != nil {
-			return "", "", ErrMessageInvalid
+			return "", nil, ErrMessageInvalid
 		}
-		return normalizedType, string(normalizedContent), nil
+		return normalizedType, datatypes.JSON(normalizedContent), nil
 	default:
-		return "", "", ErrMessageUnsupported
+		return "", nil, ErrMessageUnsupported
 	}
 }
 
@@ -1191,14 +1192,14 @@ func visibleMessageContent(message *model.Message) string {
 	if message.Status == model.MessageStatusRecalled {
 		return ""
 	}
-	return message.Content
+	return string(message.Content)
 }
 
 func conversationLastMessageContent(row repository.ConversationListRow) string {
 	if strings.EqualFold(row.LastMessageStatus, string(model.MessageStatusRecalled)) {
 		return model.RecalledMessagePlaceholder
 	}
-	return row.LastMessageContent
+	return string(row.LastMessageContent)
 }
 
 func (s *ChatService) decorateMessageReplies(ctx context.Context, messages []MessageView) error {
@@ -1274,7 +1275,7 @@ func (s *ChatService) createSystemMessageTx(
 		SenderID:       0,
 		SenderType:     model.SenderTypeSystem,
 		MessageType:    model.MessageTypeSystem,
-		Content:        string(payload),
+		Content:        datatypes.JSON(payload),
 		Status:         model.MessageStatusNormal,
 		CreatedAt:      now,
 	}
@@ -1302,50 +1303,50 @@ func (s *ChatService) renderSystemMessageText(ctx context.Context, eventType str
 
 	switch eventType {
 	case model.SystemEventMemberJoined:
-		return fmt.Sprintf("%s 加入了群聊", actorName)
+		return fmt.Sprintf("%s joined the group", actorName)
 	case model.SystemEventMemberLeft:
-		return fmt.Sprintf("%s 退出了群聊", actorName)
+		return fmt.Sprintf("%s left the group", actorName)
 	case model.SystemEventMemberInvited:
 		if targetText == "" {
-			return fmt.Sprintf("%s 邀请了新成员加入群聊", actorName)
+			return fmt.Sprintf("%s invited a new member", actorName)
 		}
-		return fmt.Sprintf("%s 邀请 %s 加入了群聊", actorName, targetText)
+		return fmt.Sprintf("%s invited %s to the group", actorName, targetText)
 	case model.SystemEventMemberRemoved:
 		if targetText == "" {
-			return fmt.Sprintf("%s 移除了群成员", actorName)
+			return fmt.Sprintf("%s removed a member", actorName)
 		}
-		return fmt.Sprintf("%s 将 %s 移出了群聊", actorName, targetText)
+		return fmt.Sprintf("%s removed %s from the group", actorName, targetText)
 	case model.SystemEventMemberMuted:
 		if targetText == "" {
-			return fmt.Sprintf("%s 禁言了一名成员", actorName)
+			return fmt.Sprintf("%s muted a member", actorName)
 		}
-		return fmt.Sprintf("%s 禁言了 %s", actorName, targetText)
+		return fmt.Sprintf("%s muted %s", actorName, targetText)
 	case model.SystemEventMemberUnmuted:
 		if targetText == "" {
-			return fmt.Sprintf("%s 解除了一名成员的禁言", actorName)
+			return fmt.Sprintf("%s unmuted a member", actorName)
 		}
-		return fmt.Sprintf("%s 解除了 %s 的禁言", actorName, targetText)
+		return fmt.Sprintf("%s unmuted %s", actorName, targetText)
 	case model.SystemEventGroupMuted:
-		return fmt.Sprintf("%s 开启了全员禁言", actorName)
+		return fmt.Sprintf("%s enabled mute all", actorName)
 	case model.SystemEventGroupUnmuted:
-		return fmt.Sprintf("%s 关闭了全员禁言", actorName)
+		return fmt.Sprintf("%s disabled mute all", actorName)
 	case model.SystemEventAdminAdded:
 		if targetText == "" {
-			return fmt.Sprintf("%s 设置了一名管理员", actorName)
+			return fmt.Sprintf("%s set a new admin", actorName)
 		}
-		return fmt.Sprintf("%s 将 %s 设为了管理员", actorName, targetText)
+		return fmt.Sprintf("%s set %s as admin", actorName, targetText)
 	case model.SystemEventAdminRemoved:
 		if targetText == "" {
-			return fmt.Sprintf("%s 取消了一名管理员", actorName)
+			return fmt.Sprintf("%s removed an admin", actorName)
 		}
-		return fmt.Sprintf("%s 取消了 %s 的管理员身份", actorName, targetText)
+		return fmt.Sprintf("%s removed admin role from %s", actorName, targetText)
 	case model.SystemEventOwnerTransferred:
 		if targetText == "" {
-			return fmt.Sprintf("%s 转让了群主", actorName)
+			return fmt.Sprintf("%s transferred ownership", actorName)
 		}
-		return fmt.Sprintf("%s 将群主转让给了 %s", actorName, targetText)
+		return fmt.Sprintf("%s transferred ownership to %s", actorName, targetText)
 	default:
-		return "群系统消息"
+		return "Group system message"
 	}
 }
 
@@ -1461,3 +1462,4 @@ func (s *ChatService) decorateMessageReadState(ctx context.Context, conversation
 
 	return nil
 }
+

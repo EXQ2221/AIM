@@ -1,15 +1,15 @@
-package mysql
+﻿package postgres
 
 import (
 	"time"
 
 	"example.com/aim/auth-service/internal/dal/model"
-	gmysql "gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 func Init(dsn string) (*gorm.DB, error) {
-	db, err := gorm.Open(gmysql.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
@@ -29,3 +29,4 @@ func Init(dsn string) (*gorm.DB, error) {
 
 	return db, nil
 }
+

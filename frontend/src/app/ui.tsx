@@ -1,5 +1,7 @@
 import type React from "react";
 import { Bot, FileText, MessageCircle, Mic, SendHorizontal, UserPlus, UserRound, Wifi, WifiOff } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { MessageInfo, MobilePane } from "../types";
 import type { ToastState, WsStatus } from "./types";
 import {
@@ -21,10 +23,13 @@ export function MessageBubble({
   mine,
   senderName,
   senderAvatar,
+  highlighted,
   readReceiptLabel,
   mentionTarget,
   onMention,
   replySummaryLabel,
+  replyThumbnailURL,
+  onJumpToReply,
   onReply,
   onRecall
 }: {
@@ -32,10 +37,13 @@ export function MessageBubble({
   mine: boolean;
   senderName: string;
   senderAvatar?: string;
+  highlighted?: boolean;
   readReceiptLabel?: string;
   mentionTarget?: string;
   onMention: (mentionTarget: string) => void;
   replySummaryLabel?: string;
+  replyThumbnailURL?: string;
+  onJumpToReply?: () => void;
   onReply?: () => void;
   onRecall?: () => void;
 }) {
@@ -56,8 +64,11 @@ export function MessageBubble({
     );
   }
 
+  const markdownText = messageText(message);
+  const enableMarkdown = !recalled && (message.messageType === "TEXT" || message.messageType === "BOT_REPLY");
+
   return (
-    <article className={cx("message-row", mine && "mine")}>
+    <article data-message-id={String(message.id)} className={cx("message-row", mine && "mine", highlighted && "highlighted")}>
       {!mine && (
         <Avatar
           name={senderName}
@@ -71,12 +82,12 @@ export function MessageBubble({
           <time>{formatClock(message.createdAt)}</time>
           {onReply && !message.pending && message.status === "NORMAL" && (
             <button className="message-reply-button" type="button" onClick={onReply}>
-              Reply
+              回复
             </button>
           )}
           {onRecall && mine && !message.pending && message.status === "NORMAL" && (
             <button className="message-reply-button" type="button" onClick={onRecall}>
-              Recall
+              撤回
             </button>
           )}
           {(message.pending || message.status === "FAILED") && (
@@ -87,8 +98,20 @@ export function MessageBubble({
         </div>
         {(message.replyTo || message.replyToId) && (
           <div className="message-reply-preview">
-            <strong>{replySummaryLabel || "Original message unavailable"}</strong>
-            <span>{message.replyTo?.contentPreview || "Original message unavailable"}</span>
+            {replyThumbnailURL && (
+              <img
+                className="message-reply-thumbnail"
+                src={replyThumbnailURL}
+                alt=""
+              />
+            )}
+            <strong>{replySummaryLabel || "原消息不可用"}</strong>
+            <span>{message.replyTo?.contentPreview || "原消息不可用"}</span>
+            {onJumpToReply && message.replyToId && (
+              <button className="message-reply-jump" type="button" onClick={onJumpToReply}>
+                跳转
+              </button>
+            )}
           </div>
         )}
         {recalled ? (
@@ -99,6 +122,7 @@ export function MessageBubble({
               <img alt={imageContent.name} src={imageContent.url} />
             </a>
             <span>{imageContent.name}</span>
+            {imageContent.text && <p>{imageContent.text}</p>}
           </div>
         ) : message.messageType === "FILE" && fileContent ? (
           <div className="message-media message-file">
@@ -122,8 +146,12 @@ export function MessageBubble({
             </div>
             <audio controls preload="none" src={voiceContent.url} />
           </div>
+        ) : enableMarkdown ? (
+          <div className="message-markdown">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownText}</ReactMarkdown>
+          </div>
         ) : (
-          <p>{messageText(message)}</p>
+          <p>{markdownText}</p>
         )}
         {mine && !message.pending && message.status !== "FAILED" && readReceiptLabel && (
           <div className="message-read-receipt">{readReceiptLabel}</div>
@@ -233,7 +261,7 @@ export function MobileNav({
   onChange: (pane: MobilePane) => void;
 }) {
   return (
-    <nav className="mobile-nav mobile-nav-five">
+    <nav className="mobile-nav">
       <button className={active === "conversations" ? "active" : ""} type="button" onClick={() => onChange("conversations")}>
         <MessageCircle size={20} />
         会话
@@ -245,10 +273,6 @@ export function MobileNav({
       <button className={active === "friends" ? "active" : ""} type="button" onClick={() => onChange("friends")}>
         <UserPlus size={20} />
         好友
-      </button>
-      <button disabled={!hasConversation} className={active === "bots" ? "active" : ""} type="button" onClick={() => onChange("bots")}>
-        <Bot size={20} />
-        AI
       </button>
       <button className={active === "account" ? "active" : ""} type="button" onClick={() => onChange("account")}>
         <UserRound size={20} />

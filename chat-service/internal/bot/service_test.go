@@ -188,6 +188,104 @@ func TestServiceHandleMentionReturnsNilWhenNoBotMatches(t *testing.T) {
 	}
 }
 
+func TestServiceHandleMentionFiltersRecalledMessagesFromContext(t *testing.T) {
+	messageRepo := &fakeMessageRepo{
+		recent: []model.Message{
+			{ID: 1, ConversationID: 10, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"normal text"}`, Status: model.MessageStatusNormal},
+			{ID: 2, ConversationID: 10, SenderID: 10002, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"should not be seen"}`, Status: model.MessageStatusRecalled},
+		},
+	}
+	conversationRepo := &fakeConversationRepo{}
+	aiCallLogRepo := &fakeAICallLogRepo{}
+	llmClient := &fakeLLMClient{response: &llm.GenerateResponse{Content: "ok"}}
+	service := NewService(llmClient, messageRepo, conversationRepo, aiCallLogRepo)
+	service.SetDefaultModel("env-model")
+	service.SetLimiter(NewLimiter(10, 1))
+	service.SetMemberRepository(&fakeMemberRepo{
+		members: []model.ConversationMember{
+			{ConversationID: 10, MemberType: model.MemberTypeBot, MemberID: 7, Role: model.MemberRoleBot, Status: model.MemberStatusNormal},
+		},
+	})
+	service.SetBotRepository(&fakeBotRepo{
+		bots: map[uint64]*model.Bot{
+			7: {ID: 7, MentionName: "aim", ModelName: "db-model", Status: model.BotStatusEnabled},
+		},
+	})
+	conversationBotRepo := newFakeConversationBotRepo()
+	_ = conversationBotRepo.Create(context.Background(), &model.ConversationBot{
+		ConversationID:  10,
+		BotID:           7,
+		Enabled:         true,
+		PermissionScope: model.BotScopeConversationOnly,
+	})
+	service.SetConversationBotRepository(conversationBotRepo)
+
+	err := service.HandleMention(context.Background(), HandleMentionRequest{
+		ConversationID: 10,
+		UserID:         10001,
+		Content:        "@aim summarize",
+	})
+	if err != nil {
+		t.Fatalf("HandleMention returned error: %v", err)
+	}
+	if len(llmClient.requests) != 1 {
+		t.Fatalf("expected one LLM request, got %d", len(llmClient.requests))
+	}
+	if strings.Contains(llmClient.requests[0].Messages[1].Content, "should not be seen") {
+		t.Fatalf("recalled message leaked into bot prompt: %q", llmClient.requests[0].Messages[1].Content)
+	}
+}
+
+func TestServiceHandleMentionNonVisionModelSendsTextOnly(t *testing.T) {
+	messageRepo := &fakeMessageRepo{
+		recent: []model.Message{
+			{ID: 1, ConversationID: 10, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: `{"url":"https://cdn.example.com/a.png","name":"a.png","mimeType":"image/png","text":"look"}`, Status: model.MessageStatusNormal},
+		},
+	}
+	conversationRepo := &fakeConversationRepo{}
+	aiCallLogRepo := &fakeAICallLogRepo{}
+	llmClient := &fakeLLMClient{response: &llm.GenerateResponse{Content: "ok"}}
+	service := NewService(llmClient, messageRepo, conversationRepo, aiCallLogRepo)
+	service.SetDefaultModel("qwen-plus")
+	service.SetLimiter(NewLimiter(10, 1))
+	service.SetMemberRepository(&fakeMemberRepo{
+		members: []model.ConversationMember{
+			{ConversationID: 10, MemberType: model.MemberTypeBot, MemberID: 7, Role: model.MemberRoleBot, Status: model.MemberStatusNormal},
+		},
+	})
+	service.SetBotRepository(&fakeBotRepo{
+		bots: map[uint64]*model.Bot{
+			7: {ID: 7, MentionName: "qwen", ModelName: "qwen-plus", Status: model.BotStatusEnabled},
+		},
+	})
+	conversationBotRepo := newFakeConversationBotRepo()
+	_ = conversationBotRepo.Create(context.Background(), &model.ConversationBot{
+		ConversationID:  10,
+		BotID:           7,
+		Enabled:         true,
+		PermissionScope: model.BotScopeConversationOnly,
+	})
+	service.SetConversationBotRepository(conversationBotRepo)
+
+	err := service.HandleMention(context.Background(), HandleMentionRequest{
+		ConversationID: 10,
+		UserID:         10001,
+		Content:        "@qwen test",
+	})
+	if err != nil {
+		t.Fatalf("HandleMention returned error: %v", err)
+	}
+	if len(llmClient.requests) != 1 {
+		t.Fatalf("expected one LLM request, got %d", len(llmClient.requests))
+	}
+	if len(llmClient.requests[0].Messages) < 2 {
+		t.Fatalf("unexpected message count: %d", len(llmClient.requests[0].Messages))
+	}
+	if got := len(llmClient.requests[0].Messages[1].Parts); got != 1 {
+		t.Fatalf("non-vision model should keep text-only parts, got %d", got)
+	}
+}
+
 func TestServiceHandleMentionReturnsNilWhenAliasIsAmbiguous(t *testing.T) {
 	messageRepo := &fakeMessageRepo{}
 	conversationRepo := &fakeConversationRepo{}

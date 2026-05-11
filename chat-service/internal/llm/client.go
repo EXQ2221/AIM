@@ -14,6 +14,13 @@ const defaultTimeout = 30 * time.Second
 type ChatMessage struct {
 	Role    string
 	Content string
+	Parts   []ChatMessagePart
+}
+
+type ChatMessagePart struct {
+	Type     string
+	Text     string
+	ImageURL string
 }
 
 type GenerateRequest struct {
@@ -37,6 +44,11 @@ type Config struct {
 	APIKey  string
 	Model   string
 	Timeout time.Duration
+}
+
+type MultiConfig struct {
+	DefaultProvider string
+	Providers       map[string]Config
 }
 
 func LoadConfigFromEnv() (Config, error) {
@@ -65,4 +77,51 @@ func LoadConfigFromEnv() (Config, error) {
 		cfg.Timeout = time.Duration(seconds) * time.Second
 	}
 	return cfg, nil
+}
+
+func LoadMultiConfigFromEnv() (MultiConfig, error) {
+	primary, err := LoadConfigFromEnv()
+	if err != nil {
+		return MultiConfig{}, err
+	}
+	providers := map[string]Config{
+		"primary": primary,
+	}
+
+	secondaryBaseURL := strings.TrimSpace(os.Getenv("LLM2_BASE_URL"))
+	secondaryAPIKey := strings.TrimSpace(os.Getenv("LLM2_API_KEY"))
+	secondaryModel := strings.TrimSpace(os.Getenv("LLM2_MODEL"))
+	if secondaryBaseURL != "" || secondaryAPIKey != "" || secondaryModel != "" {
+		if secondaryBaseURL == "" || secondaryAPIKey == "" || secondaryModel == "" {
+			return MultiConfig{}, errors.New("LLM2_BASE_URL, LLM2_API_KEY and LLM2_MODEL must be set together")
+		}
+		secondary := Config{
+			BaseURL: secondaryBaseURL,
+			APIKey:  secondaryAPIKey,
+			Model:   secondaryModel,
+			Timeout: defaultTimeout,
+		}
+		timeoutValue := strings.TrimSpace(os.Getenv("LLM2_TIMEOUT_SECONDS"))
+		if timeoutValue != "" {
+			seconds, parseErr := strconv.Atoi(timeoutValue)
+			if parseErr != nil || seconds <= 0 {
+				return MultiConfig{}, errors.New("LLM2_TIMEOUT_SECONDS must be a positive integer")
+			}
+			secondary.Timeout = time.Duration(seconds) * time.Second
+		}
+		providers["secondary"] = secondary
+	}
+
+	defaultProvider := strings.TrimSpace(os.Getenv("LLM_PROVIDER"))
+	if defaultProvider == "" {
+		defaultProvider = "primary"
+	}
+	if _, ok := providers[defaultProvider]; !ok {
+		return MultiConfig{}, errors.New("LLM_PROVIDER must reference an existing provider (primary or secondary)")
+	}
+
+	return MultiConfig{
+		DefaultProvider: defaultProvider,
+		Providers:       providers,
+	}, nil
 }

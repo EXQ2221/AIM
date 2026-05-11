@@ -307,6 +307,23 @@ struct AddConversationBotResponse {
   1: BotInfo bot
 }
 
+struct CreateCustomBotRequest {
+  1: i64 operator_id
+  2: string name
+  3: string mention_name
+  4: list<string> aliases
+  5: string description
+  6: string api_base_url
+  7: string api_key
+  8: string model_name
+  9: list<string> supported_models
+  10: optional string system_prompt
+}
+
+struct CreateCustomBotResponse {
+  1: BotInfo bot
+}
+
 struct RemoveConversationBotRequest {
   1: i64 operator_id
   2: string conversation_id
@@ -370,6 +387,7 @@ service ChatService {
   CommonResponse MarkConversationRead(1: MarkConversationReadRequest req)
   MessageRecalledEventResponse RecallMessage(1: RecallMessageRequest req)
   ListBotsResponse ListBots(1: ListBotsRequest req)
+  CreateCustomBotResponse CreateCustomBot(1: CreateCustomBotRequest req)
   ListConversationBotsResponse ListConversationBots(1: ListConversationBotsRequest req)
   AddConversationBotResponse AddConversationBot(1: AddConversationBotRequest req)
   CommonResponse RemoveConversationBot(1: RemoveConversationBotRequest req)

@@ -9,8 +9,9 @@ import (
 
 type BotRepository interface {
 	WithTx(tx *gorm.DB) BotRepository
+	Create(ctx context.Context, bot *model.Bot) error
 	GetByID(ctx context.Context, id uint64) (*model.Bot, error)
-	ListEnabled(ctx context.Context) ([]model.Bot, error)
+	ListEnabledByOwner(ctx context.Context, ownerID uint64) ([]model.Bot, error)
 }
 
 type ConversationBotRepository interface {
@@ -33,6 +34,10 @@ func (r *GormBotRepository) WithTx(tx *gorm.DB) BotRepository {
 	return &GormBotRepository{db: tx}
 }
 
+func (r *GormBotRepository) Create(ctx context.Context, bot *model.Bot) error {
+	return r.db.WithContext(ctx).Create(bot).Error
+}
+
 func (r *GormBotRepository) GetByID(ctx context.Context, id uint64) (*model.Bot, error) {
 	var bot model.Bot
 	if err := r.db.WithContext(ctx).First(&bot, id).Error; err != nil {
@@ -41,10 +46,15 @@ func (r *GormBotRepository) GetByID(ctx context.Context, id uint64) (*model.Bot,
 	return &bot, nil
 }
 
-func (r *GormBotRepository) ListEnabled(ctx context.Context) ([]model.Bot, error) {
+func (r *GormBotRepository) ListEnabledByOwner(ctx context.Context, ownerID uint64) ([]model.Bot, error) {
 	var bots []model.Bot
-	err := r.db.WithContext(ctx).
-		Where("status = ? AND created_by = ?", model.BotStatusEnabled, 0).
+	query := r.db.WithContext(ctx).Where("status = ?", model.BotStatusEnabled)
+	if ownerID == 0 {
+		query = query.Where("created_by = ?", 0)
+	} else {
+		query = query.Where("(created_by = 0 OR created_by = ?)", ownerID)
+	}
+	err := query.
 		Order("id ASC").
 		Find(&bots).Error
 	return bots, err

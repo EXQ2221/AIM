@@ -13,6 +13,7 @@ import type {
   MessageInfo,
   SessionInfo,
   UploadAvatarResponse,
+  UploadMediaResponse,
   UserInfo
 } from "./types";
 
@@ -124,6 +125,30 @@ export const api = {
     const body = new FormData();
     body.append("file", file, "avatar.png");
     return request<UploadAvatarResponse>("/api/v1/users/me/avatar", {
+      method: "POST",
+      body
+    });
+  },
+  uploadImage(file: File) {
+    const body = new FormData();
+    body.append("file", file, file.name);
+    return request<UploadMediaResponse>("/api/v1/uploads/images", {
+      method: "POST",
+      body
+    });
+  },
+  uploadFile(file: File) {
+    const body = new FormData();
+    body.append("file", file, file.name);
+    return request<UploadMediaResponse>("/api/v1/uploads/files", {
+      method: "POST",
+      body
+    });
+  },
+  uploadVoice(file: File) {
+    const body = new FormData();
+    body.append("file", file, file.name);
+    return request<UploadMediaResponse>("/api/v1/uploads/voices", {
       method: "POST",
       body
     });

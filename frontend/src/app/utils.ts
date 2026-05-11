@@ -79,13 +79,15 @@ export function parseImageMessageContent(content: string): ImageMessageContent |
   const name = readString(parsed, "name");
   const mimeType = readString(parsed, "mimeType");
   if (!url || !name || !mimeType) return null;
+  const text = readString(parsed, "text");
   return {
     url,
     name,
     mimeType,
     size: readNumber(parsed, "size"),
     width: readNumber(parsed, "width"),
-    height: readNumber(parsed, "height")
+    height: readNumber(parsed, "height"),
+    text: text || undefined
   };
 }
 
@@ -146,7 +148,8 @@ export function messageText(message: Pick<MessageInfo, "messageType" | "content"
     case "TEXT":
       return parseTextMessageContent(message.content)?.text || message.content.trim();
     case "IMAGE":
-      return "[图片]";
+      const imageText = parseImageMessageContent(message.content)?.text;
+      return imageText ? `[图片] ${imageText}` : "[图片]";
     case "FILE":
       return parseFileMessageContent(message.content)?.name || "[文件]";
     case "VOICE":
@@ -190,7 +193,10 @@ export function messageContentPreview(
       preview = parseTextMessageContent(content)?.text || content.trim();
       break;
     case "IMAGE":
-      preview = "[Image]";
+      {
+        const image = parseImageMessageContent(content);
+        preview = image?.text ? `[Image] ${image.text}` : "[Image]";
+      }
       break;
     case "FILE":
       preview = parseFileMessageContent(content)?.name || "[File]";

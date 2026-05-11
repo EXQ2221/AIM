@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"example.com/aim/chat-service/internal/bot"
@@ -20,6 +21,7 @@ var (
 	ErrBotReservedName           = errors.New("bad_request: reserved mention name is not allowed")
 	ErrBotConflict               = errors.New("bad_request: bot mentionName or aliases conflict in conversation")
 	ErrBotPermissionScopeInvalid = errors.New("bad_request: permission_scope must be CONVERSATION_ONLY")
+	ErrBotOwnerRequired          = errors.New("forbidden: only bot owner can add this custom bot")
 )
 
 var reservedBotNames = map[string]struct{}{
@@ -37,16 +39,13 @@ func (s *ChatService) ListBots(ctx context.Context, operatorID uint64) ([]BotVie
 		return nil, ErrBotManagementUnavailable
 	}
 
-	bots, err := s.BotRepo.ListEnabled(ctx)
+	bots, err := s.BotRepo.ListEnabledByOwner(ctx, operatorID)
 	if err != nil {
 		return nil, err
 	}
 
 	result := make([]BotView, 0, len(bots))
 	for _, botModel := range bots {
-		if botModel.CreatedBy != 0 {
-			continue
-		}
 		view, err := buildAvailableBotView(botModel)
 		if err != nil {
 			return nil, err
@@ -142,8 +141,8 @@ func (s *ChatService) AddConversationBot(ctx context.Context, input AddConversat
 	if botModel.Status != model.BotStatusEnabled {
 		return nil, bot.ErrBotNotFound
 	}
-	if botModel.CreatedBy != 0 {
-		return nil, bot.ErrBotNotFound
+	if botModel.CreatedBy != 0 && botModel.CreatedBy != input.OperatorID {
+		return nil, ErrBotOwnerRequired
 	}
 
 	if err := validateBaseBotTokens(*botModel); err != nil {
@@ -188,6 +187,68 @@ func (s *ChatService) AddConversationBot(ctx context.Context, input AddConversat
 	}
 
 	view, err := buildConversationBotView(*botModel, *conversationBot, *member)
+	if err != nil {
+		return nil, err
+	}
+	return &view, nil
+}
+
+func (s *ChatService) CreateCustomBot(ctx context.Context, input CreateCustomBotInput) (*BotView, error) {
+	if input.OperatorID == 0 {
+		return nil, ErrBadRequest
+	}
+	if s.BotRepo == nil {
+		return nil, ErrBotManagementUnavailable
+	}
+
+	name := strings.TrimSpace(input.Name)
+	mentionName := normalizeOptionalName(input.MentionName)
+	baseURL := strings.TrimSpace(input.APIBaseURL)
+	apiKey := strings.TrimSpace(input.APIKey)
+	modelName := strings.TrimSpace(input.ModelName)
+	if name == "" || mentionName == "" || baseURL == "" || apiKey == "" || modelName == "" {
+		return nil, ErrBadRequest
+	}
+	if err := validateMentionToken(mentionName, ErrBotMentionNameInvalid); err != nil {
+		return nil, err
+	}
+	if err := validateOverrideNames("", input.Aliases); err != nil {
+		return nil, err
+	}
+
+	aliasesText, err := marshalAliases(input.Aliases)
+	if err != nil {
+		return nil, err
+	}
+	supportedModels := input.SupportedModels
+	if len(supportedModels) == 0 {
+		supportedModels = []string{modelName}
+	}
+	supportedModelsText, err := marshalAliases(supportedModels)
+	if err != nil {
+		return nil, err
+	}
+
+	botModel := &model.Bot{
+		Name:            name,
+		MentionName:     mentionName,
+		Aliases:         aliasesText,
+		Description:     strings.TrimSpace(input.Description),
+		ModelName:       modelName,
+		SupportedModels: supportedModelsText,
+		APIBaseURL:      baseURL,
+		APIKeyEncrypted: apiKey,
+		SystemPrompt:    strings.TrimSpace(input.SystemPrompt),
+		CreatedBy:       input.OperatorID,
+		Status:          model.BotStatusEnabled,
+	}
+	if botModel.SystemPrompt == "" {
+		botModel.SystemPrompt = bot.DefaultSystemPrompt
+	}
+	if err := s.BotRepo.Create(ctx, botModel); err != nil {
+		return nil, fmt.Errorf("create custom bot failed: %w", err)
+	}
+	view, err := buildAvailableBotView(*botModel)
 	if err != nil {
 		return nil, err
 	}

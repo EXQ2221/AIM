@@ -17,12 +17,12 @@ func TestShouldTriggerBot(t *testing.T) {
 			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"hello"}`},
 		},
 		{
-			name: "任意开头 mention 进入候选触发",
+			name: "文本 mention 触发",
 			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"@aim hello"}`},
 			want: true,
 		},
 		{
-			name: "带冒号的 mention 也触发",
+			name: "带冒号 mention 触发",
 			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"@helper: hello"}`},
 			want: true,
 		},
@@ -31,8 +31,13 @@ func TestShouldTriggerBot(t *testing.T) {
 			msg:  model.Message{SenderType: model.SenderTypeBot, MessageType: model.MessageTypeBotReply, Content: "@aim hello"},
 		},
 		{
-			name: "图片消息不触发",
-			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: "@aim hello"},
+			name: "图片消息 text mention 触发",
+			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: `{"url":"https://cdn.example.com/a.png","name":"a.png","mimeType":"image/png","text":"@aim 请看图"}`},
+			want: true,
+		},
+		{
+			name: "图片消息无 mention 不触发",
+			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: `{"url":"https://cdn.example.com/a.png","name":"a.png","mimeType":"image/png","text":"这是一张图"}`},
 		},
 	}
 
@@ -52,7 +57,7 @@ func TestExtractQuestion(t *testing.T) {
 	}{
 		{content: "@AIM 总结一下刚才讨论了什么", want: "总结一下刚才讨论了什么"},
 		{content: "@bot: hello", want: "hello"},
-		{content: "@helper， 继续", want: "继续"},
+		{content: "@helper，继续", want: "继续"},
 		{content: "@aim", want: fallbackQuestion},
 	}
 

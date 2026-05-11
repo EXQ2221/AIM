@@ -69,6 +69,66 @@ func TestOpenAICompatibleGenerateSuccess(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatibleGenerateWithImageParts(t *testing.T) {
+	var seenPayload chatCompletionRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&seenPayload); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"choices":[{"message":{"role":"assistant","content":"ok"}}],
+			"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}
+		}`))
+	}))
+	defer server.Close()
+
+	client, err := NewOpenAICompatibleClient(Config{
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+		Model:   "qwen3.6-plus",
+		Timeout: time.Second,
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	_, err = client.Generate(context.Background(), GenerateRequest{
+		Messages: []ChatMessage{
+			{
+				Role: "user",
+				Parts: []ChatMessagePart{
+					{Type: "text", Text: "describe image"},
+					{Type: "image_url", ImageURL: "https://cdn.example.com/a.png"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Generate returned error: %v", err)
+	}
+	if len(seenPayload.Messages) != 1 {
+		t.Fatalf("unexpected message count: %d", len(seenPayload.Messages))
+	}
+	contentBytes, err := json.Marshal(seenPayload.Messages[0].Content)
+	if err != nil {
+		t.Fatalf("marshal content: %v", err)
+	}
+	var contentParts []chatCompletionMessagePart
+	if err := json.Unmarshal(contentBytes, &contentParts); err != nil {
+		t.Fatalf("unmarshal content parts: %v", err)
+	}
+	if len(contentParts) != 2 {
+		t.Fatalf("unexpected multicontent count: %d", len(contentParts))
+	}
+	if contentParts[0].Type != "text" || contentParts[0].Text != "describe image" {
+		t.Fatalf("unexpected first part: %+v", contentParts[0])
+	}
+	if contentParts[1].Type != "image_url" || contentParts[1].ImageURL == nil || contentParts[1].ImageURL.URL != "https://cdn.example.com/a.png" {
+		t.Fatalf("unexpected second part: %+v", contentParts[1])
+	}
+}
+
 func TestOpenAICompatibleGenerateNon2xx(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad key", http.StatusUnauthorized)

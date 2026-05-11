@@ -160,6 +160,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"CreateCustomBot": kitex.NewMethodInfo(
+		createCustomBotHandler,
+		newChatServiceCreateCustomBotArgs,
+		newChatServiceCreateCustomBotResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"ListConversationBots": kitex.NewMethodInfo(
 		listConversationBotsHandler,
 		newChatServiceListConversationBotsArgs,
@@ -646,6 +653,24 @@ func newChatServiceListBotsResult() interface{} {
 	return chat.NewChatServiceListBotsResult()
 }
 
+func createCustomBotHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceCreateCustomBotArgs)
+	realResult := result.(*chat.ChatServiceCreateCustomBotResult)
+	success, err := handler.(chat.ChatService).CreateCustomBot(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceCreateCustomBotArgs() interface{} {
+	return chat.NewChatServiceCreateCustomBotArgs()
+}
+
+func newChatServiceCreateCustomBotResult() interface{} {
+	return chat.NewChatServiceCreateCustomBotResult()
+}
+
 func listConversationBotsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	realArg := arg.(*chat.ChatServiceListConversationBotsArgs)
 	realResult := result.(*chat.ChatServiceListConversationBotsResult)
@@ -969,6 +994,16 @@ func (p *kClient) ListBots(ctx context.Context, req *chat.ListBotsRequest) (r *c
 	_args.Req = req
 	var _result chat.ChatServiceListBotsResult
 	if err = p.c.Call(ctx, "ListBots", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) CreateCustomBot(ctx context.Context, req *chat.CreateCustomBotRequest) (r *chat.CreateCustomBotResponse, err error) {
+	var _args chat.ChatServiceCreateCustomBotArgs
+	_args.Req = req
+	var _result chat.ChatServiceCreateCustomBotResult
+	if err = p.c.Call(ctx, "CreateCustomBot", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

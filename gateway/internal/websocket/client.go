@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
 	"time"
@@ -129,11 +130,16 @@ func (c *Client) handleSendMessage(ctx context.Context, event IncomingEvent) {
 		c.sendFailedAck(event.ClientMsgID, "BAD_REQUEST", "conversationId is required")
 		return
 	}
+	content, err := normalizeOutgoingContent(payload.Content, payload.ContentPayload)
+	if err != nil {
+		c.sendFailedAck(event.ClientMsgID, "BAD_REQUEST", err.Error())
+		return
+	}
 
 	resp, err := c.chatClient.CreateMessage(ctx, &chatpb.CreateMessageRequest{
 		OperatorId:     c.UserID,
 		ConversationId: payload.ConversationID,
-		Content:        payload.Content,
+		Content:        content,
 		ReplyToId:      payload.ReplyToID,
 		MessageType:    nullableTrimmedString(payload.MessageType),
 	})
@@ -155,6 +161,31 @@ func (c *Client) handleSendMessage(ctx context.Context, event IncomingEvent) {
 		},
 	})
 	c.broadcastNewMessage(ctx, resp.Message)
+}
+
+func normalizeOutgoingContent(content string, payload json.RawMessage) (string, error) {
+	if len(payload) > 0 {
+		trimmed := strings.TrimSpace(string(payload))
+		if trimmed == "" || trimmed == "null" {
+			return "", errors.New("contentPayload cannot be null")
+		}
+		var obj map[string]any
+		if err := json.Unmarshal(payload, &obj); err != nil {
+			return "", errors.New("contentPayload must be a valid JSON object")
+		}
+		if obj == nil {
+			return "", errors.New("contentPayload must be a JSON object")
+		}
+		encoded, err := json.Marshal(obj)
+		if err != nil {
+			return "", errors.New("failed to serialize contentPayload")
+		}
+		return string(encoded), nil
+	}
+	if strings.TrimSpace(content) == "" {
+		return "", errors.New("content or contentPayload is required")
+	}
+	return content, nil
 }
 
 func nullableTrimmedString(value string) *string {

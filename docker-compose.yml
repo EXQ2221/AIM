@@ -1,20 +1,20 @@
 services:
-  mysql:
-    image: ${DOCKER_HUB_MIRROR:-m.daocloud.io/docker.io}/library/mysql:8.0
-    container_name: aim-mysql
+  postgres:
+    image: ${DOCKER_HUB_MIRROR:-m.daocloud.io/docker.io}/library/postgres:16
+    container_name: aim-postgres
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-aim}
-      MYSQL_USER: ${MYSQL_USER:-aim}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}
+      POSTGRES_USER: ${POSTGRES_USER:-aim}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DATABASE:-aim}
       TZ: Asia/Shanghai
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aim} -d ${POSTGRES_DATABASE:-aim}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -50,12 +50,12 @@ services:
     environment:
       PORT: "9001"
       HEALTH_PORT: "19001"
-      MYSQL_DSN: "${MYSQL_USER:-aim}:${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}@tcp(mysql:3306)/${MYSQL_DATABASE:-aim}?charset=utf8mb4&parseTime=True&loc=Local"
+      USER_POSTGRES_DSN: "${USER_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_user port=5432 sslmode=disable TimeZone=UTC}"
       REDIS_ADDR: "redis:6379"
       CHAT_SERVICE_ADDR: "chat-service:9003"
       TZ: Asia/Shanghai
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -81,13 +81,13 @@ services:
     environment:
       PORT: "9002"
       HEALTH_PORT: "19002"
-      MYSQL_DSN: "${MYSQL_USER:-aim}:${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}@tcp(mysql:3306)/${MYSQL_DATABASE:-aim}?charset=utf8mb4&parseTime=True&loc=Local"
+      AUTH_POSTGRES_DSN: "${AUTH_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_auth port=5432 sslmode=disable TimeZone=UTC}"
       REDIS_ADDR: "redis:6379"
       USER_SERVICE_ADDR: "user-service:9001"
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       TZ: Asia/Shanghai
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -115,17 +115,25 @@ services:
     environment:
       PORT: "9003"
       HEALTH_PORT: "19003"
-      MYSQL_DSN: "${MYSQL_USER:-aim}:${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}@tcp(mysql:3306)/${MYSQL_DATABASE:-aim}?charset=utf8mb4&parseTime=True&loc=Local"
+      CHAT_POSTGRES_DSN: "${CHAT_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_chat port=5432 sslmode=disable TimeZone=UTC}"
       USER_SERVICE_ADDR: "user-service:9001"
       REDIS_ADDR: "redis:6379"
       BOT_ID: "${BOT_ID:-1}"
+      BOT2_ID: "${BOT2_ID:-100001}"
       LLM_BASE_URL: "${LLM_BASE_URL:-}"
       LLM_API_KEY: "${LLM_API_KEY:-}"
       LLM_MODEL: "${LLM_MODEL:-}"
       LLM_TIMEOUT_SECONDS: "${LLM_TIMEOUT_SECONDS:-30}"
+      LLM2_BASE_URL: "${LLM2_BASE_URL:-}"
+      LLM2_API_KEY: "${LLM2_API_KEY:-}"
+      LLM2_MODEL: "${LLM2_MODEL:-}"
+      LLM2_TIMEOUT_SECONDS: "${LLM2_TIMEOUT_SECONDS:-30}"
+      LLM_PROVIDER: "${LLM_PROVIDER:-primary}"
+      BOT_CONTEXT_MESSAGES: "${BOT_CONTEXT_MESSAGES:-20}"
+      BOT_TASK_TIMEOUT_SECONDS: "${BOT_TASK_TIMEOUT_SECONDS:-30}"
       TZ: Asia/Shanghai
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -182,7 +190,7 @@ services:
       - aim-net
 
 volumes:
-  mysql_data:
+  postgres_data:
   redis_data:
   gateway_uploads:
 

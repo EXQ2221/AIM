@@ -34,7 +34,8 @@ type ConnectedData struct {
 type SendMessageData struct {
 	ConversationID string `json:"conversationId"`
 	MessageType    string `json:"messageType,omitempty"`
-	Content        string `json:"content"`
+	Content        string          `json:"content,omitempty"`
+	ContentPayload json.RawMessage `json:"contentPayload,omitempty"`
 	ReplyToID      *int64 `json:"replyToId,omitempty"`
 }
 

@@ -50,6 +50,10 @@ export type UploadAvatarResponse = {
   user: UserInfo;
 };
 
+export type UploadMediaResponse = {
+  file: UploadedFileInfo;
+};
+
 export type FriendGroupInfo = {
   id: number;
   name: string;
@@ -132,6 +136,7 @@ export type ImageMessageContent = {
   mimeType: string;
   width?: number;
   height?: number;
+  text?: string;
 };
 
 export type FileMessageContent = {
@@ -204,7 +209,7 @@ export type MessageRecalledEventInfo = {
 
 export type OutgoingMessagePayload = {
   messageType: "TEXT" | "IMAGE" | "FILE" | "VOICE";
-  content: string;
+  contentPayload: Record<string, unknown>;
 };
 
 export type WebSocketEvent =

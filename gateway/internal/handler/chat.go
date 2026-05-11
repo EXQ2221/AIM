@@ -836,6 +836,43 @@ func ListBots(ctx *gin.Context) {
 	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success", Data: bots})
 }
 
+func CreateCustomBot(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+	var req model.CreateCustomBotRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, 400, "invalid request body")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.CreateCustomBot(ctx.Request.Context(), &chatpb.CreateCustomBotRequest{
+		OperatorId:      authCtx.UserID,
+		Name:            req.Name,
+		MentionName:     req.MentionName,
+		Aliases:         req.Aliases,
+		Description:     req.Description,
+		ApiBaseUrl:      req.APIBaseURL,
+		ApiKey:          req.APIKey,
+		ModelName:       req.ModelName,
+		SupportedModels: req.SupportedModels,
+		SystemPrompt:    &req.SystemPrompt,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success", Data: toBotModel(resp.Bot)})
+}
+
 func ListConversationBots(ctx *gin.Context) {
 	authCtx, ok := middleware.GetAuthContext(ctx)
 	if !ok {

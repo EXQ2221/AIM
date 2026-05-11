@@ -1,10 +1,19 @@
-package bot
+﻿package bot
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
+	"mime"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,7 +37,9 @@ type MentionHandler interface {
 
 type Service struct {
 	LLM                 llm.Client
+	LLMSelector         func(bot model.Bot) (llm.Client, string, error)
 	DefaultModel        string
+	ContextMessages     int
 	DailyTokenLimit     int64
 	Limiter             *Limiter
 	MessageRepo         repository.MessageRepository
@@ -49,6 +60,7 @@ func NewService(
 ) *Service {
 	return &Service{
 		LLM:              llmClient,
+		ContextMessages:  20,
 		DailyTokenLimit:  1_000_000,
 		MessageRepo:      messageRepo,
 		ConversationRepo: conversationRepo,
@@ -64,9 +76,19 @@ func (s *Service) SetLimiter(limiter *Limiter) {
 	s.Limiter = limiter
 }
 
+func (s *Service) SetLLMSelector(selector func(bot model.Bot) (llm.Client, string, error)) {
+	s.LLMSelector = selector
+}
+
 func (s *Service) SetDailyTokenLimit(limit int64) {
 	if limit > 0 {
 		s.DailyTokenLimit = limit
+	}
+}
+
+func (s *Service) SetContextMessages(limit int) {
+	if limit > 0 {
+		s.ContextMessages = limit
 	}
 }
 
@@ -147,12 +169,17 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 		return err
 	}
 
-	recentMessages, err := s.MessageRepo.ListByConversationID(ctx, req.ConversationID, nil, 20)
+	contextLimit := s.ContextMessages
+	if contextLimit <= 0 {
+		contextLimit = 20
+	}
+	recentMessages, err := s.MessageRepo.ListByConversationID(ctx, req.ConversationID, nil, contextLimit)
 	if err != nil {
 		return err
 	}
+	recentMessages = filterBotVisibleMessages(recentMessages)
 	userDisplayNames := s.resolveUserDisplayNames(ctx, recentMessages, req.UserID)
-	prompt := BuildPrompt(recentMessages, req.Content, 20, userDisplayNames, req.UserID)
+	prompt := BuildPrompt(recentMessages, req.Content, contextLimit, userDisplayNames, req.UserID)
 	systemPrompt := strings.TrimSpace(resolved.Bot.SystemPrompt)
 	if systemPrompt == "" {
 		systemPrompt = DefaultSystemPrompt
@@ -166,11 +193,40 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	}
 
 	start := time.Now()
-	resp, err := s.LLM.Generate(ctx, llm.GenerateRequest{
+	llmClient := s.LLM
+	if s.LLMSelector != nil {
+		selectedClient, _, selectErr := s.LLMSelector(resolved.Bot)
+		if selectErr != nil {
+			if logErr := s.createFailedLog(ctx, req, resolved.Bot, modelName, selectErr, 0); logErr != nil {
+				return fmt.Errorf("record failed ai call log: %w; llm select error: %v", logErr, selectErr)
+			}
+			return selectErr
+		}
+		if selectedClient != nil {
+			llmClient = selectedClient
+		}
+	}
+
+	parts, err := buildUserPromptParts(ctx, prompt, recentMessages, supportsVisionModel(modelName))
+	if err != nil {
+		if logErr := s.createFailedLog(ctx, req, resolved.Bot, modelName, err, 0); logErr != nil {
+			return fmt.Errorf("record failed ai call log: %w; build prompt parts error: %v", logErr, err)
+		}
+		if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, err.Error()); replyErr != nil {
+			return fmt.Errorf("create bot failure reply error: %w; build prompt parts error: %v", replyErr, err)
+		}
+		return nil
+	}
+
+	resp, err := llmClient.Generate(ctx, llm.GenerateRequest{
 		Model: modelName,
 		Messages: []llm.ChatMessage{
 			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: prompt},
+			{
+				Role:    "user",
+				Content: prompt,
+				Parts:   parts,
+			},
 		},
 	})
 	latencyMS := time.Since(start).Milliseconds()
@@ -180,7 +236,7 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 		}
 		var statusErr *llm.HTTPStatusError
 		if errors.As(err, &statusErr) {
-			if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, "调用错误，请稍后再试"); replyErr != nil {
+			if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, "璋冪敤閿欒锛岃绋嶅悗鍐嶈瘯"); replyErr != nil {
 				return fmt.Errorf("create bot failure reply error: %w; llm error: %v", replyErr, err)
 			}
 			return nil
@@ -316,7 +372,7 @@ func (s *Service) publishBotReplyCreated(ctx context.Context, req HandleMentionR
 			SenderID:       int64(message.SenderID),
 			SenderType:     string(message.SenderType),
 			MessageType:    string(message.MessageType),
-			Content:        message.Content,
+			Content:        string(message.Content),
 			ReplyToID:      replyToID,
 			Status:         string(message.Status),
 			CreatedAt:      message.CreatedAt.Unix(),
@@ -384,13 +440,17 @@ func (s *Service) createFailedLog(ctx context.Context, req HandleMentionRequest,
 }
 
 func (s *Service) createBotReplyMessage(ctx context.Context, req HandleMentionRequest, botModel model.Bot, content string) (*model.Message, error) {
+	normalizedContent, err := model.NormalizeTextMessageContent(content)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now()
 	botMessage := &model.Message{
 		ConversationID: req.ConversationID,
 		SenderID:       botModel.ID,
 		SenderType:     model.SenderTypeBot,
 		MessageType:    model.MessageTypeBotReply,
-		Content:        content,
+		Content:        normalizedContent,
 		Status:         model.MessageStatusNormal,
 		CreatedAt:      now,
 	}
@@ -420,6 +480,10 @@ func nullableID(id uint64) *uint64 {
 
 func (s *Service) checkDailyTokenLimit(ctx context.Context, req HandleMentionRequest, botModel model.Bot) error {
 	if s.AICallLogRepo == nil || s.DailyTokenLimit <= 0 {
+		return nil
+	}
+	// User-owned bots (CreatedBy > 0) should not consume platform quota.
+	if botModel.CreatedBy > 0 {
 		return nil
 	}
 	startAt, endAt := dayWindow()
@@ -471,4 +535,154 @@ func (s *Service) resolveUserDisplayNames(ctx context.Context, recentMessages []
 	return displayNames
 }
 
+func buildUserPromptParts(ctx context.Context, prompt string, recentMessages []model.Message, enableImages bool) ([]llm.ChatMessagePart, error) {
+	parts := []llm.ChatMessagePart{
+		{
+			Type: "text",
+			Text: prompt,
+		},
+	}
+	if !enableImages {
+		return parts, nil
+	}
+
+	for _, msg := range recentMessages {
+		if msg.MessageType != model.MessageTypeImage {
+			continue
+		}
+		var image model.ImageMessageContent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(string(msg.Content))), &image); err != nil {
+			continue
+		}
+		imageURL := strings.TrimSpace(image.URL)
+		if imageURL == "" {
+			continue
+		}
+		normalizedURL, err := normalizeImageURLForLLM(ctx, imageURL)
+		if err != nil {
+			return nil, err
+		}
+		parts = append(parts, llm.ChatMessagePart{
+			Type:     "image_url",
+			ImageURL: normalizedURL,
+		})
+	}
+	return parts, nil
+}
+
+func supportsVisionModel(modelName string) bool {
+	return strings.EqualFold(strings.TrimSpace(modelName), "qwen3.6-plus")
+}
+
+func filterBotVisibleMessages(messages []model.Message) []model.Message {
+	if len(messages) == 0 {
+		return messages
+	}
+	filtered := make([]model.Message, 0, len(messages))
+	for _, msg := range messages {
+		if msg.Status != model.MessageStatusNormal {
+			continue
+		}
+		filtered = append(filtered, msg)
+	}
+	return filtered
+}
+
+func normalizeImageURLForLLM(ctx context.Context, raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", errors.New("image URL is empty")
+	}
+	lower := strings.ToLower(value)
+	if strings.HasPrefix(lower, "data:") {
+		if strings.Contains(lower, ";base64,") {
+			return value, nil
+		}
+		return "", errors.New("invalid base64 image format, expected data:*;base64, prefix")
+	}
+	if strings.HasPrefix(lower, "file://") {
+		return "", errors.New("file:// is not supported in OpenAI-compatible mode")
+	}
+
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "", errors.New("invalid image URL format, expected http(s) URL or data:base64")
+	}
+	if parsed.Scheme == "" && strings.HasPrefix(value, "/") {
+		baseURL := strings.TrimSpace(os.Getenv("BOT_MEDIA_BASE_URL"))
+		if baseURL == "" {
+			baseURL = "http://gateway:8080"
+		}
+		target := strings.TrimRight(baseURL, "/") + value
+		return fetchAndEncodeImageToDataURL(ctx, target)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return "", errors.New("unsupported image URL scheme, expected http(s) URL or data:base64")
+	}
+	host := strings.TrimSpace(parsed.Hostname())
+	if host == "" {
+		return "", errors.New("image URL missing hostname")
+	}
+	if isPrivateHost(host) {
+		return fetchAndEncodeImageToDataURL(ctx, value)
+	}
+	return value, nil
+}
+
+func isPrivateHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
+	}
+	return false
+}
+
+func fetchAndEncodeImageToDataURL(ctx context.Context, sourceURL string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("invalid image URL: %w", err)
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("cannot access image URL: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return "", fmt.Errorf("image URL request failed (HTTP %d)", resp.StatusCode)
+	}
+
+	const maxImageBytes = 8 * 1024 * 1024
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxImageBytes+1))
+	if err != nil {
+		return "", fmt.Errorf("failed to read image body: %w", err)
+	}
+	if len(body) == 0 {
+		return "", errors.New("image body is empty")
+	}
+	if len(body) > maxImageBytes {
+		return "", errors.New("image too large (over 8MB)")
+	}
+
+	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	if contentType == "" {
+		parsed, parseErr := url.Parse(sourceURL)
+		if parseErr == nil {
+			ext := strings.ToLower(filepath.Ext(parsed.Path))
+			if guessed := mime.TypeByExtension(ext); guessed != "" {
+				contentType = guessed
+			}
+		}
+	}
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+	contentType = strings.Split(contentType, ";")[0]
+	encoded := base64.StdEncoding.EncodeToString(body)
+	return "data:" + contentType + ";base64," + encoded, nil
+}
+
 var _ MentionHandler = (*Service)(nil)
+

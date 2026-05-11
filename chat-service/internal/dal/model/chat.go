@@ -6,6 +6,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -147,7 +148,7 @@ type Message struct {
 	SenderID       uint64         `gorm:"not null;index" json:"senderId"`
 	SenderType     SenderType     `gorm:"type:varchar(32);not null" json:"senderType"`
 	MessageType    MessageType    `gorm:"type:varchar(32);not null;default:'TEXT'" json:"messageType"`
-	Content        string         `gorm:"type:text" json:"content"`
+	Content        datatypes.JSON `gorm:"type:jsonb;not null" json:"content"`
 	ReplyToID      *uint64        `gorm:"index" json:"replyToId"`
 	Status         MessageStatus  `gorm:"type:varchar(32);not null;default:'NORMAL'" json:"status"`
 	CreatedAt      time.Time      `gorm:"index:idx_conversation_created" json:"createdAt"`
@@ -172,6 +173,7 @@ type ImageMessageContent struct {
 	MimeType string `json:"mimeType"`
 	Width    int    `json:"width"`
 	Height   int    `json:"height"`
+	Text     string `json:"text,omitempty"`
 }
 
 type FileMessageContent struct {
@@ -211,27 +213,27 @@ const (
 	SystemEventAnnouncementUpdated = "ANNOUNCEMENT_UPDATED"
 )
 
-func NormalizeTextMessageContent(content string) (string, error) {
+func NormalizeTextMessageContent(content string) (datatypes.JSON, error) {
 	payload := TextMessageContent{}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err == nil {
 		payload.Text = strings.TrimSpace(payload.Text)
 		encoded, err := json.Marshal(payload)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		return string(encoded), nil
+		return datatypes.JSON(encoded), nil
 	}
 
 	payload.Text = strings.TrimSpace(content)
 	encoded, err := json.Marshal(payload)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return string(encoded), nil
+	return datatypes.JSON(encoded), nil
 }
 
-func ExtractTextMessageContent(content string) string {
-	trimmed := strings.TrimSpace(content)
+func ExtractTextMessageContent(content datatypes.JSON) string {
+	trimmed := strings.TrimSpace(string(content))
 	if trimmed == "" {
 		return ""
 	}
@@ -243,13 +245,19 @@ func ExtractTextMessageContent(content string) string {
 	return trimmed
 }
 
-func MessagePreview(messageType MessageType, content string) string {
+func MessagePreview(messageType MessageType, content datatypes.JSON) string {
 	switch messageType {
 	case MessageTypeImage:
+		var payload ImageMessageContent
+		if err := json.Unmarshal([]byte(strings.TrimSpace(string(content))), &payload); err == nil {
+			if text := strings.TrimSpace(payload.Text); text != "" {
+				return "[图片] " + text
+			}
+		}
 		return "[图片]"
 	case MessageTypeFile:
 		var payload FileMessageContent
-		if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err == nil {
+		if err := json.Unmarshal([]byte(strings.TrimSpace(string(content))), &payload); err == nil {
 			if name := strings.TrimSpace(payload.Name); name != "" {
 				return name
 			}
@@ -259,16 +267,16 @@ func MessagePreview(messageType MessageType, content string) string {
 		return "[语音]"
 	case MessageTypeSystem:
 		var payload SystemMessageContent
-		if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &payload); err == nil {
+		if err := json.Unmarshal([]byte(strings.TrimSpace(string(content))), &payload); err == nil {
 			return strings.TrimSpace(payload.Text)
 		}
-		return strings.TrimSpace(content)
+		return strings.TrimSpace(string(content))
 	case MessageTypeBotReply:
 		text := ExtractTextMessageContent(content)
 		if text != "" {
 			return text
 		}
-		return strings.TrimSpace(content)
+		return strings.TrimSpace(string(content))
 	case MessageTypeText:
 		fallthrough
 	default:
@@ -276,18 +284,18 @@ func MessagePreview(messageType MessageType, content string) string {
 	}
 }
 
-func MessagePreviewWithStatus(status MessageStatus, messageType MessageType, content string) string {
+func MessagePreviewWithStatus(status MessageStatus, messageType MessageType, content datatypes.JSON) string {
 	if status == MessageStatusRecalled {
 		return RecalledMessagePlaceholder
 	}
 	return MessagePreview(messageType, content)
 }
 
-func ReplyContentPreview(messageType MessageType, content string, limit int) string {
+func ReplyContentPreview(messageType MessageType, content datatypes.JSON, limit int) string {
 	return TruncatePreview(MessagePreview(messageType, content), limit)
 }
 
-func ReplyContentPreviewWithStatus(status MessageStatus, messageType MessageType, content string, limit int) string {
+func ReplyContentPreviewWithStatus(status MessageStatus, messageType MessageType, content datatypes.JSON, limit int) string {
 	return TruncatePreview(MessagePreviewWithStatus(status, messageType, content), limit)
 }
 

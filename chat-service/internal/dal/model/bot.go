@@ -18,6 +18,8 @@ type Bot struct {
 	Description     string    `gorm:"type:varchar(512)" json:"description"`
 	ModelName       string    `gorm:"type:varchar(128);not null" json:"modelName"`
 	SupportedModels string    `gorm:"type:text" json:"supportedModels"`
+	APIBaseURL      string    `gorm:"type:varchar(512)" json:"apiBaseUrl"`
+	APIKeyEncrypted string    `gorm:"type:text" json:"apiKeyEncrypted"`
 	SystemPrompt    string    `gorm:"type:text" json:"systemPrompt"`
 	CreatedBy       uint64    `gorm:"not null;index" json:"createdBy"`
 	Status          BotStatus `gorm:"type:varchar(32);not null;default:'ENABLED'" json:"status"`

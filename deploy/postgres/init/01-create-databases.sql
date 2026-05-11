@@ -1,0 +1,3 @@
+CREATE DATABASE aim_auth;
+CREATE DATABASE aim_user;
+CREATE DATABASE aim_chat;

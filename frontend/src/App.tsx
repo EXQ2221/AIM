@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadgePlus,
   Bell,
   Bot,
@@ -1086,7 +1086,7 @@ function App() {
       (content
         ? {
             messageType: "TEXT" as const,
-            content: JSON.stringify({ text: content })
+            contentPayload: { text: content }
           }
         : null);
     if (!outgoing) {
@@ -1104,7 +1104,7 @@ function App() {
       senderId: user.user_id,
       senderType: "USER",
       messageType: outgoing.messageType,
-      content: outgoing.content,
+      content: JSON.stringify(outgoing.contentPayload),
       replyToId,
       replyTo: replyingTo,
       status: "NORMAL",
@@ -1125,7 +1125,7 @@ function App() {
           item.conversationId === selectedConversationId
             ? {
                 ...item,
-                lastMessageContent: outgoing.content,
+                lastMessageContent: JSON.stringify(outgoing.contentPayload),
                 lastMessageSenderId: user.user_id,
                 lastMessageSenderName: user.nickname || user.aim_id,
                 updatedAt: createdAt,
@@ -1145,7 +1145,7 @@ function App() {
           data: {
             conversationId: selectedConversationId,
             messageType: outgoing.messageType,
-            content: outgoing.content,
+            contentPayload: outgoing.contentPayload,
             replyToId
           }
         })
@@ -1982,7 +1982,7 @@ function ChatPanel({
       };
       onSend({
         messageType: "IMAGE",
-        content: JSON.stringify(payload)
+        contentPayload: payload
       });
       resetMediaComposer();
       return;
@@ -1993,12 +1993,12 @@ function ChatPanel({
       if (!Number.isFinite(size) || size <= 0) return;
       onSend({
         messageType: "FILE",
-        content: JSON.stringify({
+        contentPayload: {
           url,
           name,
           mimeType,
           size
-        })
+        }
       });
       resetMediaComposer();
       return;
@@ -2008,13 +2008,13 @@ function ChatPanel({
     if (!Number.isFinite(durationMs) || durationMs <= 0) return;
     onSend({
       messageType: "VOICE",
-      content: JSON.stringify({
+      contentPayload: {
         url,
         name,
         mimeType,
         size: mediaSize.trim() ? Number(mediaSize) : undefined,
         durationMs
-      })
+      }
     });
     resetMediaComposer();
   };
@@ -4210,3 +4210,4 @@ function AccountView({
 }
 
 export default App;
+

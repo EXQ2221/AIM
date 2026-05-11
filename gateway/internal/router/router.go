@@ -34,6 +34,12 @@ func New() *gin.Engine {
 	userGroup.GET("/me", handler.Me)
 	userGroup.POST("/me/avatar", handler.UploadAvatar)
 
+	uploadGroup := engine.Group("/api/v1/uploads")
+	uploadGroup.Use(middleware.Auth())
+	uploadGroup.POST("/images", handler.UploadImage)
+	uploadGroup.POST("/files", handler.UploadFile)
+	uploadGroup.POST("/voices", handler.UploadVoice)
+
 	friendGroup := engine.Group("/api/v1/friends")
 	friendGroup.Use(middleware.Auth())
 	friendGroup.GET("", handler.ListFriends)
@@ -75,6 +81,7 @@ func New() *gin.Engine {
 	botGroup := engine.Group("/api/v1/bots")
 	botGroup.Use(middleware.Auth())
 	botGroup.GET("", handler.ListBots)
+	botGroup.POST("", handler.CreateCustomBot)
 
 	return engine
 }

@@ -28,6 +28,36 @@ var avatarExtByContentType = map[string]string{
 	"image/webp": ".webp",
 }
 
+var imageExtByContentType = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/png":  ".png",
+	"image/webp": ".webp",
+}
+
+var voiceExtByContentType = map[string]string{
+	"audio/webm":      ".webm",
+	"video/webm":      ".webm",
+	"audio/mpeg":      ".mp3",
+	"audio/mp3":       ".mp3",
+	"audio/mp4":       ".m4a",
+	"audio/x-m4a":     ".m4a",
+	"audio/ogg":       ".ogg",
+	"application/ogg": ".ogg",
+}
+
+var voiceAllowedExt = map[string]struct{}{
+	".webm": {},
+	".mp3":  {},
+	".m4a":  {},
+	".ogg":  {},
+}
+
+const (
+	maxFileUploadBytes  int64 = 512 << 20
+	maxImageUploadBytes int64 = 20 << 20
+	maxVoiceUploadBytes int64 = 20 << 20
+)
+
 func UploadAvatar(ctx *gin.Context) {
 	authCtx, ok := middleware.GetAuthContext(ctx)
 	if !ok {
@@ -122,11 +152,130 @@ func UploadAvatar(ctx *gin.Context) {
 	})
 }
 
+func UploadImage(ctx *gin.Context) {
+	fileHeader, reqErr := readUploadFile(ctx, "image", maxImageUploadBytes)
+	if reqErr != nil {
+		writeError(ctx, reqErr.status, reqErr.message)
+		return
+	}
+
+	src, openErr := fileHeader.Open()
+	if openErr != nil {
+		writeError(ctx, 500, openErr.Error())
+		return
+	}
+	defer src.Close()
+
+	saved, saveErr := saveMediaFile(src, fileHeader.Filename, "images", maxImageUploadBytes, imageExtByContentType, nil)
+	if saveErr != nil {
+		status := 400
+		if errors.Is(saveErr, errFileTooLarge) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeError(ctx, status, saveErr.Error())
+		return
+	}
+
+	writeJSON(ctx, 200, model.APIResponse{
+		Code:    0,
+		Message: "success",
+		Data: model.UploadMediaResponse{
+			File: model.UploadedFileInfo{
+				URL:         saved.publicPath,
+				Filename:    path.Base(saved.publicPath),
+				ContentType: saved.contentType,
+				Size:        saved.size,
+			},
+		},
+	})
+}
+
+func UploadFile(ctx *gin.Context) {
+	fileHeader, reqErr := readUploadFile(ctx, "file", maxFileUploadBytes)
+	if reqErr != nil {
+		writeError(ctx, reqErr.status, reqErr.message)
+		return
+	}
+
+	src, openErr := fileHeader.Open()
+	if openErr != nil {
+		writeError(ctx, 500, openErr.Error())
+		return
+	}
+	defer src.Close()
+
+	saved, saveErr := saveMediaFile(src, fileHeader.Filename, "files", maxFileUploadBytes, nil, nil)
+	if saveErr != nil {
+		status := 400
+		if errors.Is(saveErr, errFileTooLarge) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeError(ctx, status, saveErr.Error())
+		return
+	}
+
+	writeJSON(ctx, 200, model.APIResponse{
+		Code:    0,
+		Message: "success",
+		Data: model.UploadMediaResponse{
+			File: model.UploadedFileInfo{
+				URL:         saved.publicPath,
+				Filename:    path.Base(saved.publicPath),
+				ContentType: saved.contentType,
+				Size:        saved.size,
+			},
+		},
+	})
+}
+
+func UploadVoice(ctx *gin.Context) {
+	fileHeader, reqErr := readUploadFile(ctx, "voice", maxVoiceUploadBytes)
+	if reqErr != nil {
+		writeError(ctx, reqErr.status, reqErr.message)
+		return
+	}
+
+	src, openErr := fileHeader.Open()
+	if openErr != nil {
+		writeError(ctx, 500, openErr.Error())
+		return
+	}
+	defer src.Close()
+
+	saved, saveErr := saveMediaFile(src, fileHeader.Filename, "voices", maxVoiceUploadBytes, voiceExtByContentType, voiceAllowedExt)
+	if saveErr != nil {
+		status := 400
+		if errors.Is(saveErr, errFileTooLarge) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		writeError(ctx, status, saveErr.Error())
+		return
+	}
+
+	writeJSON(ctx, 200, model.APIResponse{
+		Code:    0,
+		Message: "success",
+		Data: model.UploadMediaResponse{
+			File: model.UploadedFileInfo{
+				URL:         saved.publicPath,
+				Filename:    path.Base(saved.publicPath),
+				ContentType: saved.contentType,
+				Size:        saved.size,
+			},
+		},
+	})
+}
+
 type savedAvatar struct {
 	diskPath    string
 	publicPath  string
 	contentType string
 	size        int64
+}
+
+type uploadRequestError struct {
+	status  int
+	message string
 }
 
 var errFileTooLarge = errors.New("file is too large")
@@ -143,6 +292,26 @@ func formFile(ctx *gin.Context, names ...string) (*multipart.FileHeader, error) 
 		}
 	}
 	return nil, firstErr
+}
+
+func readUploadFile(ctx *gin.Context, fieldName string, maxBytes int64) (*multipart.FileHeader, *uploadRequestError) {
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, maxBytes+multipartOverheadLimit)
+
+	fileHeader, err := formFile(ctx, "file", fieldName)
+	if err != nil {
+		if isBodyTooLarge(err) {
+			return nil, &uploadRequestError{status: http.StatusRequestEntityTooLarge, message: "file is too large"}
+		}
+		return nil, &uploadRequestError{status: 400, message: "file is required"}
+	}
+	if fileHeader.Size <= 0 {
+		return nil, &uploadRequestError{status: 400, message: "file is empty"}
+	}
+	if fileHeader.Size > maxBytes {
+		return nil, &uploadRequestError{status: http.StatusRequestEntityTooLarge, message: "file is too large"}
+	}
+
+	return fileHeader, nil
 }
 
 func saveAvatarFile(src io.Reader, userID int64, maxBytes int64) (savedAvatar, error) {
@@ -215,6 +384,101 @@ func saveAvatarFile(src io.Reader, userID int64, maxBytes int64) (savedAvatar, e
 		closeDst()
 		removeSavedFile(diskPath)
 		return savedAvatar{}, errors.New("avatar path is too long")
+	}
+
+	return savedAvatar{
+		diskPath:    diskPath,
+		publicPath:  publicPath,
+		contentType: contentType,
+		size:        total,
+	}, nil
+}
+
+func saveMediaFile(
+	src io.Reader,
+	originalFilename string,
+	relativeDir string,
+	maxBytes int64,
+	extByContentType map[string]string,
+	allowedExts map[string]struct{},
+) (savedAvatar, error) {
+	header := make([]byte, 512)
+	n, err := io.ReadFull(src, header)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) && !errors.Is(err, io.EOF) {
+		return savedAvatar{}, err
+	}
+	if n == 0 {
+		return savedAvatar{}, errors.New("file is empty")
+	}
+
+	contentType := http.DetectContentType(header[:n])
+	ext := strings.ToLower(filepath.Ext(originalFilename))
+	if ext == "" {
+		ext = ".bin"
+	}
+	if extByContentType != nil {
+		nextExt, ok := extByContentType[contentType]
+		if !ok {
+			if _, extOK := allowedExts[ext]; !extOK {
+				return savedAvatar{}, errors.New("unsupported file type")
+			}
+		} else {
+			ext = nextExt
+		}
+	}
+
+	targetDir := filepath.Join(upload.Dir(), relativeDir)
+	if err := os.MkdirAll(targetDir, 0o755); err != nil {
+		return savedAvatar{}, err
+	}
+
+	filename := newID() + ext
+	diskPath := filepath.Join(targetDir, filename)
+	dst, err := os.OpenFile(diskPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return savedAvatar{}, err
+	}
+	closed := false
+	closeDst := func() {
+		if !closed {
+			_ = dst.Close()
+			closed = true
+		}
+	}
+	defer closeDst()
+
+	written, err := dst.Write(header[:n])
+	if err != nil {
+		closeDst()
+		removeSavedFile(diskPath)
+		return savedAvatar{}, err
+	}
+
+	remaining := maxBytes - int64(written)
+	if remaining < 0 {
+		closeDst()
+		removeSavedFile(diskPath)
+		return savedAvatar{}, errFileTooLarge
+	}
+
+	copied, err := io.Copy(dst, io.LimitReader(src, remaining+1))
+	if err != nil {
+		closeDst()
+		removeSavedFile(diskPath)
+		return savedAvatar{}, err
+	}
+	total := int64(written) + copied
+	if total > maxBytes {
+		closeDst()
+		removeSavedFile(diskPath)
+		return savedAvatar{}, errFileTooLarge
+	}
+
+	publicPath := path.Join(upload.PublicPrefix(), relativeDir, filename)
+	if len(publicPath) > 512 {
+		closeDst()
+		removeSavedFile(diskPath)
+		return savedAvatar{}, errors.New("file path is too long")
 	}
 
 	return savedAvatar{

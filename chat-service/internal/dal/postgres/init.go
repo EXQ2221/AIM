@@ -1,4 +1,4 @@
-package mysql
+﻿package postgres
 
 import (
 	"crypto/rand"
@@ -9,13 +9,13 @@ import (
 	"time"
 
 	"example.com/aim/chat-service/internal/dal/model"
-	gmysql "gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 func Init(dsn string) (*gorm.DB, error) {
-	db, err := gorm.Open(gmysql.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
@@ -205,3 +205,4 @@ func marshalStringList(values []string) (string, error) {
 	}
 	return string(data), nil
 }
+

@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"example.com/aim/user-service/internal/biz"
-	"example.com/aim/user-service/internal/dal/mysql"
+	"example.com/aim/user-service/internal/dal/postgres"
 	"example.com/aim/user-service/internal/handler"
 	"example.com/aim/user-service/internal/realtime"
 	"example.com/aim/user-service/internal/repository"
@@ -23,9 +23,9 @@ func main() {
 	ctx := context.Background()
 	rpcAddr := ":" + getenv("PORT", "9001")
 	healthAddr := ":" + getenv("HEALTH_PORT", "19001")
-	mysqlDSN := mustGetenv("MYSQL_DSN")
+	postgresDSN := mustGetenv("USER_POSTGRES_DSN")
 
-	db, err := mysql.Init(mysqlDSN)
+	db, err := postgres.Init(postgresDSN)
 	if err != nil {
 		log.Fatal(err)
 	}

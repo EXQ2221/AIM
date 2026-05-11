@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"example.com/aim/auth-service/internal/biz"
-	mysqlstore "example.com/aim/auth-service/internal/dal/mysql"
+	pgstore "example.com/aim/auth-service/internal/dal/postgres"
 	redisstore "example.com/aim/auth-service/internal/dal/redis"
 	"example.com/aim/auth-service/internal/handler"
 	"example.com/aim/auth-service/internal/repository"
@@ -20,12 +20,12 @@ import (
 func main() {
 	rpcAddr := ":" + getenv("PORT", "9002")
 	healthAddr := ":" + getenv("HEALTH_PORT", "19002")
-	mysqlDSN := mustGetenv("MYSQL_DSN")
+	postgresDSN := mustGetenv("AUTH_POSTGRES_DSN")
 	redisAddr := getenv("REDIS_ADDR", "127.0.0.1:6379")
 	userServiceAddr := getenv("USER_SERVICE_ADDR", "127.0.0.1:9001")
 	jwtSecret := mustGetenv("JWT_SECRET")
 
-	db, err := mysqlstore.Init(mysqlDSN)
+	db, err := pgstore.Init(postgresDSN)
 	if err != nil {
 		log.Fatal(err)
 	}

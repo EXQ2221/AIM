@@ -32,6 +32,7 @@ type Client interface {
 	MarkConversationRead(ctx context.Context, req *chat.MarkConversationReadRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
 	RecallMessage(ctx context.Context, req *chat.RecallMessageRequest, callOptions ...callopt.Option) (r *chat.MessageRecalledEventResponse, err error)
 	ListBots(ctx context.Context, req *chat.ListBotsRequest, callOptions ...callopt.Option) (r *chat.ListBotsResponse, err error)
+	CreateCustomBot(ctx context.Context, req *chat.CreateCustomBotRequest, callOptions ...callopt.Option) (r *chat.CreateCustomBotResponse, err error)
 	ListConversationBots(ctx context.Context, req *chat.ListConversationBotsRequest, callOptions ...callopt.Option) (r *chat.ListConversationBotsResponse, err error)
 	AddConversationBot(ctx context.Context, req *chat.AddConversationBotRequest, callOptions ...callopt.Option) (r *chat.AddConversationBotResponse, err error)
 	RemoveConversationBot(ctx context.Context, req *chat.RemoveConversationBotRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
@@ -172,6 +173,11 @@ func (p *kChatServiceClient) RecallMessage(ctx context.Context, req *chat.Recall
 func (p *kChatServiceClient) ListBots(ctx context.Context, req *chat.ListBotsRequest, callOptions ...callopt.Option) (r *chat.ListBotsResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.ListBots(ctx, req)
+}
+
+func (p *kChatServiceClient) CreateCustomBot(ctx context.Context, req *chat.CreateCustomBotRequest, callOptions ...callopt.Option) (r *chat.CreateCustomBotResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.CreateCustomBot(ctx, req)
 }
 
 func (p *kChatServiceClient) ListConversationBots(ctx context.Context, req *chat.ListConversationBotsRequest, callOptions ...callopt.Option) (r *chat.ListConversationBotsResponse, err error) {

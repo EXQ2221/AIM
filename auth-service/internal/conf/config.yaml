@@ -2,8 +2,8 @@ service:
   name: auth-service
   addr: ":9002"
 
-mysql:
-  dsn_env: MYSQL_DSN
+postgres:
+  dsn_env: AUTH_POSTGRES_DSN
 
 redis:
   addr_env: REDIS_ADDR

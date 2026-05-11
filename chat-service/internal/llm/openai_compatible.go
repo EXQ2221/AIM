@@ -91,9 +91,53 @@ func (c *OpenAICompatibleClient) Generate(ctx context.Context, req GenerateReque
 		if role == "" {
 			return nil, errors.New("message role is required")
 		}
+		trimmedContent := strings.TrimSpace(message.Content)
+		if len(message.Parts) == 0 {
+			payload.Messages = append(payload.Messages, chatCompletionMessage{
+				Role:    role,
+				Content: trimmedContent,
+			})
+			continue
+		}
+
+		parts := make([]chatCompletionMessagePart, 0, len(message.Parts))
+		for _, part := range message.Parts {
+			partType := strings.TrimSpace(part.Type)
+			switch partType {
+			case "text":
+				text := strings.TrimSpace(part.Text)
+				if text == "" {
+					continue
+				}
+				parts = append(parts, chatCompletionMessagePart{
+					Type: "text",
+					Text: text,
+				})
+			case "image_url":
+				imageURL := strings.TrimSpace(part.ImageURL)
+				if imageURL == "" {
+					continue
+				}
+				parts = append(parts, chatCompletionMessagePart{
+					Type: "image_url",
+					ImageURL: &chatCompletionImageURL{
+						URL: imageURL,
+					},
+				})
+			default:
+				continue
+			}
+		}
+		if len(parts) == 0 {
+			payload.Messages = append(payload.Messages, chatCompletionMessage{
+				Role:    role,
+				Content: trimmedContent,
+			})
+			continue
+		}
 		payload.Messages = append(payload.Messages, chatCompletionMessage{
 			Role:    role,
-			Content: message.Content,
+			Content: parts,
 		})
 	}
 
@@ -149,13 +193,25 @@ type chatCompletionRequest struct {
 }
 
 type chatCompletionMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string      `json:"role"`
+	Content interface{} `json:"content,omitempty"`
+}
+
+type chatCompletionMessagePart struct {
+	Type     string                  `json:"type"`
+	Text     string                  `json:"text,omitempty"`
+	ImageURL *chatCompletionImageURL `json:"image_url,omitempty"`
+}
+
+type chatCompletionImageURL struct {
+	URL string `json:"url"`
 }
 
 type chatCompletionResponse struct {
 	Choices []struct {
-		Message chatCompletionMessage `json:"message"`
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
 	} `json:"choices"`
 	Usage struct {
 		PromptTokens     int `json:"prompt_tokens"`

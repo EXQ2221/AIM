@@ -1,4 +1,4 @@
-package biz
+﻿package biz
 
 type CreateGroupInput struct {
 	OperatorID   uint64
@@ -102,7 +102,7 @@ type ConversationView struct {
 	LastMessageSenderID   *uint64
 	LastMessageSenderType string
 	LastMessageSenderName string
-	LastMessageContent    string
+	LastMessageContent        string
 	MuteAll               *bool
 	Role                  string
 	IsPinned              bool
@@ -180,6 +180,19 @@ type AddConversationBotInput struct {
 	ModelNameOverride   string
 }
 
+type CreateCustomBotInput struct {
+	OperatorID      uint64
+	Name            string
+	MentionName     string
+	Aliases         []string
+	Description     string
+	APIBaseURL      string
+	APIKey          string
+	ModelName       string
+	SupportedModels []string
+	SystemPrompt    string
+}
+
 type BotView struct {
 	BotID           uint64
 	MemberType      string
@@ -225,3 +238,4 @@ type AICallLogListView struct {
 	Logs  []AICallLogView
 	Quota AICallLogQuotaView
 }
+

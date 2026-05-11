@@ -94,6 +94,18 @@ type AddConversationBotRequest struct {
 	ModelNameOverride   string   `json:"modelNameOverride"`
 }
 
+type CreateCustomBotRequest struct {
+	Name            string   `json:"name"`
+	MentionName     string   `json:"mentionName"`
+	Aliases         []string `json:"aliases"`
+	Description     string   `json:"description"`
+	APIBaseURL      string   `json:"apiBaseUrl"`
+	APIKey          string   `json:"apiKey"`
+	ModelName       string   `json:"modelName"`
+	SupportedModels []string `json:"supportedModels"`
+	SystemPrompt    string   `json:"systemPrompt"`
+}
+
 type InviteMemberRequest struct {
 	TargetUserID int64 `json:"targetUserId"`
 }

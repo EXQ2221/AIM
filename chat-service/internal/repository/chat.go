@@ -1,4 +1,4 @@
-package repository
+﻿package repository
 
 import (
 	"context"
@@ -20,7 +20,7 @@ type ConversationListRow struct {
 	LastMessageSenderType string
 	LastMessageType       string
 	LastMessageStatus     string
-	LastMessageContent    string
+	LastMessageContent    []byte
 	MuteAll               *bool
 	Role                  string
 	IsPinned              bool
@@ -398,3 +398,4 @@ func (r *GormAICallLogRepository) SumTotalTokensByConversationBetween(ctx contex
 		Scan(&total).Error
 	return total, err
 }
+
