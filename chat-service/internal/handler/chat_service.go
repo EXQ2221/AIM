@@ -387,6 +387,23 @@ func (h *ChatServiceImpl) CreateKnowledgeBase(ctx context.Context, req *chatpb.C
 	}, nil
 }
 
+func (h *ChatServiceImpl) ListKnowledgeBases(ctx context.Context, req *chatpb.ListKnowledgeBasesRequest) (*chatpb.ListKnowledgeBasesResponse, error) {
+	items, err := h.Service.ListKnowledgeBases(ctx, uint64(req.OperatorId))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*chatpb.KnowledgeBaseInfo, 0, len(items))
+	for _, item := range items {
+		result = append(result, &chatpb.KnowledgeBaseInfo{
+			KnowledgeBaseId: int64(item.KnowledgeBaseID),
+			Name:            item.Name,
+			Description:     item.Description,
+			Status:          item.Status,
+		})
+	}
+	return &chatpb.ListKnowledgeBasesResponse{KnowledgeBases: result}, nil
+}
+
 func (h *ChatServiceImpl) AddKnowledgeDocumentText(ctx context.Context, req *chatpb.AddKnowledgeDocumentTextRequest) (*chatpb.AddKnowledgeDocumentTextResponse, error) {
 	item, err := h.Service.AddKnowledgeDocumentText(ctx, biz.AddKnowledgeDocumentTextInput{
 		OperatorID:      uint64(req.OperatorId),

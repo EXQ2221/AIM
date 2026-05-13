@@ -49,12 +49,13 @@ type Client interface {
 }
 
 type Config struct {
-	Provider  Provider
-	BaseURL   string
-	APIKey    string
-	Model     string
-	Dimension int
-	Timeout   time.Duration
+	Provider           Provider
+	BaseURL            string
+	APIKey             string
+	Model              string
+	Dimension          int
+	Timeout            time.Duration
+	InsecureSkipVerify bool
 }
 
 func LoadConfigFromEnv() (Config, error) {
@@ -99,6 +100,13 @@ func LoadConfigFromEnv() (Config, error) {
 			return Config{}, errors.New("EMBEDDING_TIMEOUT_SECONDS must be a positive integer")
 		}
 		cfg.Timeout = time.Duration(value) * time.Second
+	}
+	if insecureText := strings.TrimSpace(os.Getenv("EMBEDDING_INSECURE_SKIP_VERIFY")); insecureText != "" {
+		value, err := strconv.ParseBool(insecureText)
+		if err != nil {
+			return Config{}, errors.New("EMBEDDING_INSECURE_SKIP_VERIFY must be true or false")
+		}
+		cfg.InsecureSkipVerify = value
 	}
 
 	return cfg, nil

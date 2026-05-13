@@ -1123,6 +1123,44 @@ func CreateKnowledgeBase(ctx *gin.Context) {
 	})
 }
 
+func ListKnowledgeBases(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.ListKnowledgeBases(ctx.Request.Context(), &chatpb.ListKnowledgeBasesRequest{
+		OperatorId: authCtx.UserID,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+
+	items := make([]model.KnowledgeBaseInfo, 0, len(resp.KnowledgeBases))
+	for _, item := range resp.KnowledgeBases {
+		items = append(items, model.KnowledgeBaseInfo{
+			KnowledgeBaseID: item.KnowledgeBaseId,
+			Name:            item.Name,
+			Description:     item.Description,
+			Status:          item.Status,
+		})
+	}
+
+	writeJSON(ctx, 200, model.APIResponse{
+		Code:    0,
+		Message: "success",
+		Data:    items,
+	})
+}
+
 func AddKnowledgeDocumentText(ctx *gin.Context) {
 	authCtx, ok := middleware.GetAuthContext(ctx)
 	if !ok {

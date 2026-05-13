@@ -83,6 +83,7 @@ func New() *gin.Engine {
 
 	knowledgeBaseGroup := engine.Group("/api/v1/knowledge-bases")
 	knowledgeBaseGroup.Use(middleware.Auth())
+	knowledgeBaseGroup.GET("", handler.ListKnowledgeBases)
 	knowledgeBaseGroup.POST("", handler.CreateKnowledgeBase)
 	knowledgeBaseGroup.POST("/:knowledgeBaseId/documents/text", handler.AddKnowledgeDocumentText)
 	knowledgeBaseGroup.GET("/:knowledgeBaseId/documents", handler.ListKnowledgeDocuments)

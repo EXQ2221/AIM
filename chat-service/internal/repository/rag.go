@@ -25,6 +25,7 @@ type KnowledgeChunkRecord struct {
 type RAGRepository interface {
 	WithTx(tx *gorm.DB) RAGRepository
 	CreateKnowledgeBase(ctx context.Context, kb *model.KnowledgeBase) error
+	ListKnowledgeBasesByOwner(ctx context.Context, ownerID uint64) ([]model.KnowledgeBase, error)
 	GetKnowledgeBaseByID(ctx context.Context, kbID uint64) (*model.KnowledgeBase, error)
 	CreateKnowledgeDocument(ctx context.Context, doc *model.KnowledgeDocument) error
 	UpdateKnowledgeDocument(ctx context.Context, doc *model.KnowledgeDocument) error
@@ -60,6 +61,15 @@ func (r *GormRAGRepository) WithTx(tx *gorm.DB) RAGRepository {
 
 func (r *GormRAGRepository) CreateKnowledgeBase(ctx context.Context, kb *model.KnowledgeBase) error {
 	return r.db.WithContext(ctx).Create(kb).Error
+}
+
+func (r *GormRAGRepository) ListKnowledgeBasesByOwner(ctx context.Context, ownerID uint64) ([]model.KnowledgeBase, error) {
+	var items []model.KnowledgeBase
+	err := r.db.WithContext(ctx).
+		Where("owner_id = ?", ownerID).
+		Order("id DESC").
+		Find(&items).Error
+	return items, err
 }
 
 func (r *GormRAGRepository) GetKnowledgeBaseByID(ctx context.Context, kbID uint64) (*model.KnowledgeBase, error) {

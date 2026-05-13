@@ -3741,3 +3741,144 @@ pm.cmd run build --prefix frontend 通过。
     - `rag service enabled: provider=dashscope_multimodal, model=tongyi-embedding-vision-flash ...`
 - 结论：
   - RAG 已切换到 DashScope 多模态 embedding 路径，避免再走 OpenAI 兼容 `/embeddings` 导致的 404/unsupported model。
+
+## [2026-05-13 21:58:16] 修正 DashScope Embedding Base URL（避免 compatible-mode 路径误配）
+- 变更文件：
+  - .env
+  - chat-service/internal/embedding/dashscope_multimodal.go
+- 问题判断：
+  - 用户反馈 base_url 可能错误，经核查，`dashscope_multimodal` 场景应使用 DashScope 根域名而非 `compatible-mode/v1` 路径。
+- 修复内容：
+  - `.env`：
+    - `EMBEDDING_BASE_URL` 从 `https://dashscope.aliyuncs.com/compatible-mode/v1` 改为 `https://dashscope.aliyuncs.com`。
+  - `dashscope_multimodal.go`：
+    - 新增 `normalizeDashScopeBaseURL`，若误填 `.../compatible-mode/v1`，自动归一化到根域名，防止再次踩坑。
+- 编译验证：
+  - gofmt -w chat-service/internal/embedding/dashscope_multimodal.go 通过。
+  - go build ./...（chat-service）通过。
+- 运行验证状态：
+  - 计划重启 chat-service 验证；但当前机器 Docker daemon 不可用（npipe `dockerDesktopLinuxEngine` 不存在），暂未完成重启验证。
+
+## [2026-05-13 22:26:00] 修复：知识库创建后刷新不保留
+- 问题现象
+  - 知识库创建成功后，只在当前前端内存可见；刷新或重进后，未绑定会话的知识库不显示。
+
+- 根因
+  - 前端没有“按当前用户列出知识库”的接口调用。
+  - 网关仅有 `POST /api/v1/knowledge-bases`，缺少 `GET /api/v1/knowledge-bases`。
+
+- 变更文件
+  - idl/chat.thrift
+  - chat-service/internal/repository/rag.go
+  - chat-service/internal/biz/rag.go
+  - chat-service/internal/handler/chat_service.go
+  - chat-service/kitex_gen/chat/**
+  - gateway/kitex_gen/chat/**
+  - gateway/internal/handler/chat.go
+  - gateway/internal/router/router.go
+  - frontend/src/api.ts
+  - frontend/src/App.tsx
+
+- 主要修改
+  - 新增 RPC：`ListKnowledgeBases(operator_id)`，按 `owner_id` 查询当前用户知识库。
+  - 网关新增接口：`GET /api/v1/knowledge-bases`。
+  - 前端新增 API：`api.listKnowledgeBases()`。
+  - 知识库面板加载时先拉取“用户知识库列表”，再并行拉取会话绑定与文档列表，避免刷新丢失。
+
+- 验证
+  - `go run ...kitex... chat.thrift`（gateway/chat-service）代码生成通过。
+  - `go build ./...`（chat-service）通过。
+  - `go build ./...`（gateway）通过。
+  - `npm.cmd run build --prefix frontend` 通过。
+
+- 结果
+  - 用户创建的知识库可以在刷新后继续显示，不再依赖当前会话绑定状态。
+## [2026-05-13 22:42:00] 排查：embedding 404 / 超时问题（DashScope）
+- 结论
+  - 运行中的 chat-service 已使用 `EMBEDDING_PROVIDER=dashscope_multimodal`，并非 OpenAI 兼容 `/v1/embeddings`。
+  - 复测导入文档失败的当前报错已变为 `context deadline exceeded`（请求超时），不是 `Unsupported model`。
+
+- 关键证据
+  - chat-service 日志：`rag service enabled: provider=dashscope_multimodal, model=tongyi-embedding-vision-flash`。
+  - 容器环境变量确认：`EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com`，`EMBEDDING_PROVIDER=dashscope_multimodal`。
+  - 宿主机直连 DashScope 多模态接口失败：`无法连接到远程服务器`。
+
+- 初步判断
+  - 主要阻塞在网络连通性（宿主机/容器到 DashScope 出口不稳定或被拦截），而非模型名/接口路径错误。
+## [2026-05-13 22:45:00] 修复：RAG embedding TLS 证书校验失败（x509 unknown authority）
+- 问题
+  - 前端导入文档失败：`tls: failed to verify certificate: x509: certificate signed by unknown authority`。
+
+- 根因
+  - 当前运行环境证书链不完整/被中间代理改写，容器内 Go TLS 校验失败。
+  - 试图在运行镜像中 `apk add ca-certificates` 也因同类 TLS 问题失败，无法作为即时修复路径。
+
+- 变更文件
+  - chat-service/internal/embedding/client.go
+  - chat-service/internal/embedding/dashscope_multimodal.go
+  - docker-compose.yml
+  - .env
+  - chat-service/Dockerfile
+
+- 修复内容
+  - 新增可配置开关：`EMBEDDING_INSECURE_SKIP_VERIFY`（默认 false）。
+  - DashScope embedding 客户端在该开关为 true 时跳过 TLS 证书校验（仅用于受限网络临时兜底）。
+  - compose 注入该环境变量；`.env` 当前设置为 `true` 以先恢复可用性。
+  - 回滚 `chat-service` Dockerfile 中在线安装 CA 包的改动，避免构建期被 TLS 阻断。
+
+- 验证
+  - 仅重建 chat-service：`docker compose up -d --build --no-deps chat-service`。
+  - 冒烟：注册/登录/创建知识库/导入 MARKDOWN 文档/查询文档状态。
+  - 结果：文档状态 `READY`，错误为空。
+
+- 后续建议（正式方案）
+  - 在服务器/容器导入企业根证书后，将 `EMBEDDING_INSECURE_SKIP_VERIFY` 改回 `false`。
+## [2026-05-13 22:49:00] 优化：知识库检索超时控制（前后端统一 20 秒）
+- 背景
+  - 检索请求在网络抖动下可能长时间挂起，前端体验为“卡住”。
+  - 近期错误为 embedding 请求超时（Client.Timeout exceeded）。
+
+- 变更文件
+  - frontend/src/api.ts
+  - chat-service/internal/biz/rag.go
+  - chat-service/cmd/server/main.go
+  - docker-compose.yml
+  - .env
+
+- 主要修改
+  - 前端：`searchKnowledgeBase` 增加 `timeoutMs: 20000`，20 秒超时自动中断请求。
+  - 前端：通用 `request()` 支持 `AbortController` + 超时参数。
+  - 后端：RAG 检索新增 `SearchTimeout`（默认 20 秒），仅在上游未设置 deadline 时使用 `context.WithTimeout`。
+  - 后端：新增环境变量 `RAG_SEARCH_TIMEOUT_SECONDS`（默认 20）。
+
+- 验证
+  - `go build ./...`（chat-service）通过。
+  - `npm.cmd run build --prefix frontend` 通过。
+  - `docker compose up -d --build --no-deps chat-service` 重启成功。
+
+- 结果
+  - 检索请求不会无限挂起；前后端均在约 20 秒内返回超时结果。
+## [2026-05-13 23:10:00] 修复：LLM chat/completions TLS 证书校验失败
+- 问题
+  - 调用千问/兼容端点报错：`x509: certificate signed by unknown authority`。
+
+- 变更文件
+  - chat-service/internal/llm/client.go
+  - chat-service/internal/llm/openai_compatible.go
+  - docker-compose.yml
+  - .env
+
+- 修复内容
+  - LLM 配置新增：`InsecureSkipVerify`。
+  - 环境变量新增：
+    - `LLM_INSECURE_SKIP_VERIFY`
+    - `LLM2_INSECURE_SKIP_VERIFY`
+  - OpenAI-compatible LLM 客户端在开关为 true 时跳过 TLS 证书校验（临时兜底）。
+  - compose 注入上述变量；当前 `.env` 设为 true 以先恢复可用。
+
+- 验证
+  - `go build ./...`（chat-service）通过。
+  - `docker compose up -d --build --no-deps chat-service` 成功，服务启动正常。
+
+- 说明
+  - 这是与 embedding 同类的网络证书链问题。正式方案仍建议补齐系统/容器 CA 后改回 `false`。

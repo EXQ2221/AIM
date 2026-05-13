@@ -157,7 +157,7 @@ func newBotServiceFromEnv(
 	botService.SetLLMSelector(func(botModel model.Bot) (llm.Client, string, error) {
 		provider := "primary"
 		mentionName := strings.ToLower(strings.TrimSpace(botModel.MentionName))
-		if mentionName == "qwen" || mentionName == "mrag" {
+		if mentionName == "qwen" {
 			provider = "secondary"
 		}
 		client, _, providerName, selectErr := registry.Client(provider)
@@ -228,6 +228,7 @@ func newRAGServiceFromEnv(ragRepo repository.RAGRepository) *biz.RAGService {
 	processor := rag.NewDocumentProcessor(embedClient, ragRepo, splitterCfg)
 	service := biz.NewRAGService(ragRepo, embedClient, processor)
 	service.DefaultTopK = ragTopKFromEnv()
+	service.SearchTimeout = ragSearchTimeoutFromEnv()
 	log.Printf("rag service enabled: provider=%s, model=%s, chunk_size=%d, chunk_overlap=%d, top_k=%d", cfg.Provider, cfg.Model, splitterCfg.ChunkSize, splitterCfg.ChunkOverlap, service.DefaultTopK)
 	return service
 }
@@ -241,6 +242,14 @@ func ragTopKFromEnv() int {
 		return 10
 	}
 	return value
+}
+
+func ragSearchTimeoutFromEnv() time.Duration {
+	seconds := intFromEnv("RAG_SEARCH_TIMEOUT_SECONDS", 20)
+	if seconds <= 0 {
+		seconds = 20
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func builtInBotConfigsFromEnv() []pgstore.BuiltInBotConfig {
@@ -266,17 +275,6 @@ func builtInBotConfigsFromEnv() []pgstore.BuiltInBotConfig {
 		}
 	}
 
-	multiModalSupportedModels := []string{"qwen3.6-plus"}
-	multiModalModelName := multiModalSupportedModels[0]
-	if envModel := strings.TrimSpace(os.Getenv("LLM2_MODEL")); envModel != "" {
-		for _, supportedModel := range multiModalSupportedModels {
-			if supportedModel == envModel {
-				multiModalModelName = envModel
-				break
-			}
-		}
-	}
-
 	return []pgstore.BuiltInBotConfig{
 		{
 			ID:              uint64(intFromEnv("BOT_ID", 100000)),
@@ -290,22 +288,12 @@ func builtInBotConfigsFromEnv() []pgstore.BuiltInBotConfig {
 		},
 		{
 			ID:              uint64(intFromEnv("BOT2_ID", 100001)),
-			Name:            "\u5343\u95ee",
+			Name:            "\u901a\u4e49\u5343\u95ee",
 			MentionName:     "qwen",
 			Aliases:         []string{"tongyi", "qw"},
 			Description:     "\u5e73\u53f0\u5185\u7f6e\u901a\u4e49\u5343\u95ee\u52a9\u624b\uff1aqwen-turbo\uff08\u901f\u5ea6\u5feb\uff09\u3001qwen-plus\uff08\u5747\u8861\uff09\u3001qwen-max\uff08\u6548\u679c\u6700\u597d\uff09\u3001qwen3.6-plus\uff08\u652f\u6301\u8bfb\u56fe\uff09\u3002",
 			ModelName:       qwenModelName,
 			SupportedModels: qwenSupportedModels,
-			SystemPrompt:    bot.DefaultSystemPrompt,
-		},
-		{
-			ID:              uint64(intFromEnv("BOT3_ID", 100002)),
-			Name:            "\u591a\u6a21\u6001\u77e5\u8bc6\u5e93\u52a9\u624b",
-			MentionName:     "mrag",
-			Aliases:         []string{"kb", "visionkb"},
-			Description:     "\u5e73\u53f0\u5185\u7f6e\u591a\u6a21\u6001\u77e5\u8bc6\u5e93 Bot\uff0c\u53ef\u7ed3\u5408\u6587\u672c\u4e0e\u56fe\u7247\u8f93\u5165\uff0c\u9ed8\u8ba4 qwen3.6-plus\u3002",
-			ModelName:       multiModalModelName,
-			SupportedModels: multiModalSupportedModels,
 			SystemPrompt:    bot.DefaultSystemPrompt,
 		},
 	}

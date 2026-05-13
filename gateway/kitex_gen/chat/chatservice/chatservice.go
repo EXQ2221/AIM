@@ -202,6 +202,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"ListKnowledgeBases": kitex.NewMethodInfo(
+		listKnowledgeBasesHandler,
+		newChatServiceListKnowledgeBasesArgs,
+		newChatServiceListKnowledgeBasesResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"AddKnowledgeDocumentText": kitex.NewMethodInfo(
 		addKnowledgeDocumentTextHandler,
 		newChatServiceAddKnowledgeDocumentTextArgs,
@@ -810,6 +817,24 @@ func newChatServiceCreateKnowledgeBaseResult() interface{} {
 	return chat.NewChatServiceCreateKnowledgeBaseResult()
 }
 
+func listKnowledgeBasesHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceListKnowledgeBasesArgs)
+	realResult := result.(*chat.ChatServiceListKnowledgeBasesResult)
+	success, err := handler.(chat.ChatService).ListKnowledgeBases(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceListKnowledgeBasesArgs() interface{} {
+	return chat.NewChatServiceListKnowledgeBasesArgs()
+}
+
+func newChatServiceListKnowledgeBasesResult() interface{} {
+	return chat.NewChatServiceListKnowledgeBasesResult()
+}
+
 func addKnowledgeDocumentTextHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	realArg := arg.(*chat.ChatServiceAddKnowledgeDocumentTextArgs)
 	realResult := result.(*chat.ChatServiceAddKnowledgeDocumentTextResult)
@@ -1229,6 +1254,16 @@ func (p *kClient) CreateKnowledgeBase(ctx context.Context, req *chat.CreateKnowl
 	_args.Req = req
 	var _result chat.ChatServiceCreateKnowledgeBaseResult
 	if err = p.c.Call(ctx, "CreateKnowledgeBase", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListKnowledgeBases(ctx context.Context, req *chat.ListKnowledgeBasesRequest) (r *chat.ListKnowledgeBasesResponse, err error) {
+	var _args chat.ChatServiceListKnowledgeBasesArgs
+	_args.Req = req
+	var _result chat.ChatServiceListKnowledgeBasesResult
+	if err = p.c.Call(ctx, "ListKnowledgeBases", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

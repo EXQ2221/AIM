@@ -2702,6 +2702,64 @@ var fieldIDToName_CreateKnowledgeBaseResponse = map[int16]string{
 	1: "knowledge_base",
 }
 
+type ListKnowledgeBasesRequest struct {
+	OperatorId int64 `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+}
+
+func NewListKnowledgeBasesRequest() *ListKnowledgeBasesRequest {
+	return &ListKnowledgeBasesRequest{}
+}
+
+func (p *ListKnowledgeBasesRequest) InitDefault() {
+}
+
+func (p *ListKnowledgeBasesRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+func (p *ListKnowledgeBasesRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+
+func (p *ListKnowledgeBasesRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListKnowledgeBasesRequest(%+v)", *p)
+}
+
+var fieldIDToName_ListKnowledgeBasesRequest = map[int16]string{
+	1: "operator_id",
+}
+
+type ListKnowledgeBasesResponse struct {
+	KnowledgeBases []*KnowledgeBaseInfo `thrift:"knowledge_bases,1" frugal:"1,default,list<KnowledgeBaseInfo>" json:"knowledge_bases"`
+}
+
+func NewListKnowledgeBasesResponse() *ListKnowledgeBasesResponse {
+	return &ListKnowledgeBasesResponse{}
+}
+
+func (p *ListKnowledgeBasesResponse) InitDefault() {
+}
+
+func (p *ListKnowledgeBasesResponse) GetKnowledgeBases() (v []*KnowledgeBaseInfo) {
+	return p.KnowledgeBases
+}
+func (p *ListKnowledgeBasesResponse) SetKnowledgeBases(val []*KnowledgeBaseInfo) {
+	p.KnowledgeBases = val
+}
+
+func (p *ListKnowledgeBasesResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListKnowledgeBasesResponse(%+v)", *p)
+}
+
+var fieldIDToName_ListKnowledgeBasesResponse = map[int16]string{
+	1: "knowledge_bases",
+}
+
 type AddKnowledgeDocumentTextRequest struct {
 	OperatorId      int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
 	KnowledgeBaseId int64  `thrift:"knowledge_base_id,2" frugal:"2,default,i64" json:"knowledge_base_id"`
@@ -4097,6 +4155,8 @@ type ChatService interface {
 	ListAICallLogs(ctx context.Context, req *ListAICallLogsRequest) (r *ListAICallLogsResponse, err error)
 
 	CreateKnowledgeBase(ctx context.Context, req *CreateKnowledgeBaseRequest) (r *CreateKnowledgeBaseResponse, err error)
+
+	ListKnowledgeBases(ctx context.Context, req *ListKnowledgeBasesRequest) (r *ListKnowledgeBasesResponse, err error)
 
 	AddKnowledgeDocumentText(ctx context.Context, req *AddKnowledgeDocumentTextRequest) (r *AddKnowledgeDocumentTextResponse, err error)
 
@@ -6164,6 +6224,82 @@ func (p *ChatServiceCreateKnowledgeBaseResult) String() string {
 }
 
 var fieldIDToName_ChatServiceCreateKnowledgeBaseResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceListKnowledgeBasesArgs struct {
+	Req *ListKnowledgeBasesRequest `thrift:"req,1" frugal:"1,default,ListKnowledgeBasesRequest" json:"req"`
+}
+
+func NewChatServiceListKnowledgeBasesArgs() *ChatServiceListKnowledgeBasesArgs {
+	return &ChatServiceListKnowledgeBasesArgs{}
+}
+
+func (p *ChatServiceListKnowledgeBasesArgs) InitDefault() {
+}
+
+var ChatServiceListKnowledgeBasesArgs_Req_DEFAULT *ListKnowledgeBasesRequest
+
+func (p *ChatServiceListKnowledgeBasesArgs) GetReq() (v *ListKnowledgeBasesRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceListKnowledgeBasesArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceListKnowledgeBasesArgs) SetReq(val *ListKnowledgeBasesRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceListKnowledgeBasesArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceListKnowledgeBasesArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListKnowledgeBasesArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListKnowledgeBasesArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceListKnowledgeBasesResult struct {
+	Success *ListKnowledgeBasesResponse `thrift:"success,0,optional" frugal:"0,optional,ListKnowledgeBasesResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceListKnowledgeBasesResult() *ChatServiceListKnowledgeBasesResult {
+	return &ChatServiceListKnowledgeBasesResult{}
+}
+
+func (p *ChatServiceListKnowledgeBasesResult) InitDefault() {
+}
+
+var ChatServiceListKnowledgeBasesResult_Success_DEFAULT *ListKnowledgeBasesResponse
+
+func (p *ChatServiceListKnowledgeBasesResult) GetSuccess() (v *ListKnowledgeBasesResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceListKnowledgeBasesResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceListKnowledgeBasesResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ListKnowledgeBasesResponse)
+}
+
+func (p *ChatServiceListKnowledgeBasesResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceListKnowledgeBasesResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListKnowledgeBasesResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListKnowledgeBasesResult = map[int16]string{
 	0: "success",
 }
 

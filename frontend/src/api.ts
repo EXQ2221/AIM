@@ -23,6 +23,7 @@ import type {
 
 type RequestOptions = RequestInit & {
   retryOnUnauthorized?: boolean;
+  timeoutMs?: number;
 };
 
 const JSON_HEADERS = {
@@ -44,12 +45,20 @@ export class APIError extends Error {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { retryOnUnauthorized = true, headers, body, ...rest } = options;
+  const { retryOnUnauthorized = true, headers, body, timeoutMs, ...rest } = options;
+  const controller = new AbortController();
+  const timeoutId =
+    typeof timeoutMs === "number" && timeoutMs > 0 ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
   const response = await fetch(path, {
     credentials: "include",
     headers: body instanceof FormData ? headers : { ...JSON_HEADERS, ...headers },
     body,
+    signal: controller.signal,
     ...rest
+  }).finally(() => {
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
   });
 
   if (response.status === 401 && retryOnUnauthorized && path !== "/api/v1/auth/refresh") {
@@ -351,6 +360,9 @@ export const api = {
       body: JSON.stringify(input)
     });
   },
+  listKnowledgeBases() {
+    return request<KnowledgeBaseInfo[]>("/api/v1/knowledge-bases");
+  },
   addKnowledgeDocumentText(
     knowledgeBaseId: number,
     input: { title: string; sourceType: "TEXT" | "MARKDOWN"; content: string }
@@ -373,7 +385,8 @@ export const api = {
       `/api/v1/knowledge-bases/${encodeURIComponent(String(knowledgeBaseId))}/search`,
       {
         method: "POST",
-        body: JSON.stringify(input)
+        body: JSON.stringify(input),
+        timeoutMs: 20000
       }
     );
   },

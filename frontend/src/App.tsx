@@ -567,6 +567,8 @@ function App() {
   const loadKnowledgePanelData = useCallback(async () => {
     setLoadingKnowledge(true);
     try {
+      const list = await api.listKnowledgeBases();
+      setKnowledgeBases(list);
       const tasks: Array<Promise<unknown>> = [];
       if (selectedConversationId) {
         tasks.push(refreshConversationKnowledgeBases());

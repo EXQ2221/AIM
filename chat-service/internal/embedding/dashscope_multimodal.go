@@ -3,6 +3,7 @@ package embedding
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +25,8 @@ func NewDashScopeMultimodalClient(cfg Config) (*DashScopeMultimodalClient, error
 	if baseURL == "" {
 		return nil, errors.New("EMBEDDING_BASE_URL is required")
 	}
+	// Accept historical compatible-mode URL in env and normalize to DashScope root endpoint.
+	baseURL = normalizeDashScopeBaseURL(baseURL)
 	if strings.TrimSpace(cfg.APIKey) == "" {
 		return nil, errors.New("EMBEDDING_API_KEY is required")
 	}
@@ -41,6 +44,9 @@ func NewDashScopeMultimodalClient(cfg Config) (*DashScopeMultimodalClient, error
 		dimension: cfg.Dimension,
 		httpClient: &http.Client{
 			Timeout: timeout,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: cfg.InsecureSkipVerify}, //nolint:gosec
+			},
 		},
 	}, nil
 }
@@ -181,6 +187,14 @@ func (c *DashScopeMultimodalClient) Embed(ctx context.Context, req EmbedRequest)
 		result.Embeddings = append(result.Embeddings, item.Embedding)
 	}
 	return result, nil
+}
+
+func normalizeDashScopeBaseURL(baseURL string) string {
+	lower := strings.ToLower(baseURL)
+	if strings.Contains(lower, "/compatible-mode/v1") {
+		return strings.TrimRight(strings.Replace(baseURL, "/compatible-mode/v1", "", 1), "/")
+	}
+	return baseURL
 }
 
 func supportsDimensionParameter(modelName string) bool {

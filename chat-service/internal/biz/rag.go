@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"example.com/aim/chat-service/internal/dal/model"
 	"example.com/aim/chat-service/internal/embedding"
@@ -106,6 +107,7 @@ type RAGService struct {
 	EmbeddingClient   embedding.Client
 	DocumentProcessor *rag.DocumentProcessor
 	DefaultTopK       int
+	SearchTimeout     time.Duration
 }
 
 func NewRAGService(repo repository.RAGRepository, embedClient embedding.Client, processor *rag.DocumentProcessor) *RAGService {
@@ -114,6 +116,7 @@ func NewRAGService(repo repository.RAGRepository, embedClient embedding.Client, 
 		EmbeddingClient:   embedClient,
 		DocumentProcessor: processor,
 		DefaultTopK:       5,
+		SearchTimeout:     20 * time.Second,
 	}
 }
 
@@ -142,6 +145,29 @@ func (s *RAGService) CreateKnowledgeBase(ctx context.Context, input CreateKnowle
 		Description:     kb.Description,
 		Status:          string(kb.Status),
 	}, nil
+}
+
+func (s *RAGService) ListKnowledgeBases(ctx context.Context, operatorID uint64) ([]KnowledgeBaseView, error) {
+	if s == nil || s.Repo == nil {
+		return nil, ErrRAGUnavailable
+	}
+	if operatorID == 0 {
+		return nil, ErrBadRequest
+	}
+	items, err := s.Repo.ListKnowledgeBasesByOwner(ctx, operatorID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]KnowledgeBaseView, 0, len(items))
+	for _, item := range items {
+		result = append(result, KnowledgeBaseView{
+			KnowledgeBaseID: item.ID,
+			Name:            item.Name,
+			Description:     item.Description,
+			Status:          string(item.Status),
+		})
+	}
+	return result, nil
 }
 
 func (s *RAGService) AddKnowledgeDocumentText(ctx context.Context, input AddKnowledgeDocumentTextInput) (*KnowledgeDocumentView, error) {
@@ -301,7 +327,18 @@ func (s *RAGService) SearchKnowledgeBase(ctx context.Context, input SearchKnowle
 		topK = value
 	}
 
-	embedResp, err := s.EmbeddingClient.Embed(ctx, embedding.EmbedRequest{
+	searchCtx := ctx
+	timeout := s.SearchTimeout
+	if timeout <= 0 {
+		timeout = 20 * time.Second
+	}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		searchCtx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	embedResp, err := s.EmbeddingClient.Embed(searchCtx, embedding.EmbedRequest{
 		Model: "",
 		Input: []embedding.InputPart{
 			{
@@ -317,7 +354,7 @@ func (s *RAGService) SearchKnowledgeBase(ctx context.Context, input SearchKnowle
 		return nil, errors.New("knowledge search embedding result is invalid")
 	}
 
-	items, err := s.Repo.SearchKnowledgeChunksByKB(ctx, input.KnowledgeBaseID, embedResp.Embeddings[0], topK)
+	items, err := s.Repo.SearchKnowledgeChunksByKB(searchCtx, input.KnowledgeBaseID, embedResp.Embeddings[0], topK)
 	if err != nil {
 		return nil, err
 	}
@@ -496,6 +533,14 @@ func (s *ChatService) CreateKnowledgeBase(ctx context.Context, input CreateKnowl
 		return nil, err
 	}
 	return ragService.CreateKnowledgeBase(ctx, input)
+}
+
+func (s *ChatService) ListKnowledgeBases(ctx context.Context, operatorID uint64) ([]KnowledgeBaseView, error) {
+	ragService, err := s.ensureRAGService()
+	if err != nil {
+		return nil, err
+	}
+	return ragService.ListKnowledgeBases(ctx, operatorID)
 }
 
 func (s *ChatService) AddKnowledgeDocumentText(ctx context.Context, input AddKnowledgeDocumentTextInput) (*KnowledgeDocumentView, error) {

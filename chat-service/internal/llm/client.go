@@ -40,10 +40,11 @@ type Client interface {
 }
 
 type Config struct {
-	BaseURL string
-	APIKey  string
-	Model   string
-	Timeout time.Duration
+	BaseURL            string
+	APIKey             string
+	Model              string
+	Timeout            time.Duration
+	InsecureSkipVerify bool
 }
 
 type MultiConfig struct {
@@ -75,6 +76,13 @@ func LoadConfigFromEnv() (Config, error) {
 			return Config{}, errors.New("LLM_TIMEOUT_SECONDS must be a positive integer")
 		}
 		cfg.Timeout = time.Duration(seconds) * time.Second
+	}
+	if insecureText := strings.TrimSpace(os.Getenv("LLM_INSECURE_SKIP_VERIFY")); insecureText != "" {
+		value, err := strconv.ParseBool(insecureText)
+		if err != nil {
+			return Config{}, errors.New("LLM_INSECURE_SKIP_VERIFY must be true or false")
+		}
+		cfg.InsecureSkipVerify = value
 	}
 	return cfg, nil
 }
@@ -108,6 +116,13 @@ func LoadMultiConfigFromEnv() (MultiConfig, error) {
 				return MultiConfig{}, errors.New("LLM2_TIMEOUT_SECONDS must be a positive integer")
 			}
 			secondary.Timeout = time.Duration(seconds) * time.Second
+		}
+		if insecureText := strings.TrimSpace(os.Getenv("LLM2_INSECURE_SKIP_VERIFY")); insecureText != "" {
+			value, parseErr := strconv.ParseBool(insecureText)
+			if parseErr != nil {
+				return MultiConfig{}, errors.New("LLM2_INSECURE_SKIP_VERIFY must be true or false")
+			}
+			secondary.InsecureSkipVerify = value
 		}
 		providers["secondary"] = secondary
 	}

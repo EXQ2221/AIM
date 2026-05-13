@@ -38,6 +38,7 @@ type Client interface {
 	RemoveConversationBot(ctx context.Context, req *chat.RemoveConversationBotRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
 	ListAICallLogs(ctx context.Context, req *chat.ListAICallLogsRequest, callOptions ...callopt.Option) (r *chat.ListAICallLogsResponse, err error)
 	CreateKnowledgeBase(ctx context.Context, req *chat.CreateKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.CreateKnowledgeBaseResponse, err error)
+	ListKnowledgeBases(ctx context.Context, req *chat.ListKnowledgeBasesRequest, callOptions ...callopt.Option) (r *chat.ListKnowledgeBasesResponse, err error)
 	AddKnowledgeDocumentText(ctx context.Context, req *chat.AddKnowledgeDocumentTextRequest, callOptions ...callopt.Option) (r *chat.AddKnowledgeDocumentTextResponse, err error)
 	ListKnowledgeDocuments(ctx context.Context, req *chat.ListKnowledgeDocumentsRequest, callOptions ...callopt.Option) (r *chat.ListKnowledgeDocumentsResponse, err error)
 	SearchKnowledgeBase(ctx context.Context, req *chat.SearchKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.SearchKnowledgeBaseResponse, err error)
@@ -210,6 +211,11 @@ func (p *kChatServiceClient) ListAICallLogs(ctx context.Context, req *chat.ListA
 func (p *kChatServiceClient) CreateKnowledgeBase(ctx context.Context, req *chat.CreateKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.CreateKnowledgeBaseResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.CreateKnowledgeBase(ctx, req)
+}
+
+func (p *kChatServiceClient) ListKnowledgeBases(ctx context.Context, req *chat.ListKnowledgeBasesRequest, callOptions ...callopt.Option) (r *chat.ListKnowledgeBasesResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListKnowledgeBases(ctx, req)
 }
 
 func (p *kChatServiceClient) AddKnowledgeDocumentText(ctx context.Context, req *chat.AddKnowledgeDocumentTextRequest, callOptions ...callopt.Option) (r *chat.AddKnowledgeDocumentTextResponse, err error) {

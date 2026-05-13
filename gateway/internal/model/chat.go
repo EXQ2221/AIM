@@ -184,6 +184,10 @@ type KnowledgeBaseInfo struct {
 	Status          string `json:"status"`
 }
 
+type ListKnowledgeBasesResponse struct {
+	KnowledgeBases []KnowledgeBaseInfo `json:"knowledgeBases"`
+}
+
 type AddKnowledgeDocumentTextRequest struct {
 	Title      string `json:"title"`
 	SourceType string `json:"sourceType"`

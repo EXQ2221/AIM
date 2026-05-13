@@ -305,6 +305,14 @@ struct CreateKnowledgeBaseResponse {
   1: KnowledgeBaseInfo knowledge_base
 }
 
+struct ListKnowledgeBasesRequest {
+  1: i64 operator_id
+}
+
+struct ListKnowledgeBasesResponse {
+  1: list<KnowledgeBaseInfo> knowledge_bases
+}
+
 struct AddKnowledgeDocumentTextRequest {
   1: i64 operator_id
   2: i64 knowledge_base_id
@@ -490,6 +498,7 @@ service ChatService {
   CommonResponse RemoveConversationBot(1: RemoveConversationBotRequest req)
   ListAICallLogsResponse ListAICallLogs(1: ListAICallLogsRequest req)
   CreateKnowledgeBaseResponse CreateKnowledgeBase(1: CreateKnowledgeBaseRequest req)
+  ListKnowledgeBasesResponse ListKnowledgeBases(1: ListKnowledgeBasesRequest req)
   AddKnowledgeDocumentTextResponse AddKnowledgeDocumentText(1: AddKnowledgeDocumentTextRequest req)
   ListKnowledgeDocumentsResponse ListKnowledgeDocuments(1: ListKnowledgeDocumentsRequest req)
   SearchKnowledgeBaseResponse SearchKnowledgeBase(1: SearchKnowledgeBaseRequest req)

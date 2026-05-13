@@ -217,3 +217,9 @@ func (s *ChatServiceImpl) UnbindConversationKnowledgeBase(ctx context.Context, r
 	// TODO: Your code here...
 	return
 }
+
+// ListKnowledgeBases implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) ListKnowledgeBases(ctx context.Context, req *chat.ListKnowledgeBasesRequest) (resp *chat.ListKnowledgeBasesResponse, err error) {
+	// TODO: Your code here...
+	return
+}
