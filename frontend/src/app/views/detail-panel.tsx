@@ -1,4 +1,4 @@
-import {
+﻿import {
   BadgePlus,
   Bell,
   Bot,
@@ -18,16 +18,20 @@ import {
   UsersRound,
   X
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import type {
   AICallLogInfo,
   AICallLogQuotaInfo,
   BotInfo,
+  ConversationKnowledgeBaseInfo,
   ConversationInfo,
   FriendGroupInfo,
   FriendInfo,
   FriendRequestInfo,
   GroupInfo,
+  KnowledgeBaseInfo,
+  KnowledgeDocumentInfo,
+  KnowledgeSearchChunkInfo,
   MemberInfo,
   SessionInfo,
   UserInfo
@@ -73,6 +77,12 @@ export function DetailPanel({
   aiCallLogQuota,
   loadingAICallLogs,
   aiCallLogStatus,
+  knowledgeBases,
+  selectedKnowledgeBaseId,
+  knowledgeDocuments,
+  knowledgeSearchChunks,
+  conversationKnowledgeBases,
+  loadingKnowledge,
   onTabChange,
   onCreateFriendGroup,
   onAddFriend,
@@ -98,6 +108,13 @@ export function DetailPanel({
   onRemoveBot,
   onAICallLogStatusChange,
   onRefreshAICallLogs,
+  onSelectKnowledgeBase,
+  onCreateKnowledgeBase,
+  onAddKnowledgeDocument,
+  onSearchKnowledgeBase,
+  onBindConversationKnowledgeBase,
+  onUnbindConversationKnowledgeBase,
+  onRefreshKnowledgePanelData,
   onMention,
   onClose
 }: {
@@ -125,6 +142,12 @@ export function DetailPanel({
   aiCallLogQuota: AICallLogQuotaInfo;
   loadingAICallLogs: boolean;
   aiCallLogStatus: "" | "SUCCESS" | "FAILED";
+  knowledgeBases: KnowledgeBaseInfo[];
+  selectedKnowledgeBaseId: number | null;
+  knowledgeDocuments: KnowledgeDocumentInfo[];
+  knowledgeSearchChunks: KnowledgeSearchChunkInfo[];
+  conversationKnowledgeBases: ConversationKnowledgeBaseInfo[];
+  loadingKnowledge: boolean;
   onTabChange: (tab: DetailTab) => void;
   onCreateFriendGroup: (name: string) => Promise<void>;
   onAddFriend: (input: { targetAimId: string; remark: string; groupId: number | null }) => Promise<void>;
@@ -157,13 +180,25 @@ export function DetailPanel({
   onRemoveBot: (botId: number) => Promise<void>;
   onAICallLogStatusChange: (status: "" | "SUCCESS" | "FAILED") => void;
   onRefreshAICallLogs: () => Promise<void>;
+  onSelectKnowledgeBase: (knowledgeBaseId: number | null) => void;
+  onCreateKnowledgeBase: (input: { name: string; description: string }) => Promise<void>;
+  onAddKnowledgeDocument: (input: {
+    knowledgeBaseId: number;
+    title: string;
+    sourceType: "TEXT" | "MARKDOWN";
+    content: string;
+  }) => Promise<void>;
+  onSearchKnowledgeBase: (input: { knowledgeBaseId: number; query: string; topK: number }) => Promise<void>;
+  onBindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
+  onUnbindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
+  onRefreshKnowledgePanelData: () => Promise<void>;
   onMention: (mentionTarget: string) => void;
   onClose: () => void;
 }) {
   return (
     <aside className={cx("pane detail-pane", active && "mobile-active")}>
       <header className="detail-header">
-        <div className="segmented small-tabs tabs-five">
+        <div className="segmented small-tabs tabs-six">
           <button className={tab === "friends" ? "active" : ""} type="button" onClick={() => onTabChange("friends")}>
             好友
           </button>
@@ -172,6 +207,9 @@ export function DetailPanel({
           </button>
           <button className={tab === "bots" ? "active" : ""} type="button" onClick={() => onTabChange("bots")}>
             AI 助手
+          </button>
+          <button className={tab === "knowledge" ? "active" : ""} type="button" onClick={() => onTabChange("knowledge")}>
+            知识库
           </button>
           <button disabled={!selectedConversationId} className={tab === "logs" ? "active" : ""} type="button" onClick={() => onTabChange("logs")}>
             日志
@@ -237,6 +275,26 @@ export function DetailPanel({
           onStatusFilterChange={onAICallLogStatusChange}
           onRefresh={onRefreshAICallLogs}
         />
+      ) : tab === "knowledge" ? (
+        <KnowledgeBasePanel
+          selectedConversationId={selectedConversationId}
+          selectedConversationType={selectedConversationType}
+          currentMember={currentMember}
+          knowledgeBases={knowledgeBases}
+          selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+          knowledgeDocuments={knowledgeDocuments}
+          knowledgeSearchChunks={knowledgeSearchChunks}
+          conversationKnowledgeBases={conversationKnowledgeBases}
+          loading={loadingKnowledge}
+          busy={busy}
+          onSelectKnowledgeBase={onSelectKnowledgeBase}
+          onCreateKnowledgeBase={onCreateKnowledgeBase}
+          onAddKnowledgeDocument={onAddKnowledgeDocument}
+          onSearchKnowledgeBase={onSearchKnowledgeBase}
+          onBindConversationKnowledgeBase={onBindConversationKnowledgeBase}
+          onUnbindConversationKnowledgeBase={onUnbindConversationKnowledgeBase}
+          onRefresh={onRefreshKnowledgePanelData}
+        />
       ) : (
         <AccountView
           user={user}
@@ -254,6 +312,365 @@ export function DetailPanel({
         />
       )}
     </aside>
+  );
+}
+
+function KnowledgeBasePanel({
+  selectedConversationId,
+  selectedConversationType,
+  currentMember,
+  knowledgeBases,
+  selectedKnowledgeBaseId,
+  knowledgeDocuments,
+  knowledgeSearchChunks,
+  conversationKnowledgeBases,
+  loading,
+  busy,
+  onSelectKnowledgeBase,
+  onCreateKnowledgeBase,
+  onAddKnowledgeDocument,
+  onSearchKnowledgeBase,
+  onBindConversationKnowledgeBase,
+  onUnbindConversationKnowledgeBase,
+  onRefresh
+}: {
+  selectedConversationId: string | null;
+  selectedConversationType: ConversationInfo["type"] | null;
+  currentMember: MemberInfo | null;
+  knowledgeBases: KnowledgeBaseInfo[];
+  selectedKnowledgeBaseId: number | null;
+  knowledgeDocuments: KnowledgeDocumentInfo[];
+  knowledgeSearchChunks: KnowledgeSearchChunkInfo[];
+  conversationKnowledgeBases: ConversationKnowledgeBaseInfo[];
+  loading: boolean;
+  busy: boolean;
+  onSelectKnowledgeBase: (knowledgeBaseId: number | null) => void;
+  onCreateKnowledgeBase: (input: { name: string; description: string }) => Promise<void>;
+  onAddKnowledgeDocument: (input: {
+    knowledgeBaseId: number;
+    title: string;
+    sourceType: "TEXT" | "MARKDOWN";
+    content: string;
+  }) => Promise<void>;
+  onSearchKnowledgeBase: (input: { knowledgeBaseId: number; query: string; topK: number }) => Promise<void>;
+  onBindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
+  onUnbindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
+  onRefresh: () => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState("");
+  const [sourceType, setSourceType] = useState<"TEXT" | "MARKDOWN">("MARKDOWN");
+  const [content, setContent] = useState("");
+  const [selectedDocumentFile, setSelectedDocumentFile] = useState<File | null>(null);
+  const [query, setQuery] = useState("");
+  const [topK, setTopK] = useState(5);
+  const [bindKnowledgeBaseId, setBindKnowledgeBaseId] = useState<number | "">("");
+
+  const canManageBinding =
+    selectedConversationType === "GROUP" && (currentMember?.role === "OWNER" || currentMember?.role === "ADMIN");
+  const enabledBindings = conversationKnowledgeBases.filter((item) => item.enabled);
+  const enabledBindingIds = new Set(enabledBindings.map((item) => item.knowledgeBaseId));
+  const bindCandidates = knowledgeBases.filter((item) => !enabledBindingIds.has(item.knowledgeBaseId));
+
+  useEffect(() => {
+    if (bindCandidates.length === 0) {
+      setBindKnowledgeBaseId("");
+      return;
+    }
+    if (bindKnowledgeBaseId === "" || !bindCandidates.some((item) => item.knowledgeBaseId === bindKnowledgeBaseId)) {
+      setBindKnowledgeBaseId(bindCandidates[0].knowledgeBaseId);
+    }
+  }, [bindCandidates, bindKnowledgeBaseId]);
+
+  const submitCreate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextName = name.trim();
+    if (!nextName) return;
+    await onCreateKnowledgeBase({
+      name: nextName,
+      description: description.trim()
+    });
+    setName("");
+    setDescription("");
+  };
+
+  const submitDocument = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedKnowledgeBaseId) return;
+    const nextTitle = title.trim();
+    const nextContent = content.trim();
+    if (!nextTitle || !nextContent) return;
+    await onAddKnowledgeDocument({
+      knowledgeBaseId: selectedKnowledgeBaseId,
+      title: nextTitle,
+      sourceType,
+      content: nextContent
+    });
+    setTitle("");
+    setContent("");
+    setSelectedDocumentFile(null);
+  };
+
+  const handleDocumentFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) {
+      setSelectedDocumentFile(null);
+      setContent("");
+      return;
+    }
+    const fileName = file.name || "";
+    const lowerName = fileName.toLowerCase();
+    if (lowerName.endsWith(".md") || lowerName.endsWith(".markdown")) {
+      setSourceType("MARKDOWN");
+    } else if (lowerName.endsWith(".txt")) {
+      setSourceType("TEXT");
+    }
+    setSelectedDocumentFile(file);
+    if (!title.trim()) {
+      const dotIndex = fileName.lastIndexOf(".");
+      setTitle(dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName);
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const raw = typeof reader.result === "string" ? reader.result : "";
+      setContent(raw);
+    };
+    reader.onerror = () => {
+      setContent("");
+      setSelectedDocumentFile(null);
+      alert("读取文件失败，请重试");
+    };
+    reader.readAsText(file, "utf-8");
+  };
+
+  const submitSearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedKnowledgeBaseId) return;
+    const nextQuery = query.trim();
+    if (!nextQuery) return;
+    await onSearchKnowledgeBase({
+      knowledgeBaseId: selectedKnowledgeBaseId,
+      query: nextQuery,
+      topK
+    });
+  };
+
+  const submitBind = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedConversationId || typeof bindKnowledgeBaseId !== "number") return;
+    await onBindConversationKnowledgeBase(bindKnowledgeBaseId);
+  };
+
+  return (
+    <div className="detail-body knowledge-body">
+      <div className="section-title">
+        <span>知识库管理</span>
+        <IconButton label="刷新知识库数据" onClick={() => void onRefresh()}>
+          <RefreshCw size={16} />
+        </IconButton>
+      </div>
+
+      <form className="drawer-form" onSubmit={submitCreate}>
+        <label className="field">
+          <span>新建知识库</span>
+          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="知识库名称" required />
+        </label>
+        <textarea
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder="知识库描述（可选）"
+          rows={2}
+        />
+        <button disabled={busy} type="submit">
+          {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
+          创建知识库
+        </button>
+      </form>
+
+      <div className="kb-card">
+        <label className="field">
+          <span>当前知识库</span>
+          <select
+            value={selectedKnowledgeBaseId ?? ""}
+            onChange={(event) => onSelectKnowledgeBase(event.target.value ? Number(event.target.value) : null)}
+          >
+            <option value="">请选择知识库</option>
+            {knowledgeBases.map((item) => (
+              <option key={item.knowledgeBaseId} value={item.knowledgeBaseId}>
+                {item.name} (#{item.knowledgeBaseId})
+              </option>
+            ))}
+          </select>
+        </label>
+        {loading && (
+          <span className="kb-hint">
+            <Loader2 className="spin" size={14} />
+            加载中
+          </span>
+        )}
+      </div>
+
+      <form className="drawer-form" onSubmit={submitDocument}>
+        <label className="field">
+          <span>导入文档</span>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="文档标题"
+            disabled={!selectedKnowledgeBaseId}
+            required
+          />
+        </label>
+        <select
+          value={sourceType}
+          onChange={(event) => setSourceType(event.target.value as "TEXT" | "MARKDOWN")}
+          disabled={!selectedKnowledgeBaseId}
+        >
+          <option value="TEXT">TEXT</option>
+          <option value="MARKDOWN">MARKDOWN</option>
+        </select>
+        <label className="field">
+          <span>选择文件</span>
+          <input
+            type="file"
+            accept=".txt,.md,.markdown,text/plain,text/markdown"
+            onChange={handleDocumentFileChange}
+            disabled={!selectedKnowledgeBaseId}
+          />
+        </label>
+        {selectedDocumentFile && <span className="form-hint">已选择：{selectedDocumentFile.name}</span>}
+        <textarea
+          value={content}
+          onChange={(event) => setContent(event.target.value)}
+          placeholder="文件内容会自动填充，也可手动补充编辑"
+          rows={5}
+          disabled={!selectedKnowledgeBaseId}
+        />
+        <button disabled={busy || !selectedKnowledgeBaseId} type="submit">
+          {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
+          导入文档
+        </button>
+      </form>
+
+      <div className="kb-card">
+        <div className="section-title">
+          <span>文档状态</span>
+          <strong>{knowledgeDocuments.length}</strong>
+        </div>
+        <div className="kb-list">
+          {knowledgeDocuments.map((item) => (
+            <div className="kb-row" key={item.documentId}>
+              <strong>{item.title}</strong>
+              <span>
+                {item.sourceType} · {item.status}
+              </span>
+              {!!item.errorMessage && <p className="log-error">{item.errorMessage}</p>}
+            </div>
+          ))}
+          {knowledgeDocuments.length === 0 && <span className="kb-empty">暂无文档</span>}
+        </div>
+      </div>
+
+      <form className="drawer-form" onSubmit={submitSearch}>
+        <label className="field">
+          <span>检索测试</span>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="输入检索问题"
+            disabled={!selectedKnowledgeBaseId}
+          />
+        </label>
+        <label className="field">
+          <span>TopK</span>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={topK}
+            onChange={(event) => setTopK(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
+            disabled={!selectedKnowledgeBaseId}
+          />
+        </label>
+        <button disabled={busy || !selectedKnowledgeBaseId} type="submit">
+          {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
+          执行检索
+        </button>
+      </form>
+
+      <div className="kb-card">
+        <div className="section-title">
+          <span>检索结果</span>
+          <strong>{knowledgeSearchChunks.length}</strong>
+        </div>
+        <div className="kb-list">
+          {knowledgeSearchChunks.map((item) => (
+            <div className="kb-row" key={item.chunkId}>
+              <strong>Chunk #{item.chunkId}</strong>
+              <span>
+                文档 #{item.documentId} · score {item.score.toFixed(4)}
+              </span>
+              <p>{item.content}</p>
+            </div>
+          ))}
+          {knowledgeSearchChunks.length === 0 && <span className="kb-empty">暂无检索结果</span>}
+        </div>
+      </div>
+
+      <div className="kb-card">
+        <div className="section-title">
+          <span>会话绑定知识库</span>
+          <strong>{enabledBindings.length}</strong>
+        </div>
+        {!selectedConversationId || selectedConversationType !== "GROUP" ? (
+          <span className="kb-empty">仅群聊支持知识库绑定</span>
+        ) : (
+          <>
+            <form className="kb-bind-form" onSubmit={submitBind}>
+              <select
+                value={bindKnowledgeBaseId}
+                onChange={(event) => setBindKnowledgeBaseId(event.target.value ? Number(event.target.value) : "")}
+                disabled={!canManageBinding || bindCandidates.length === 0}
+              >
+                <option value="">请选择待绑定知识库</option>
+                {bindCandidates.map((item) => (
+                  <option key={item.knowledgeBaseId} value={item.knowledgeBaseId}>
+                    {item.name} (#{item.knowledgeBaseId})
+                  </option>
+                ))}
+              </select>
+              <button disabled={!canManageBinding || busy || typeof bindKnowledgeBaseId !== "number"} type="submit">
+                绑定
+              </button>
+            </form>
+            {!canManageBinding && <span className="kb-empty">当前角色为只读（仅 OWNER/ADMIN 可绑定或解绑）</span>}
+          </>
+        )}
+        <div className="kb-list">
+          {enabledBindings.map((item) => (
+            <div className="kb-row" key={item.id}>
+              <strong>
+                {item.name} (#{item.knowledgeBaseId})
+              </strong>
+              <span>{item.status}</span>
+              {canManageBinding && selectedConversationType === "GROUP" && (
+                <button
+                  className="danger-button compact-button"
+                  disabled={busy}
+                  type="button"
+                  onClick={() => void onUnbindConversationKnowledgeBase(item.knowledgeBaseId)}
+                >
+                  解绑
+                </button>
+              )}
+            </div>
+          ))}
+          {enabledBindings.length === 0 && <span className="kb-empty">当前会话暂无绑定知识库</span>}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1607,6 +2024,7 @@ function BotPanelClean({
   const [addOpen, setAddOpen] = useState(false);
   const [selectedBotId, setSelectedBotId] = useState<number | "">("");
   const [selectedModelName, setSelectedModelName] = useState("");
+  const [selectedPermissionScope, setSelectedPermissionScope] = useState("CONVERSATION_ONLY");
 
   const canManage = currentMember?.role === "OWNER" || currentMember?.role === "ADMIN";
   const addedBotIds = new Set(conversationBots.map((item) => item.botId));
@@ -1627,10 +2045,12 @@ function BotPanelClean({
     if (typeof selectedBotId !== "number" || selectedBotId <= 0 || !selectedModelName) return;
     await onAddBot({
       botId: selectedBotId,
+      permissionScope: selectedPermissionScope,
       modelNameOverride: selectedModelName
     });
     setSelectedBotId("");
     setSelectedModelName("");
+    setSelectedPermissionScope("CONVERSATION_ONLY");
     setAddOpen(false);
   };
 
@@ -1674,6 +2094,15 @@ function BotPanelClean({
                   </label>
 
                   <label className="field">
+                    <span>权限范围</span>
+                    <select value={selectedPermissionScope} onChange={(event) => setSelectedPermissionScope(event.target.value)}>
+                      <option value="CONVERSATION_ONLY">群聊上下文</option>
+                      <option value="KNOWLEDGE_BASE_ONLY">仅知识库</option>
+                      <option value="CONVERSATION_AND_KB">群聊 + 知识库</option>
+                    </select>
+                  </label>
+
+                  <label className="field">
                     <span>选择模型</span>
                     <select
                       value={selectedModelName}
@@ -1689,11 +2118,11 @@ function BotPanelClean({
                     </select>
                   </label>
 
-                  {candidateBots.length === 0 && <span className="form-hint">All available bots are already in this group.</span>}
-                  <span className="form-hint">DeepSeek platform bots are currently available here.</span>
+                  {candidateBots.length === 0 && <span className="form-hint">当前可用 Bot 已全部加入本群。</span>}
+                  <span className="form-hint">建议按 Bot 用途选择权限范围，避免越权读取。</span>
                   <button disabled={busy || typeof selectedBotId !== "number" || !selectedModelName} type="submit">
                     {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
-                    添加到会话?
+                    添加到会话
                   </button>
                 </form>
               )}
@@ -1752,6 +2181,7 @@ function BotCardClean({
   onSaveModel: (modelName: string) => Promise<void>;
 }) {
   const [modelName, setModelName] = useState(bot.modelName || bot.supportedModels?.[0] || "");
+  const permissionScopeLabel = toPermissionScopeLabel(bot.permissionScope);
 
   useEffect(() => {
     setModelName(bot.modelName || bot.supportedModels?.[0] || "");
@@ -1787,7 +2217,7 @@ function BotCardClean({
         )}
         <div className="bot-field-row">
           <span className="bot-field-label">权限范围</span>
-          <span className="bot-field-value">{bot.permissionScope}</span>
+          <span className="bot-field-value">{permissionScopeLabel}</span>
         </div>
         <div className="bot-field-row">
           <span className="bot-field-label">模型</span>
@@ -1829,6 +2259,12 @@ function BotCardClean({
       )}
     </div>
   );
+}
+
+function toPermissionScopeLabel(scope: string) {
+  if (scope === "KNOWLEDGE_BASE_ONLY") return "仅知识库";
+  if (scope === "CONVERSATION_AND_KB") return "群聊 + 知识库";
+  return "群聊上下文";
 }
 
 function AccountView({

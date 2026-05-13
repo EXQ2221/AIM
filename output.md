@@ -3305,3 +3305,439 @@ pm run build --prefix frontend 通过。
   - `npm.cmd run build --prefix frontend` 通过。
 - 结果：
   - Bot 与日志页逻辑进一步下沉，App 主文件编排职责更清晰。
+## [2026-05-13] Task 0：RAG Spec Review Result
+
+1. Blocking Issues
+- **Spec 文件路径与任务要求不一致（阻塞）**：
+  - Task0“只读文件”写的是 `docs/specs/p4-rag-spec.md`，仓库实际文件是 `docs/specs/RAG-spec.md`。
+  - 在当前仓库中若严格按任务执行，会出现“目标文件不存在”的执行歧义。
+- **当前环境与规格前提不一致（阻塞）**：
+  - 规格前提是“PostgreSQL + pgvector”，但现有 `deploy/postgres/init/01-create-databases.sql` 仅创建库（`aim_auth/aim_user/aim_chat`），未包含 `CREATE EXTENSION IF NOT EXISTS vector;`。
+  - `chat-service` 当前初始化 `internal/dal/postgres/init.go` 也未执行 pgvector 扩展检查或初始化。
+- **Embedding 运行时配置未落位（阻塞）**：
+  - `.env.example` 与 `docker-compose.yml` 当前没有 `EMBEDDING_BASE_URL / EMBEDDING_API_KEY / EMBEDDING_MODEL / EMBEDDING_DIMENSION / EMBEDDING_TIMEOUT_SECONDS`。
+  - `chat-service/cmd/server/main.go` 也无对应加载路径，无法进入 Task2 的可执行状态。
+- **permission_scope 约束与现状冲突（阻塞）**：
+  - 规格要求支持 `CONVERSATION_ONLY / KNOWLEDGE_BASE_ONLY / CONVERSATION_AND_KB` 行为。
+  - 现有 `chat-service/internal/biz/bot_management.go` 明确校验仅允许 `CONVERSATION_ONLY`（`ErrBotPermissionScopeInvalid`）。
+  - 该冲突若不先修订规格或任务顺序，会在 Task4/Task5 直接卡住。
+
+2. Non-blocking Issues
+- **规格文档嵌套了 Markdown 代码围栏**：`RAG-spec.md` 内容开头包含“可直接放到 docs/specs/p4-rag-spec.md”的二次围栏文本，不影响理解，但不利于任务执行引用。
+- **前端范围描述较宽**：Task0 要求只读 `frontend/src/**`，实际本阶段主要影响点更集中在 `frontend/src/App.tsx` 与知识库管理相关视图；可在后续任务缩小触达面。
+- **向量索引延后策略合理**：第一版不建 HNSW/IVFFlat 可接受，属性能优化后置，不影响闭环。
+
+3. Ambiguities
+- **Task0 输出落点未指定**：规格只给“输出格式”，未写输出到哪里（回复、`output.md` 还是新文档）。
+- **`KNOWLEDGE_BASE_ONLY` 的“上下文最小集合”边界**：文字写“除当前用户问题外不使用群聊最近消息”，但未明确是否允许使用 system prompt、bot 配置 prompt、群元信息。
+- **检索分数字段语义**：写了“可返回 score=1-distance 或 distance”，但接口字段名固定 `score`，未强制标注“越大越相关/越小越相关”。
+- **会话绑定权限来源**：规格写 OWNER/ADMIN，但未明确是以 `conversation_members.role` 的哪一层校验（网关、chat-service、或二者）。
+
+4. Risk Points
+- **高风险：任务依赖顺序与现有代码约束耦合**：permission_scope 现状限制会影响 Task5 接入速度。
+- **中风险：Embedding 维度错配**：若不在 Task1 先把维度配置和表结构绑定起来，Task2 容易出现写入失败或 silent mismatch。
+- **中风险：同步导入阻塞请求**：Task3 文档导入同步处理在大文本下会拉长 API 延时；虽符合规格，但需设置合理超时与输入限制。
+- **中风险：多库初始化一致性**：当前 `aim_chat` 才会承载 RAG 表，若扩展脚本放错库或未执行，后续问题隐蔽。
+
+5. Suggested Spec Changes
+- **统一路径**：将规格主文件统一命名为 `docs/specs/p4-rag-spec.md`（或在 Task0 明确“本仓库使用 docs/specs/RAG-spec.md”）。
+- **补充 Task0 输出归档约定**：明确“Task0 结果写入 `output.md` 的固定章节”。
+- **前置新增配置条目**：在 Task1 前置要求更新 `.env.example` 与 `docker-compose.yml`，加入全部 EMBEDDING/RAG 参数。
+- **修正 permission_scope 演进路径**：
+  - Task1~Task3 允许暂保持 `CONVERSATION_ONLY`；
+  - Task5 再放开 `KNOWLEDGE_BASE_ONLY/CONVERSATION_AND_KB` 并给迁移说明。
+- **明确检索字段语义**：统一响应为 `score` 且“越大越相关”，并约束计算方式。
+- **补充输入上限**：为 `documents/text` 增加单次字符上限建议，避免同步处理过慢。
+
+6. Implementation Readiness: NOT READY
+- 结论：当前规格可作为主方向，但在“路径统一、配置前置、permission_scope 冲突消解、输出归档约定”四点完成前，不建议直接进入 Task1 实做。## [2026-05-13 09:58:37] Task 8：RAG 运行基线补齐（Task 0 后）
+- 变更文件：
+  - docs/specs/p4-rag-spec.md
+  - deploy/postgres/init/02-enable-pgvector.sql
+  - .env.example
+  - docker-compose.yml
+- 规格文档修订：
+  - 删除文档头尾多余围栏包装，统一为纯 Markdown 规范文本。
+  - 明确检索响应统一返回 score = 1 - distance，并固定语义“score 越大相关性越高”。
+  - 为 documents/text 增加输入上限建议（默认 200000 字符）及超限错误要求。
+  - 增加 permission_scope 分阶段兼容约束：Task1~Task4 可仅 CONVERSATION_ONLY，Task5 必须放开 KNOWLEDGE_BASE_ONLY / CONVERSATION_AND_KB。
+  - 为 Task0 增加“输出落点”：审查结果必须追加写入 output.md。
+  - 在 Task2 中新增“扫描原生 SQL 方言差异”必做清单（ON DUPLICATE KEY/ON CONFLICT、JSON/时间函数等）。
+  - 新增 Task8“RAG 运行基线补齐”，并加入推荐执行顺序（Task0 后立即执行）。
+- 运行基线补齐：
+  - 新增 deploy/postgres/init/02-enable-pgvector.sql，在 im_chat 库执行 CREATE EXTENSION IF NOT EXISTS vector;。
+  - .env.example 增加 EMBEDDING_* 与 RAG_* 配置模板。
+  - docker-compose.yml 为 chat-service 透传 EMBEDDING_* 与 RAG_* 环境变量。
+- 校验：
+  - docker compose config 通过，配置可解析，chat-service 环境变量包含新增 RAG/Embedding 字段。
+## [2026-05-13 10:18:17] Task 1：pgvector 初始化与 RAG 数据模型
+- 变更文件：
+  - chat-service/internal/dal/model/rag.go
+  - chat-service/internal/dal/postgres/init.go
+  - deploy/postgres/init/02-enable-pgvector.sql（Task8 基线脚本，Task1 依赖）
+- 实现内容：
+  - 新增 RAG 模型：
+    - knowledge_bases（KnowledgeBase）
+    - knowledge_documents（KnowledgeDocument）
+    - conversation_knowledge_bases（ConversationKnowledgeBase）
+  - 在 postgres.Init 的 AutoMigrate 中纳入上述 3 张表。
+  - 新增 EMBEDDING_DIMENSION 读取逻辑（默认 1536，必须为正整数）。
+  - 新增 knowledge_chunks raw SQL 建表逻辑：
+    - embedding vector(EMBEDDING_DIMENSION)
+    - 索引：idx_knowledge_chunks_kb_id、idx_knowledge_chunks_document_id
+    - 唯一索引：idx_knowledge_chunks_document_index (document_id, chunk_index)
+  - 新增维度一致性校验：
+    - 通过 ormat_type(atttypid, atttypmod) 读取 knowledge_chunks.embedding 实际类型；
+    - 若与 ector(EMBEDDING_DIMENSION) 不一致则启动报错，防止 silent mismatch。
+- 约束对齐：
+  - 本 Task 未修改 Bot prompt、LLM 客户端、gateway handler、前端、业务 API，符合 Task1 范围。
+- 验证：
+  - gofmt -w chat-service/internal/dal/model/rag.go chat-service/internal/dal/postgres/init.go 完成。
+  - go build ./...（chat-service）通过。
+## [2026-05-13 10:27:48] Task 2：Embedding Client 与 Chunk 处理
+- 变更文件：
+  - chat-service/internal/embedding/client.go
+  - chat-service/internal/embedding/openai_compatible.go
+  - chat-service/internal/embedding/dashscope_multimodal.go
+  - chat-service/internal/rag/splitter.go
+  - chat-service/internal/rag/service.go
+  - chat-service/internal/repository/rag.go
+  - chat-service/internal/rag/splitter_test.go
+  - .env.example
+  - docker-compose.yml
+- 实现内容：
+  - 新增 embedding 客户端抽象（Client、EmbedRequest、EmbedResponse）与环境加载：
+    - EMBEDDING_PROVIDER（openai_compatible / dashscope_multimodal）
+    - EMBEDDING_BASE_URL / EMBEDDING_API_KEY / EMBEDDING_MODEL
+    - EMBEDDING_DIMENSION / EMBEDDING_TIMEOUT_SECONDS
+  - 新增 OpenAI-compatible embedding client：
+    - 调用 POST /embeddings
+    - 校验 embedding 数量与维度一致性
+  - 新增 DashScope Multimodal embedding client：
+    - 调用 POST /api/v1/services/embeddings/multimodal-embedding/multimodal-embedding
+    - 支持 	ext / image 输入项
+    - 校验 embedding 数量与维度一致性
+  - 新增 chunk splitter：
+    - 支持 RAG_CHUNK_SIZE / RAG_CHUNK_OVERLAP
+    - 校验 overlap < chunk_size
+    - 生成 chunk_index 从 0 递增
+  - 新增文档处理服务 DocumentProcessor：
+    - 文档状态流转：PROCESSING -> READY/FAILED
+    - 按批调用 embedding（默认 batch=16）
+    - 将 chunks + embeddings 写入 knowledge_chunks
+  - 新增 RAG 仓储：
+    - GetKnowledgeDocumentByID
+    - UpdateKnowledgeDocumentStatus
+    - ReplaceKnowledgeChunksForDocument（事务内先删后插）
+- 配置补齐：
+  - .env.example 新增 EMBEDDING_PROVIDER=openai_compatible。
+  - docker-compose.yml 为 chat-service 透传 EMBEDDING_PROVIDER。
+- 验证：
+  - gofmt 已完成。
+  - go build ./...（chat-service）通过。
+  - go test ./... 失败，失败点为既有测试与当前主干类型/接口不一致（如 fake repo 未实现 Create、若干测试仍以 string/[]byte 构造 datatypes.JSON），非本次 Task2 新增代码引入。
+## [2026-05-13 10:51:49] Task 3：知识库 API 与检索 API
+- 变更文件：
+  - idl/chat.thrift
+  - chat-service/internal/biz/rag.go
+  - chat-service/internal/repository/rag.go
+  - chat-service/internal/handler/chat_service.go
+  - chat-service/cmd/server/main.go
+  - chat-service/internal/biz/chat.go
+  - chat-service/internal/rag/service.go
+  - gateway/internal/model/chat.go
+  - gateway/internal/handler/chat.go
+  - gateway/internal/router/router.go
+  - chat-service/kitex_gen/chat/**（IDL 生成）
+  - gateway/kitex_gen/chat/**（IDL 生成）
+- 新增 RPC（chat.thrift）：
+  - CreateKnowledgeBase
+  - AddKnowledgeDocumentText
+  - ListKnowledgeDocuments
+  - SearchKnowledgeBase
+- 新增 HTTP API（gateway）：
+  - POST /api/v1/knowledge-bases
+  - POST /api/v1/knowledge-bases/{knowledgeBaseId}/documents/text
+  - GET /api/v1/knowledge-bases/{knowledgeBaseId}/documents
+  - POST /api/v1/knowledge-bases/{knowledgeBaseId}/search
+- 业务规则实现（chat-service）：
+  - 知识库创建：登录用户可创建，
+ame 必填。
+  - 文档导入：仅 owner 可导入；支持 TEXT/MARKDOWN；同步处理；超限（>200000 字符）拒绝。
+  - 文档状态：PROCESSING -> READY/FAILED；失败信息写 error_message。
+  - 检索：仅 owner 可检索；query 必填；	opK 限制 1~10；响应返回 score=1-distance。
+- RAG 运行接线：
+  - chat-service 启动时按环境初始化 RAGService（embedding client + splitter + processor）。
+  - 环境不完整时会禁用 RAG 并输出日志，不影响基础聊天服务启动。
+- 编译验证：
+  - go build ./...（chat-service）通过。
+  - go build ./...（gateway）通过。
+## [2026-05-13 11:00:45] Task 4：群聊绑定知识库 API
+- 变更文件：
+  - idl/chat.thrift
+  - chat-service/internal/repository/rag.go
+  - chat-service/internal/biz/rag.go
+  - chat-service/internal/handler/chat_service.go
+  - chat-service/cmd/server/main.go
+  - gateway/internal/model/chat.go
+  - gateway/internal/handler/chat.go
+  - gateway/internal/router/router.go
+  - chat-service/kitex_gen/chat/**（IDL 生成）
+  - gateway/kitex_gen/chat/**（IDL 生成）
+- 新增 RPC（chat.thrift）：
+  - BindConversationKnowledgeBase
+  - ListConversationKnowledgeBases
+  - UnbindConversationKnowledgeBase
+- 新增 HTTP API（gateway）：
+  - POST /api/v1/conversations/{conversationId}/knowledge-bases
+  - GET /api/v1/conversations/{conversationId}/knowledge-bases
+  - DELETE /api/v1/conversations/{conversationId}/knowledge-bases/{knowledgeBaseId}
+- 权限与行为实现：
+  - POST/DELETE：仅 OWNER/ADMIN 可操作；会话必须是 GROUP。
+  - GET：会话成员可查看。
+  - 绑定：upsert + enabled=true。
+  - 解绑：enabled=false（软解绑，不删除知识库）。
+- 代码实现细节：
+  - repository：新增 conversation_knowledge_bases upsert/list/get/update-enabled。
+  - biz：新增绑定/查询/解绑服务，复用 ConversationRepo + MemberRepo 做会话与角色校验。
+  - handler：新增对应 RPC 与 HTTP 映射。
+- 额外补齐：
+  - chat-service/cmd/server/main.go 将 RAG_TOP_K 接入 RAGService.DefaultTopK（范围钳制 1~10）。
+- 编译验证：
+  - go build ./...（chat-service）通过。
+  - go build ./...（gateway）通过。
+- 配置观察：
+  - 当前 compose 解析显示 EMBEDDING_BASE_URL 实际值为 =https://dashscope.aliyuncs.com/compatible-mode/v1，存在前导 =，会导致请求 URL 异常，需要手动修正 .env。
+## [2026-05-13 12:33:00] Task 5：Bot 接入 RAG 收口（范围策略、依赖注入、测试修复）
+- 变更文件：
+  - chat-service/cmd/server/main.go
+  - chat-service/internal/bot/service.go
+  - chat-service/internal/bot/prompt.go
+  - chat-service/internal/bot/rag_searcher.go
+  - chat-service/internal/bot/trigger.go
+  - chat-service/internal/bot/service_test.go
+  - chat-service/internal/bot/prompt_test.go
+  - chat-service/internal/bot/trigger_test.go
+  - chat-service/internal/bot/membership_test.go
+- 主要修改：
+  - 完成 Bot 与 RAG 的会话级检索集成，按 permission_scope 生效：
+    - CONVERSATION_ONLY：仅群聊上下文
+    - KNOWLEDGE_BASE_ONLY：仅问题 + 知识库资料
+    - CONVERSATION_AND_KB：群聊上下文 + 知识库资料
+  - 修复 main.go 注入链路：Bot RAG 检索器复用已创建的 ragRepo，不再二次 pgstore.Init，避免重复建连与初始化副作用。
+  - 补全 RAG 检索异常策略：
+    - KNOWLEDGE_BASE_ONLY 检索失败时回复“知识库检索失败，请稍后再试”并记录失败日志。
+    - KNOWLEDGE_BASE_ONLY 无命中/无绑定时回复“当前会话未绑定知识库，无法基于知识库回答。”
+    - CONVERSATION_AND_KB 检索失败不阻断主流程，仍继续 LLM 回答。
+  - 重构 Prompt 生成（BuildPromptWithRAG）：固定段落为“群聊上下文 / 知识库资料 / 当前提问用户 / 用户问题 / 回答要求”。
+  - 修复 Trigger fallbackQuestion 文案为可读中文。
+  - 将 bot 测试中的 message content 全部适配为 datatypes.JSON，修复历史 string -> JSONB 演进导致的编译错误。
+  - 补充/更新单测：
+    - KB_ONLY 使用 RAG 且不注入群聊上下文；
+    - KB_ONLY 无绑定时走兜底回复且不调 LLM；
+    - CONVERSATION_AND_KB 在 RAG 失败时继续 LLM。
+- 验证：
+  - gofmt 已执行（上述 Task5 相关文件）。
+  - go test ./internal/bot 通过。
+  - go build ./...（chat-service）通过。
+- 未完成项：
+  - chat-service/internal/biz 下仍有与历史 JSONB 改造相关的旧测试未收口（不在本次 Task5 变更范围）。
+## [2026-05-13 12:37:00] 测试收口：internal/biz JSONB 兼容修复
+- 变更文件：
+  - chat-service/internal/biz/chat_test.go
+- 主要修改：
+  - 适配 repository.ConversationListRow 的 `LastMessageContent []byte`：测试用例改为 `[]byte(...)`。
+  - 适配 message `content` 已改为 `datatypes.JSON`：
+    - 相关测试构造从字符串常量改为 `datatypes.JSON(...)`；
+    - 对 `MessageView.Content`（string）做断言时，统一通过 `datatypes.JSON(message.Content)` 再传给 `model.ExtractTextMessageContent`。
+  - 适配 BotRepository 接口升级：为 `fakeConversationListBotRepo` 增加
+    - `Create(ctx, *model.Bot) error`
+    - `ListEnabledByOwner(ctx, ownerID uint64) ([]model.Bot, error)`
+  - 保持原有测试语义不变，仅做类型与接口兼容修复。
+- 验证：
+  - gofmt -w internal/biz/chat_test.go 完成。
+  - go test ./internal/biz 通过。
+  - go test ./internal/bot ./internal/biz 通过。
+  - go build ./...（chat-service）通过。
+- 未完成项：
+  - 无（本轮目标已完成）。
+
+## [2026-05-13 16:20:00] Task 6：前端最小知识库管理（T6）
+- 变更文件：
+  - frontend/src/types.ts
+  - frontend/src/api.ts
+  - frontend/src/app/types.ts
+  - frontend/src/App.tsx
+  - frontend/src/app/views/detail-panel.tsx
+  - frontend/src/styles.css
+- 主要改动：
+  - 新增知识库前端类型：KnowledgeBaseInfo、KnowledgeDocumentInfo、KnowledgeSearchChunkInfo、ConversationKnowledgeBaseInfo。
+  - 新增知识库 API 调用：
+    - createKnowledgeBase
+    - ddKnowledgeDocumentText
+    - listKnowledgeDocuments
+    - searchKnowledgeBase
+    - indConversationKnowledgeBase
+    - listConversationKnowledgeBases
+    - unbindConversationKnowledgeBase
+  - 详情侧栏新增 knowledge 标签页（知识库），并扩展为 6 个顶部标签。
+  - 新增最小可用知识库管理面板（KnowledgeBasePanel）：
+    - 创建知识库
+    - 导入 TEXT/MARKDOWN 文档
+    - 查看文档状态与错误信息
+    - 检索测试（query + topK）
+    - 会话绑定/解绑知识库
+  - 权限与交互：
+    - 群聊 OWNER/ADMIN 可绑定与解绑
+    - MEMBER 只读可查看绑定状态
+    - 非群聊显示仅群聊可绑定提示
+  - App 状态与数据流接入：
+    - 新增知识库相关 state（列表、选中、文档、检索结果、会话绑定、加载态）
+    - 新增创建、导入、检索、绑定、解绑、刷新处理函数
+    - 在会话绑定列表返回时回填本地知识库列表，避免依赖不存在的“知识库列表接口”
+- 样式补充：
+  - 新增 	abs-six 与知识库面板样式（knowledge-body、kb-card、kb-list、kb-row 等）。
+- 验证：
+  - 
+pm.cmd run build --prefix frontend 通过。
+- 说明：
+  - 本次严格在 rontend/src/** 范围内实现 T6，不改后端接口。
+## [2026-05-13 14:05:00] Task 7：文档对齐与冒烟验证（T7）
+- Changed files
+  - README.md
+  - docs/specs/p4-rag-spec.md
+  - output.md
+
+- What changed
+  - README 重写为当前 PostgreSQL+Redis+RAG 的可执行运行说明：
+    - 增加 RAG 必需环境变量清单
+    - 增加 pgvector 扩展验证/启用步骤
+    - 增加最小 RAG 闭环接口链路
+    - 增加 OpenAI-compatible embedding 模型兼容性提示
+  - p4-rag-spec.md 增补 Task7 执行注意：
+    - 普通 postgres:16 可能不含 pgvector
+    - EMBEDDING_BASE_URL 前导 = 风险
+    - EMBEDDING_MODEL 与 /embeddings 兼容性要求
+    - 环境阻塞时的结果记录规范
+
+- Commands run
+  - docker compose ps
+  - docker exec aim-postgres psql -U aim -d aim_chat -c "SELECT extname FROM pg_extension WHERE extname='vector';"
+  - docker exec aim-postgres sh -lc "apt-get update && apt-get install -y postgresql-16-pgvector"
+  - docker exec aim-postgres psql -U aim -d aim_chat -c "CREATE EXTENSION IF NOT EXISTS vector;"
+  - docker compose up -d --build chat-service gateway
+  - docker compose restart chat-service gateway auth-service
+  - docker compose up -d chat-service gateway
+  - docker compose logs --tail=260 chat-service
+  - docker compose logs --tail=160 auth-service user-service
+  - PowerShell Invoke-RestMethod 脚本：注册/登录/建群/创建知识库/导入文档/检索/绑定
+
+- Smoke test result
+  - 1) PostgreSQL pgvector 可用：通过
+    - 结果：SELECT extname ... 返回 ector
+  - 2) 创建知识库：通过（环境修复后）
+  - 3) 导入文本：请求可达，但文档状态为 FAILED（受 embedding 模型兼容性影响）
+  - 4) 文档 status=READY：未通过（当前为 FAILED）
+  - 5) search 返回 chunks：未通过
+    - 错误：Unsupported model 	ongyi-embedding-vision-flash for OpenAI compatibility mode
+  - 6) 群聊绑定知识库：通过
+  - 7) Bot 在 CONVERSATION_AND_KB 使用知识库回答：未通过（前置检索失败）
+  - 8) CONVERSATION_ONLY 保持旧行为：未完成独立验证（本轮重点在 RAG链路阻塞定位）
+
+- Known issues
+  - 运行中的 postgres:16 镜像默认不含 pgvector，需额外安装扩展包。
+  - .env 曾出现 EMBEDDING_BASE_URL==... 前导等号，导致 URL 异常。
+  - 当前 EMBEDDING_MODEL=tongyi-embedding-vision-flash 在 OpenAI-compatible /embeddings 下不受支持，导致文档处理与检索失败。
+  - 本次重启后，部分先前临时注册用户在 user-service 中未查询到（日志显示 user not found），不影响本次阻塞结论。
+
+- Remaining TODOs
+  - 1. 将 PostgreSQL 运行镜像替换为内置 pgvector 版本（或在初始化阶段自动安装）并固化到 compose/部署文档。
+  - 2. 更换为 OpenAI-compatible embeddings 可用模型（并同步 EMBEDDING_DIMENSION），重新执行文档导入+检索冒烟。
+  - 3. 在修复 embeddings 后补做第 7/8 项：
+    - CONVERSATION_AND_KB Bot 回答验证
+    - CONVERSATION_ONLY 回归验证
+## [2026-05-13 14:15:22] T7+后续：多模态 Embedding 专用链路 + 专用 Bot + 权限范围显式化
+- 变更文件：
+  - chat-service/internal/embedding/client.go
+  - chat-service/internal/embedding/dashscope_multimodal.go
+  - chat-service/cmd/server/main.go
+  - frontend/src/app/views/detail-panel.tsx
+- 主要改动：
+  - Embedding Provider 自动识别增强：
+    - `EMBEDDING_PROVIDER` 未显式配置时，若模型名命中 `embedding-vision` / `vl-embedding` / `multimodal-embedding-v1`，自动切到 `dashscope_multimodal`。
+  - Embedding 默认维度按模型自适配：
+    - qwen3-vl-embedding=2560，qwen2.5-vl-embedding=1024，tongyi-embedding-vision-plus=1152，tongyi-embedding-vision-flash=768，snapshot 2026-03-06 对应默认值，multimodal-embedding-v1=1024。
+  - DashScope 多模态请求体修正为官方结构：
+    - 从错误结构 `{"input": [...]}` 改为 `{"input": {"contents": [...]}}`。
+    - 支持 text/image/video 三种输入构造。
+    - 仅对支持 `dimension` 参数的模型下发 `parameters.dimension`，避免不支持模型报错。
+    - 增加响应层错误字段识别（code/message/request_id）与空向量校验。
+  - 新增平台内置“多模态知识库助手”Bot（第三个内置 Bot）：
+    - 默认 `BOT3_ID=100002`
+    - `mentionName=mrag`，别名 `kb`, `visionkb`
+    - 默认模型 `qwen3.6-plus`
+    - 用于群聊+知识库多模态场景。
+  - LLM Provider 选择扩展：
+    - `qwen` 与 `mrag` 均走 secondary provider（LLM2）。
+  - 前端 Bot 会话管理增强：
+    - 新增“权限范围”下拉：`群聊上下文` / `仅知识库` / `群聊 + 知识库`，并随添加请求提交 `permissionScope`。
+    - 会话内 Bot 卡片将 `permissionScope` 显示为中文标签，提升可读性。
+    - Bot 面板相关英文提示改为中文。
+- 验证：
+  - gofmt -w chat-service/internal/embedding/client.go chat-service/internal/embedding/dashscope_multimodal.go chat-service/cmd/server/main.go 通过。
+  - go build ./...（chat-service）通过。
+  - npm.cmd run build --prefix frontend 通过。
+- 说明：
+  - 本次未修改数据库结构与 IDL，仅调整运行时请求构造、内置 Bot 初始化与前端配置入口。
+
+## [2026-05-13 14:23:03] 前端消息文本解析修复：Bot 回复 JSON -> 文本 + Markdown
+- 变更文件：
+  - frontend/src/app/utils.ts
+- 问题现象：
+  - Bot 返回内容为 `{"text":"..."}` 时，前端未按 BOT_REPLY 解析，导致消息气泡显示原始 JSON 字符串，Markdown 也无法正确作用于正文文本。
+- 修复内容：
+  - `messageText(...)` 增加 `BOT_REPLY` 分支：
+    - 优先按 `parseTextMessageContent` 提取 `text` 字段；
+    - 失败时回退到原始字符串（兼容历史数据）。
+  - `parseJSONObject(...)` 增加双层 JSON 兼容：
+    - 处理被二次转义的 payload（如 `"{\"text\":\"...\"}"`）。
+- 结果：
+  - TEXT/BOT_REPLY 消息进入 `MessageBubble` 时可得到真实正文，再由现有 `ReactMarkdown` 正常渲染代码块、列表、粗体等内容。
+- 验证：
+  - npm.cmd run build --prefix frontend 通过。
+
+## [2026-05-13 14:25:07] 前端知识库导入改为文件选择（支持 txt/md）
+- 变更文件：
+  - frontend/src/app/views/detail-panel.tsx
+- 主要改动：
+  - 知识库“导入文档”表单新增文件选择器（`input type=file`），支持 `.txt/.md/.markdown`。
+  - 选择文件后：
+    - 自动使用 UTF-8 读取文件内容并填充到 `content`；
+    - 根据扩展名自动切换 `sourceType`（md->MARKDOWN, txt->TEXT）；
+    - 若标题为空，自动使用文件名（去扩展名）填入标题。
+  - 导入成功后清理已选文件状态。
+  - 保留 textarea，可在文件导入后继续手动补充编辑内容。
+- 验证：
+  - npm.cmd run build --prefix frontend 通过。
+
+## [2026-05-13 15:43:33] 修复 RAG 文档 embedding 404（OpenAI 兼容模式误用）
+- 现象：
+  - 文档导入失败，报错：Unsupported model `tongyi-embedding-vision-flash` for OpenAI compatibility mode.
+- 根因：
+  - `docker-compose.yml` 中 `EMBEDDING_PROVIDER` 默认值被强制为 `openai_compatible`，覆盖了后端按模型自动识别到 `dashscope_multimodal` 的逻辑。
+- 变更文件：
+  - docker-compose.yml
+  - .env
+- 修复内容：
+  - `docker-compose.yml`：
+    - `EMBEDDING_PROVIDER: "${EMBEDDING_PROVIDER:-openai_compatible}"`
+    - 改为 `EMBEDDING_PROVIDER: "${EMBEDDING_PROVIDER:-}"`，不再强制覆盖默认 provider。
+  - `.env`：
+    - 显式添加 `EMBEDDING_PROVIDER=dashscope_multimodal`。
+    - 清理重复的 `EMBEDDING_API_KEY` 条目，保留单一配置。
+- 运行验证：
+  - 重建并重启 `chat-service` 成功。
+  - chat-service 日志确认：
+    - `rag service enabled: provider=dashscope_multimodal, model=tongyi-embedding-vision-flash ...`
+- 结论：
+  - RAG 已切换到 DashScope 多模态 embedding 路径，避免再走 OpenAI 兼容 `/embeddings` 导致的 404/unsupported model。

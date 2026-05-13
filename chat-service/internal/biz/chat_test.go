@@ -10,6 +10,7 @@ import (
 	"example.com/aim/chat-service/internal/dal/model"
 	"example.com/aim/chat-service/internal/repository"
 	"example.com/aim/chat-service/internal/rpc"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -129,7 +130,7 @@ func TestListConversationsUsesBotNameForLastBotReply(t *testing.T) {
 			Title:                 "test1",
 			LastMessageSenderID:   uint64Ptr(100000),
 			LastMessageSenderType: string(model.SenderTypeBot),
-			LastMessageContent:    "bot reply",
+			LastMessageContent:    []byte(`{"text":"bot reply"}`),
 			UpdatedAt:             time.Now(),
 		},
 	}
@@ -169,7 +170,7 @@ func TestListConversationsUsesRecalledPlaceholderForLastMessage(t *testing.T) {
 			LastMessageSenderID:   uint64Ptr(10001),
 			LastMessageSenderType: string(model.SenderTypeUser),
 			LastMessageStatus:     string(model.MessageStatusRecalled),
-			LastMessageContent:    `{"text":"secret"}`,
+			LastMessageContent:    []byte(`{"text":"secret"}`),
 			UpdatedAt:             time.Now(),
 		},
 	}
@@ -302,7 +303,7 @@ func TestCreateMessageCreatesMessageAndUpdatesConversation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateMessage returned error: %v", err)
 	}
-	if message.ID == 0 || model.ExtractTextMessageContent(message.Content) != "hello" || message.MessageType != string(model.MessageTypeText) {
+	if message.ID == 0 || model.ExtractTextMessageContent(datatypes.JSON(message.Content)) != "hello" || message.MessageType != string(model.MessageTypeText) {
 		t.Fatalf("unexpected message view: %+v", message)
 	}
 	if conversationRepo.lastMessageID != message.ID || conversationRepo.lastConversationID != 1 {
@@ -339,7 +340,7 @@ func TestRecallMessageMarksStatusAndReturnsRecipients(t *testing.T) {
 		SenderID:       10001,
 		SenderType:     model.SenderTypeUser,
 		MessageType:    model.MessageTypeText,
-		Content:        `{"text":"hello"}`,
+		Content:        datatypes.JSON(`{"text":"hello"}`),
 		Status:         model.MessageStatusNormal,
 		CreatedAt:      time.Now(),
 	})
@@ -388,7 +389,7 @@ func TestRecallMessageRejectsNonSender(t *testing.T) {
 		SenderID:       10001,
 		SenderType:     model.SenderTypeUser,
 		MessageType:    model.MessageTypeText,
-		Content:        `{"text":"hello"}`,
+		Content:        datatypes.JSON(`{"text":"hello"}`),
 		Status:         model.MessageStatusNormal,
 		CreatedAt:      time.Now(),
 	})
@@ -488,7 +489,7 @@ func TestCreateMessageSupportsSingleConversation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateMessage returned error: %v", err)
 	}
-	if message.ConversationID != "c_single" || model.ExtractTextMessageContent(message.Content) != "hello" {
+	if message.ConversationID != "c_single" || model.ExtractTextMessageContent(datatypes.JSON(message.Content)) != "hello" {
 		t.Fatalf("unexpected single message view: %+v", message)
 	}
 }
@@ -637,8 +638,8 @@ func TestListMessagesReturnsSingleReadByPeer(t *testing.T) {
 		JoinedAt:          time.Now(),
 	})
 	messageRepo.messages = append(messageRepo.messages,
-		&model.Message{ID: 10, ConversationID: 1, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"hello"}`},
-		&model.Message{ID: 20, ConversationID: 1, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"later"}`},
+		&model.Message{ID: 10, ConversationID: 1, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"hello"}`)},
+		&model.Message{ID: 20, ConversationID: 1, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"later"}`)},
 	)
 
 	messages, err := service.ListMessages(context.Background(), 10001, "c_single", nil, 30)
@@ -704,8 +705,8 @@ func TestListMessagesReturnsGroupReadCount(t *testing.T) {
 		JoinedAt:       time.Now(),
 	})
 	messageRepo.messages = append(messageRepo.messages,
-		&model.Message{ID: 10, ConversationID: 1, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"hello"}`},
-		&model.Message{ID: 12, ConversationID: 1, SenderID: 10002, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"later"}`},
+		&model.Message{ID: 10, ConversationID: 1, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"hello"}`)},
+		&model.Message{ID: 12, ConversationID: 1, SenderID: 10002, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"later"}`)},
 	)
 
 	messages, err := service.ListMessages(context.Background(), 10001, "c_group", nil, 30)
@@ -768,7 +769,7 @@ func TestCreateMessageBotFailureDoesNotFailUserMessage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateMessage returned error: %v", err)
 	}
-	if message.ID == 0 || model.ExtractTextMessageContent(message.Content) != "@bot hello" {
+	if message.ID == 0 || model.ExtractTextMessageContent(datatypes.JSON(message.Content)) != "@bot hello" {
 		t.Fatalf("unexpected message: %+v", message)
 	}
 	_ = handler.waitRequest(t)
@@ -1139,6 +1140,15 @@ func (r *fakeConversationListBotRepo) WithTx(tx *gorm.DB) repository.BotReposito
 	return r
 }
 
+func (r *fakeConversationListBotRepo) Create(ctx context.Context, botModel *model.Bot) error {
+	if r.bots == nil {
+		r.bots = make(map[uint64]*model.Bot)
+	}
+	botCopy := *botModel
+	r.bots[botModel.ID] = &botCopy
+	return nil
+}
+
 func (r *fakeConversationListBotRepo) GetByID(ctx context.Context, id uint64) (*model.Bot, error) {
 	botModel, ok := r.bots[id]
 	if !ok {
@@ -1147,10 +1157,14 @@ func (r *fakeConversationListBotRepo) GetByID(ctx context.Context, id uint64) (*
 	return botModel, nil
 }
 
-func (r *fakeConversationListBotRepo) ListEnabled(ctx context.Context) ([]model.Bot, error) {
+func (r *fakeConversationListBotRepo) ListEnabledByOwner(ctx context.Context, ownerID uint64) ([]model.Bot, error) {
 	result := make([]model.Bot, 0, len(r.bots))
 	for _, botModel := range r.bots {
-		result = append(result, *botModel)
+		if botModel.Status == "" || botModel.Status == model.BotStatusEnabled {
+			if botModel.CreatedBy == 0 || botModel.CreatedBy == ownerID {
+				result = append(result, *botModel)
+			}
+		}
 	}
 	return result, nil
 }

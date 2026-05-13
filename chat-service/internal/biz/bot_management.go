@@ -20,7 +20,7 @@ var (
 	ErrBotModelInvalid           = errors.New("bad_request: model_name_override is not supported by this bot")
 	ErrBotReservedName           = errors.New("bad_request: reserved mention name is not allowed")
 	ErrBotConflict               = errors.New("bad_request: bot mentionName or aliases conflict in conversation")
-	ErrBotPermissionScopeInvalid = errors.New("bad_request: permission_scope must be CONVERSATION_ONLY")
+	ErrBotPermissionScopeInvalid = errors.New("bad_request: permission_scope must be CONVERSATION_ONLY / KNOWLEDGE_BASE_ONLY / CONVERSATION_AND_KB")
 	ErrBotOwnerRequired          = errors.New("forbidden: only bot owner can add this custom bot")
 )
 
@@ -130,7 +130,9 @@ func (s *ChatService) AddConversationBot(ctx context.Context, input AddConversat
 	if permissionScope == "" {
 		permissionScope = string(model.BotScopeConversationOnly)
 	}
-	if permissionScope != string(model.BotScopeConversationOnly) {
+	if permissionScope != string(model.BotScopeConversationOnly) &&
+		permissionScope != string(model.BotScopeKnowledgeBaseOnly) &&
+		permissionScope != string(model.BotScopeConversationAndKB) {
 		return nil, ErrBotPermissionScopeInvalid
 	}
 
@@ -172,7 +174,7 @@ func (s *ChatService) AddConversationBot(ctx context.Context, input AddConversat
 		DisplayNameOverride: strings.TrimSpace(input.DisplayNameOverride),
 		MentionNameOverride: normalizeOptionalName(input.MentionNameOverride),
 		AliasesOverride:     aliasesOverride,
-		PermissionScope:     model.BotScopeConversationOnly,
+		PermissionScope:     model.BotPermissionScope(permissionScope),
 	}); err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"example.com/aim/chat-service/internal/dal/model"
+	"gorm.io/datatypes"
 )
 
 func TestShouldTriggerBot(t *testing.T) {
@@ -13,31 +14,31 @@ func TestShouldTriggerBot(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "普通文本不触发",
-			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"hello"}`},
+			name: "plain text should not trigger",
+			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"hello"}`)},
 		},
 		{
-			name: "文本 mention 触发",
-			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"@aim hello"}`},
+			name: "text mention should trigger",
+			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"@aim hello"}`)},
 			want: true,
 		},
 		{
-			name: "带冒号 mention 触发",
-			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"@helper: hello"}`},
+			name: "mention with colon should trigger",
+			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"@helper: hello"}`)},
 			want: true,
 		},
 		{
-			name: "bot 回复不触发",
-			msg:  model.Message{SenderType: model.SenderTypeBot, MessageType: model.MessageTypeBotReply, Content: "@aim hello"},
+			name: "bot message should not trigger",
+			msg:  model.Message{SenderType: model.SenderTypeBot, MessageType: model.MessageTypeBotReply, Content: datatypes.JSON(`{"text":"@aim hello"}`)},
 		},
 		{
-			name: "图片消息 text mention 触发",
-			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: `{"url":"https://cdn.example.com/a.png","name":"a.png","mimeType":"image/png","text":"@aim 请看图"}`},
+			name: "image text mention should trigger",
+			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: datatypes.JSON(`{"url":"https://cdn.example.com/a.png","name":"a.png","mimeType":"image/png","text":"@aim look"}`)},
 			want: true,
 		},
 		{
-			name: "图片消息无 mention 不触发",
-			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: `{"url":"https://cdn.example.com/a.png","name":"a.png","mimeType":"image/png","text":"这是一张图"}`},
+			name: "image without mention should not trigger",
+			msg:  model.Message{SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: datatypes.JSON(`{"url":"https://cdn.example.com/a.png","name":"a.png","mimeType":"image/png","text":"just image"}`)},
 		},
 	}
 
@@ -55,9 +56,9 @@ func TestExtractQuestion(t *testing.T) {
 		content string
 		want    string
 	}{
-		{content: "@AIM 总结一下刚才讨论了什么", want: "总结一下刚才讨论了什么"},
+		{content: "@AIM summarize this", want: "summarize this"},
 		{content: "@bot: hello", want: "hello"},
-		{content: "@helper，继续", want: "继续"},
+		{content: "@helper，continue", want: "continue"},
 		{content: "@aim", want: fallbackQuestion},
 	}
 

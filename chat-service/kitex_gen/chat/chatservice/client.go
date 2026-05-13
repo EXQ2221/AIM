@@ -37,6 +37,13 @@ type Client interface {
 	AddConversationBot(ctx context.Context, req *chat.AddConversationBotRequest, callOptions ...callopt.Option) (r *chat.AddConversationBotResponse, err error)
 	RemoveConversationBot(ctx context.Context, req *chat.RemoveConversationBotRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
 	ListAICallLogs(ctx context.Context, req *chat.ListAICallLogsRequest, callOptions ...callopt.Option) (r *chat.ListAICallLogsResponse, err error)
+	CreateKnowledgeBase(ctx context.Context, req *chat.CreateKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.CreateKnowledgeBaseResponse, err error)
+	AddKnowledgeDocumentText(ctx context.Context, req *chat.AddKnowledgeDocumentTextRequest, callOptions ...callopt.Option) (r *chat.AddKnowledgeDocumentTextResponse, err error)
+	ListKnowledgeDocuments(ctx context.Context, req *chat.ListKnowledgeDocumentsRequest, callOptions ...callopt.Option) (r *chat.ListKnowledgeDocumentsResponse, err error)
+	SearchKnowledgeBase(ctx context.Context, req *chat.SearchKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.SearchKnowledgeBaseResponse, err error)
+	BindConversationKnowledgeBase(ctx context.Context, req *chat.BindConversationKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
+	ListConversationKnowledgeBases(ctx context.Context, req *chat.ListConversationKnowledgeBasesRequest, callOptions ...callopt.Option) (r *chat.ListConversationKnowledgeBasesResponse, err error)
+	UnbindConversationKnowledgeBase(ctx context.Context, req *chat.UnbindConversationKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
 	CreateMessage(ctx context.Context, req *chat.CreateMessageRequest, callOptions ...callopt.Option) (r *chat.CreateMessageResponse, err error)
 	FindSingleByUsers(ctx context.Context, req *chat.FindSingleByUsersRequest, callOptions ...callopt.Option) (r *chat.FindSingleByUsersResponse, err error)
 }
@@ -198,6 +205,41 @@ func (p *kChatServiceClient) RemoveConversationBot(ctx context.Context, req *cha
 func (p *kChatServiceClient) ListAICallLogs(ctx context.Context, req *chat.ListAICallLogsRequest, callOptions ...callopt.Option) (r *chat.ListAICallLogsResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.ListAICallLogs(ctx, req)
+}
+
+func (p *kChatServiceClient) CreateKnowledgeBase(ctx context.Context, req *chat.CreateKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.CreateKnowledgeBaseResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.CreateKnowledgeBase(ctx, req)
+}
+
+func (p *kChatServiceClient) AddKnowledgeDocumentText(ctx context.Context, req *chat.AddKnowledgeDocumentTextRequest, callOptions ...callopt.Option) (r *chat.AddKnowledgeDocumentTextResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.AddKnowledgeDocumentText(ctx, req)
+}
+
+func (p *kChatServiceClient) ListKnowledgeDocuments(ctx context.Context, req *chat.ListKnowledgeDocumentsRequest, callOptions ...callopt.Option) (r *chat.ListKnowledgeDocumentsResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListKnowledgeDocuments(ctx, req)
+}
+
+func (p *kChatServiceClient) SearchKnowledgeBase(ctx context.Context, req *chat.SearchKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.SearchKnowledgeBaseResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.SearchKnowledgeBase(ctx, req)
+}
+
+func (p *kChatServiceClient) BindConversationKnowledgeBase(ctx context.Context, req *chat.BindConversationKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.BindConversationKnowledgeBase(ctx, req)
+}
+
+func (p *kChatServiceClient) ListConversationKnowledgeBases(ctx context.Context, req *chat.ListConversationKnowledgeBasesRequest, callOptions ...callopt.Option) (r *chat.ListConversationKnowledgeBasesResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListConversationKnowledgeBases(ctx, req)
+}
+
+func (p *kChatServiceClient) UnbindConversationKnowledgeBase(ctx context.Context, req *chat.UnbindConversationKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.UnbindConversationKnowledgeBase(ctx, req)
 }
 
 func (p *kChatServiceClient) CreateMessage(ctx context.Context, req *chat.CreateMessageRequest, callOptions ...callopt.Option) (r *chat.CreateMessageResponse, err error) {

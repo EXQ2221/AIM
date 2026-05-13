@@ -75,8 +75,18 @@ func New() *gin.Engine {
 	conversationGroup.GET("/:conversationId/bots", handler.ListConversationBots)
 	conversationGroup.POST("/:conversationId/bots", handler.AddConversationBot)
 	conversationGroup.DELETE("/:conversationId/bots/:botId", handler.RemoveConversationBot)
+	conversationGroup.POST("/:conversationId/knowledge-bases", handler.BindConversationKnowledgeBase)
+	conversationGroup.GET("/:conversationId/knowledge-bases", handler.ListConversationKnowledgeBases)
+	conversationGroup.DELETE("/:conversationId/knowledge-bases/:knowledgeBaseId", handler.UnbindConversationKnowledgeBase)
 	conversationGroup.GET("/:conversationId/ai-call-logs", handler.ListAICallLogs)
 	conversationGroup.GET("/:conversationId/messages", handler.ListMessages)
+
+	knowledgeBaseGroup := engine.Group("/api/v1/knowledge-bases")
+	knowledgeBaseGroup.Use(middleware.Auth())
+	knowledgeBaseGroup.POST("", handler.CreateKnowledgeBase)
+	knowledgeBaseGroup.POST("/:knowledgeBaseId/documents/text", handler.AddKnowledgeDocumentText)
+	knowledgeBaseGroup.GET("/:knowledgeBaseId/documents", handler.ListKnowledgeDocuments)
+	knowledgeBaseGroup.POST("/:knowledgeBaseId/search", handler.SearchKnowledgeBase)
 
 	botGroup := engine.Group("/api/v1/bots")
 	botGroup.Use(middleware.Auth())

@@ -2422,6 +2422,794 @@ var fieldIDToName_AICallLogQuotaInfo = map[int16]string{
 	3: "remaining_tokens",
 }
 
+type KnowledgeBaseInfo struct {
+	KnowledgeBaseId int64  `thrift:"knowledge_base_id,1" frugal:"1,default,i64" json:"knowledge_base_id"`
+	Name            string `thrift:"name,2" frugal:"2,default,string" json:"name"`
+	Description     string `thrift:"description,3" frugal:"3,default,string" json:"description"`
+	Status          string `thrift:"status,4" frugal:"4,default,string" json:"status"`
+}
+
+func NewKnowledgeBaseInfo() *KnowledgeBaseInfo {
+	return &KnowledgeBaseInfo{}
+}
+
+func (p *KnowledgeBaseInfo) InitDefault() {
+}
+
+func (p *KnowledgeBaseInfo) GetKnowledgeBaseId() (v int64) {
+	return p.KnowledgeBaseId
+}
+
+func (p *KnowledgeBaseInfo) GetName() (v string) {
+	return p.Name
+}
+
+func (p *KnowledgeBaseInfo) GetDescription() (v string) {
+	return p.Description
+}
+
+func (p *KnowledgeBaseInfo) GetStatus() (v string) {
+	return p.Status
+}
+func (p *KnowledgeBaseInfo) SetKnowledgeBaseId(val int64) {
+	p.KnowledgeBaseId = val
+}
+func (p *KnowledgeBaseInfo) SetName(val string) {
+	p.Name = val
+}
+func (p *KnowledgeBaseInfo) SetDescription(val string) {
+	p.Description = val
+}
+func (p *KnowledgeBaseInfo) SetStatus(val string) {
+	p.Status = val
+}
+
+func (p *KnowledgeBaseInfo) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("KnowledgeBaseInfo(%+v)", *p)
+}
+
+var fieldIDToName_KnowledgeBaseInfo = map[int16]string{
+	1: "knowledge_base_id",
+	2: "name",
+	3: "description",
+	4: "status",
+}
+
+type KnowledgeDocumentInfo struct {
+	DocumentId      int64  `thrift:"document_id,1" frugal:"1,default,i64" json:"document_id"`
+	KnowledgeBaseId int64  `thrift:"knowledge_base_id,2" frugal:"2,default,i64" json:"knowledge_base_id"`
+	Title           string `thrift:"title,3" frugal:"3,default,string" json:"title"`
+	SourceType      string `thrift:"source_type,4" frugal:"4,default,string" json:"source_type"`
+	Status          string `thrift:"status,5" frugal:"5,default,string" json:"status"`
+	ErrorMessage    string `thrift:"error_message,6" frugal:"6,default,string" json:"error_message"`
+	CreatedAt       int64  `thrift:"created_at,7" frugal:"7,default,i64" json:"created_at"`
+}
+
+func NewKnowledgeDocumentInfo() *KnowledgeDocumentInfo {
+	return &KnowledgeDocumentInfo{}
+}
+
+func (p *KnowledgeDocumentInfo) InitDefault() {
+}
+
+func (p *KnowledgeDocumentInfo) GetDocumentId() (v int64) {
+	return p.DocumentId
+}
+
+func (p *KnowledgeDocumentInfo) GetKnowledgeBaseId() (v int64) {
+	return p.KnowledgeBaseId
+}
+
+func (p *KnowledgeDocumentInfo) GetTitle() (v string) {
+	return p.Title
+}
+
+func (p *KnowledgeDocumentInfo) GetSourceType() (v string) {
+	return p.SourceType
+}
+
+func (p *KnowledgeDocumentInfo) GetStatus() (v string) {
+	return p.Status
+}
+
+func (p *KnowledgeDocumentInfo) GetErrorMessage() (v string) {
+	return p.ErrorMessage
+}
+
+func (p *KnowledgeDocumentInfo) GetCreatedAt() (v int64) {
+	return p.CreatedAt
+}
+func (p *KnowledgeDocumentInfo) SetDocumentId(val int64) {
+	p.DocumentId = val
+}
+func (p *KnowledgeDocumentInfo) SetKnowledgeBaseId(val int64) {
+	p.KnowledgeBaseId = val
+}
+func (p *KnowledgeDocumentInfo) SetTitle(val string) {
+	p.Title = val
+}
+func (p *KnowledgeDocumentInfo) SetSourceType(val string) {
+	p.SourceType = val
+}
+func (p *KnowledgeDocumentInfo) SetStatus(val string) {
+	p.Status = val
+}
+func (p *KnowledgeDocumentInfo) SetErrorMessage(val string) {
+	p.ErrorMessage = val
+}
+func (p *KnowledgeDocumentInfo) SetCreatedAt(val int64) {
+	p.CreatedAt = val
+}
+
+func (p *KnowledgeDocumentInfo) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("KnowledgeDocumentInfo(%+v)", *p)
+}
+
+var fieldIDToName_KnowledgeDocumentInfo = map[int16]string{
+	1: "document_id",
+	2: "knowledge_base_id",
+	3: "title",
+	4: "source_type",
+	5: "status",
+	6: "error_message",
+	7: "created_at",
+}
+
+type KnowledgeSearchChunkInfo struct {
+	ChunkId    int64   `thrift:"chunk_id,1" frugal:"1,default,i64" json:"chunk_id"`
+	DocumentId int64   `thrift:"document_id,2" frugal:"2,default,i64" json:"document_id"`
+	Score      float64 `thrift:"score,3" frugal:"3,default,double" json:"score"`
+	Content    string  `thrift:"content,4" frugal:"4,default,string" json:"content"`
+}
+
+func NewKnowledgeSearchChunkInfo() *KnowledgeSearchChunkInfo {
+	return &KnowledgeSearchChunkInfo{}
+}
+
+func (p *KnowledgeSearchChunkInfo) InitDefault() {
+}
+
+func (p *KnowledgeSearchChunkInfo) GetChunkId() (v int64) {
+	return p.ChunkId
+}
+
+func (p *KnowledgeSearchChunkInfo) GetDocumentId() (v int64) {
+	return p.DocumentId
+}
+
+func (p *KnowledgeSearchChunkInfo) GetScore() (v float64) {
+	return p.Score
+}
+
+func (p *KnowledgeSearchChunkInfo) GetContent() (v string) {
+	return p.Content
+}
+func (p *KnowledgeSearchChunkInfo) SetChunkId(val int64) {
+	p.ChunkId = val
+}
+func (p *KnowledgeSearchChunkInfo) SetDocumentId(val int64) {
+	p.DocumentId = val
+}
+func (p *KnowledgeSearchChunkInfo) SetScore(val float64) {
+	p.Score = val
+}
+func (p *KnowledgeSearchChunkInfo) SetContent(val string) {
+	p.Content = val
+}
+
+func (p *KnowledgeSearchChunkInfo) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("KnowledgeSearchChunkInfo(%+v)", *p)
+}
+
+var fieldIDToName_KnowledgeSearchChunkInfo = map[int16]string{
+	1: "chunk_id",
+	2: "document_id",
+	3: "score",
+	4: "content",
+}
+
+type CreateKnowledgeBaseRequest struct {
+	OperatorId  int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	Name        string `thrift:"name,2" frugal:"2,default,string" json:"name"`
+	Description string `thrift:"description,3" frugal:"3,default,string" json:"description"`
+}
+
+func NewCreateKnowledgeBaseRequest() *CreateKnowledgeBaseRequest {
+	return &CreateKnowledgeBaseRequest{}
+}
+
+func (p *CreateKnowledgeBaseRequest) InitDefault() {
+}
+
+func (p *CreateKnowledgeBaseRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *CreateKnowledgeBaseRequest) GetName() (v string) {
+	return p.Name
+}
+
+func (p *CreateKnowledgeBaseRequest) GetDescription() (v string) {
+	return p.Description
+}
+func (p *CreateKnowledgeBaseRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *CreateKnowledgeBaseRequest) SetName(val string) {
+	p.Name = val
+}
+func (p *CreateKnowledgeBaseRequest) SetDescription(val string) {
+	p.Description = val
+}
+
+func (p *CreateKnowledgeBaseRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("CreateKnowledgeBaseRequest(%+v)", *p)
+}
+
+var fieldIDToName_CreateKnowledgeBaseRequest = map[int16]string{
+	1: "operator_id",
+	2: "name",
+	3: "description",
+}
+
+type CreateKnowledgeBaseResponse struct {
+	KnowledgeBase *KnowledgeBaseInfo `thrift:"knowledge_base,1" frugal:"1,default,KnowledgeBaseInfo" json:"knowledge_base"`
+}
+
+func NewCreateKnowledgeBaseResponse() *CreateKnowledgeBaseResponse {
+	return &CreateKnowledgeBaseResponse{}
+}
+
+func (p *CreateKnowledgeBaseResponse) InitDefault() {
+}
+
+var CreateKnowledgeBaseResponse_KnowledgeBase_DEFAULT *KnowledgeBaseInfo
+
+func (p *CreateKnowledgeBaseResponse) GetKnowledgeBase() (v *KnowledgeBaseInfo) {
+	if !p.IsSetKnowledgeBase() {
+		return CreateKnowledgeBaseResponse_KnowledgeBase_DEFAULT
+	}
+	return p.KnowledgeBase
+}
+func (p *CreateKnowledgeBaseResponse) SetKnowledgeBase(val *KnowledgeBaseInfo) {
+	p.KnowledgeBase = val
+}
+
+func (p *CreateKnowledgeBaseResponse) IsSetKnowledgeBase() bool {
+	return p.KnowledgeBase != nil
+}
+
+func (p *CreateKnowledgeBaseResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("CreateKnowledgeBaseResponse(%+v)", *p)
+}
+
+var fieldIDToName_CreateKnowledgeBaseResponse = map[int16]string{
+	1: "knowledge_base",
+}
+
+type AddKnowledgeDocumentTextRequest struct {
+	OperatorId      int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	KnowledgeBaseId int64  `thrift:"knowledge_base_id,2" frugal:"2,default,i64" json:"knowledge_base_id"`
+	Title           string `thrift:"title,3" frugal:"3,default,string" json:"title"`
+	SourceType      string `thrift:"source_type,4" frugal:"4,default,string" json:"source_type"`
+	Content         string `thrift:"content,5" frugal:"5,default,string" json:"content"`
+}
+
+func NewAddKnowledgeDocumentTextRequest() *AddKnowledgeDocumentTextRequest {
+	return &AddKnowledgeDocumentTextRequest{}
+}
+
+func (p *AddKnowledgeDocumentTextRequest) InitDefault() {
+}
+
+func (p *AddKnowledgeDocumentTextRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *AddKnowledgeDocumentTextRequest) GetKnowledgeBaseId() (v int64) {
+	return p.KnowledgeBaseId
+}
+
+func (p *AddKnowledgeDocumentTextRequest) GetTitle() (v string) {
+	return p.Title
+}
+
+func (p *AddKnowledgeDocumentTextRequest) GetSourceType() (v string) {
+	return p.SourceType
+}
+
+func (p *AddKnowledgeDocumentTextRequest) GetContent() (v string) {
+	return p.Content
+}
+func (p *AddKnowledgeDocumentTextRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *AddKnowledgeDocumentTextRequest) SetKnowledgeBaseId(val int64) {
+	p.KnowledgeBaseId = val
+}
+func (p *AddKnowledgeDocumentTextRequest) SetTitle(val string) {
+	p.Title = val
+}
+func (p *AddKnowledgeDocumentTextRequest) SetSourceType(val string) {
+	p.SourceType = val
+}
+func (p *AddKnowledgeDocumentTextRequest) SetContent(val string) {
+	p.Content = val
+}
+
+func (p *AddKnowledgeDocumentTextRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AddKnowledgeDocumentTextRequest(%+v)", *p)
+}
+
+var fieldIDToName_AddKnowledgeDocumentTextRequest = map[int16]string{
+	1: "operator_id",
+	2: "knowledge_base_id",
+	3: "title",
+	4: "source_type",
+	5: "content",
+}
+
+type AddKnowledgeDocumentTextResponse struct {
+	Document *KnowledgeDocumentInfo `thrift:"document,1" frugal:"1,default,KnowledgeDocumentInfo" json:"document"`
+}
+
+func NewAddKnowledgeDocumentTextResponse() *AddKnowledgeDocumentTextResponse {
+	return &AddKnowledgeDocumentTextResponse{}
+}
+
+func (p *AddKnowledgeDocumentTextResponse) InitDefault() {
+}
+
+var AddKnowledgeDocumentTextResponse_Document_DEFAULT *KnowledgeDocumentInfo
+
+func (p *AddKnowledgeDocumentTextResponse) GetDocument() (v *KnowledgeDocumentInfo) {
+	if !p.IsSetDocument() {
+		return AddKnowledgeDocumentTextResponse_Document_DEFAULT
+	}
+	return p.Document
+}
+func (p *AddKnowledgeDocumentTextResponse) SetDocument(val *KnowledgeDocumentInfo) {
+	p.Document = val
+}
+
+func (p *AddKnowledgeDocumentTextResponse) IsSetDocument() bool {
+	return p.Document != nil
+}
+
+func (p *AddKnowledgeDocumentTextResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("AddKnowledgeDocumentTextResponse(%+v)", *p)
+}
+
+var fieldIDToName_AddKnowledgeDocumentTextResponse = map[int16]string{
+	1: "document",
+}
+
+type ListKnowledgeDocumentsRequest struct {
+	OperatorId      int64 `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	KnowledgeBaseId int64 `thrift:"knowledge_base_id,2" frugal:"2,default,i64" json:"knowledge_base_id"`
+}
+
+func NewListKnowledgeDocumentsRequest() *ListKnowledgeDocumentsRequest {
+	return &ListKnowledgeDocumentsRequest{}
+}
+
+func (p *ListKnowledgeDocumentsRequest) InitDefault() {
+}
+
+func (p *ListKnowledgeDocumentsRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *ListKnowledgeDocumentsRequest) GetKnowledgeBaseId() (v int64) {
+	return p.KnowledgeBaseId
+}
+func (p *ListKnowledgeDocumentsRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *ListKnowledgeDocumentsRequest) SetKnowledgeBaseId(val int64) {
+	p.KnowledgeBaseId = val
+}
+
+func (p *ListKnowledgeDocumentsRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListKnowledgeDocumentsRequest(%+v)", *p)
+}
+
+var fieldIDToName_ListKnowledgeDocumentsRequest = map[int16]string{
+	1: "operator_id",
+	2: "knowledge_base_id",
+}
+
+type ListKnowledgeDocumentsResponse struct {
+	Documents []*KnowledgeDocumentInfo `thrift:"documents,1" frugal:"1,default,list<KnowledgeDocumentInfo>" json:"documents"`
+}
+
+func NewListKnowledgeDocumentsResponse() *ListKnowledgeDocumentsResponse {
+	return &ListKnowledgeDocumentsResponse{}
+}
+
+func (p *ListKnowledgeDocumentsResponse) InitDefault() {
+}
+
+func (p *ListKnowledgeDocumentsResponse) GetDocuments() (v []*KnowledgeDocumentInfo) {
+	return p.Documents
+}
+func (p *ListKnowledgeDocumentsResponse) SetDocuments(val []*KnowledgeDocumentInfo) {
+	p.Documents = val
+}
+
+func (p *ListKnowledgeDocumentsResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListKnowledgeDocumentsResponse(%+v)", *p)
+}
+
+var fieldIDToName_ListKnowledgeDocumentsResponse = map[int16]string{
+	1: "documents",
+}
+
+type SearchKnowledgeBaseRequest struct {
+	OperatorId      int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	KnowledgeBaseId int64  `thrift:"knowledge_base_id,2" frugal:"2,default,i64" json:"knowledge_base_id"`
+	Query           string `thrift:"query,3" frugal:"3,default,string" json:"query"`
+	TopK            *int32 `thrift:"top_k,4,optional" frugal:"4,optional,i32" json:"top_k,omitempty"`
+}
+
+func NewSearchKnowledgeBaseRequest() *SearchKnowledgeBaseRequest {
+	return &SearchKnowledgeBaseRequest{}
+}
+
+func (p *SearchKnowledgeBaseRequest) InitDefault() {
+}
+
+func (p *SearchKnowledgeBaseRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *SearchKnowledgeBaseRequest) GetKnowledgeBaseId() (v int64) {
+	return p.KnowledgeBaseId
+}
+
+func (p *SearchKnowledgeBaseRequest) GetQuery() (v string) {
+	return p.Query
+}
+
+var SearchKnowledgeBaseRequest_TopK_DEFAULT int32
+
+func (p *SearchKnowledgeBaseRequest) GetTopK() (v int32) {
+	if !p.IsSetTopK() {
+		return SearchKnowledgeBaseRequest_TopK_DEFAULT
+	}
+	return *p.TopK
+}
+func (p *SearchKnowledgeBaseRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *SearchKnowledgeBaseRequest) SetKnowledgeBaseId(val int64) {
+	p.KnowledgeBaseId = val
+}
+func (p *SearchKnowledgeBaseRequest) SetQuery(val string) {
+	p.Query = val
+}
+func (p *SearchKnowledgeBaseRequest) SetTopK(val *int32) {
+	p.TopK = val
+}
+
+func (p *SearchKnowledgeBaseRequest) IsSetTopK() bool {
+	return p.TopK != nil
+}
+
+func (p *SearchKnowledgeBaseRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SearchKnowledgeBaseRequest(%+v)", *p)
+}
+
+var fieldIDToName_SearchKnowledgeBaseRequest = map[int16]string{
+	1: "operator_id",
+	2: "knowledge_base_id",
+	3: "query",
+	4: "top_k",
+}
+
+type SearchKnowledgeBaseResponse struct {
+	Chunks []*KnowledgeSearchChunkInfo `thrift:"chunks,1" frugal:"1,default,list<KnowledgeSearchChunkInfo>" json:"chunks"`
+}
+
+func NewSearchKnowledgeBaseResponse() *SearchKnowledgeBaseResponse {
+	return &SearchKnowledgeBaseResponse{}
+}
+
+func (p *SearchKnowledgeBaseResponse) InitDefault() {
+}
+
+func (p *SearchKnowledgeBaseResponse) GetChunks() (v []*KnowledgeSearchChunkInfo) {
+	return p.Chunks
+}
+func (p *SearchKnowledgeBaseResponse) SetChunks(val []*KnowledgeSearchChunkInfo) {
+	p.Chunks = val
+}
+
+func (p *SearchKnowledgeBaseResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("SearchKnowledgeBaseResponse(%+v)", *p)
+}
+
+var fieldIDToName_SearchKnowledgeBaseResponse = map[int16]string{
+	1: "chunks",
+}
+
+type ConversationKnowledgeBaseInfo struct {
+	Id              int64  `thrift:"id,1" frugal:"1,default,i64" json:"id"`
+	ConversationId  string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	KnowledgeBaseId int64  `thrift:"knowledge_base_id,3" frugal:"3,default,i64" json:"knowledge_base_id"`
+	Name            string `thrift:"name,4" frugal:"4,default,string" json:"name"`
+	Description     string `thrift:"description,5" frugal:"5,default,string" json:"description"`
+	Status          string `thrift:"status,6" frugal:"6,default,string" json:"status"`
+	Enabled         bool   `thrift:"enabled,7" frugal:"7,default,bool" json:"enabled"`
+}
+
+func NewConversationKnowledgeBaseInfo() *ConversationKnowledgeBaseInfo {
+	return &ConversationKnowledgeBaseInfo{}
+}
+
+func (p *ConversationKnowledgeBaseInfo) InitDefault() {
+}
+
+func (p *ConversationKnowledgeBaseInfo) GetId() (v int64) {
+	return p.Id
+}
+
+func (p *ConversationKnowledgeBaseInfo) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *ConversationKnowledgeBaseInfo) GetKnowledgeBaseId() (v int64) {
+	return p.KnowledgeBaseId
+}
+
+func (p *ConversationKnowledgeBaseInfo) GetName() (v string) {
+	return p.Name
+}
+
+func (p *ConversationKnowledgeBaseInfo) GetDescription() (v string) {
+	return p.Description
+}
+
+func (p *ConversationKnowledgeBaseInfo) GetStatus() (v string) {
+	return p.Status
+}
+
+func (p *ConversationKnowledgeBaseInfo) GetEnabled() (v bool) {
+	return p.Enabled
+}
+func (p *ConversationKnowledgeBaseInfo) SetId(val int64) {
+	p.Id = val
+}
+func (p *ConversationKnowledgeBaseInfo) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *ConversationKnowledgeBaseInfo) SetKnowledgeBaseId(val int64) {
+	p.KnowledgeBaseId = val
+}
+func (p *ConversationKnowledgeBaseInfo) SetName(val string) {
+	p.Name = val
+}
+func (p *ConversationKnowledgeBaseInfo) SetDescription(val string) {
+	p.Description = val
+}
+func (p *ConversationKnowledgeBaseInfo) SetStatus(val string) {
+	p.Status = val
+}
+func (p *ConversationKnowledgeBaseInfo) SetEnabled(val bool) {
+	p.Enabled = val
+}
+
+func (p *ConversationKnowledgeBaseInfo) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ConversationKnowledgeBaseInfo(%+v)", *p)
+}
+
+var fieldIDToName_ConversationKnowledgeBaseInfo = map[int16]string{
+	1: "id",
+	2: "conversation_id",
+	3: "knowledge_base_id",
+	4: "name",
+	5: "description",
+	6: "status",
+	7: "enabled",
+}
+
+type BindConversationKnowledgeBaseRequest struct {
+	OperatorId      int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId  string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	KnowledgeBaseId int64  `thrift:"knowledge_base_id,3" frugal:"3,default,i64" json:"knowledge_base_id"`
+}
+
+func NewBindConversationKnowledgeBaseRequest() *BindConversationKnowledgeBaseRequest {
+	return &BindConversationKnowledgeBaseRequest{}
+}
+
+func (p *BindConversationKnowledgeBaseRequest) InitDefault() {
+}
+
+func (p *BindConversationKnowledgeBaseRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *BindConversationKnowledgeBaseRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *BindConversationKnowledgeBaseRequest) GetKnowledgeBaseId() (v int64) {
+	return p.KnowledgeBaseId
+}
+func (p *BindConversationKnowledgeBaseRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *BindConversationKnowledgeBaseRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *BindConversationKnowledgeBaseRequest) SetKnowledgeBaseId(val int64) {
+	p.KnowledgeBaseId = val
+}
+
+func (p *BindConversationKnowledgeBaseRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("BindConversationKnowledgeBaseRequest(%+v)", *p)
+}
+
+var fieldIDToName_BindConversationKnowledgeBaseRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "knowledge_base_id",
+}
+
+type ListConversationKnowledgeBasesRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+}
+
+func NewListConversationKnowledgeBasesRequest() *ListConversationKnowledgeBasesRequest {
+	return &ListConversationKnowledgeBasesRequest{}
+}
+
+func (p *ListConversationKnowledgeBasesRequest) InitDefault() {
+}
+
+func (p *ListConversationKnowledgeBasesRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *ListConversationKnowledgeBasesRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+func (p *ListConversationKnowledgeBasesRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *ListConversationKnowledgeBasesRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+
+func (p *ListConversationKnowledgeBasesRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListConversationKnowledgeBasesRequest(%+v)", *p)
+}
+
+var fieldIDToName_ListConversationKnowledgeBasesRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+}
+
+type ListConversationKnowledgeBasesResponse struct {
+	KnowledgeBases []*ConversationKnowledgeBaseInfo `thrift:"knowledge_bases,1" frugal:"1,default,list<ConversationKnowledgeBaseInfo>" json:"knowledge_bases"`
+}
+
+func NewListConversationKnowledgeBasesResponse() *ListConversationKnowledgeBasesResponse {
+	return &ListConversationKnowledgeBasesResponse{}
+}
+
+func (p *ListConversationKnowledgeBasesResponse) InitDefault() {
+}
+
+func (p *ListConversationKnowledgeBasesResponse) GetKnowledgeBases() (v []*ConversationKnowledgeBaseInfo) {
+	return p.KnowledgeBases
+}
+func (p *ListConversationKnowledgeBasesResponse) SetKnowledgeBases(val []*ConversationKnowledgeBaseInfo) {
+	p.KnowledgeBases = val
+}
+
+func (p *ListConversationKnowledgeBasesResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListConversationKnowledgeBasesResponse(%+v)", *p)
+}
+
+var fieldIDToName_ListConversationKnowledgeBasesResponse = map[int16]string{
+	1: "knowledge_bases",
+}
+
+type UnbindConversationKnowledgeBaseRequest struct {
+	OperatorId      int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId  string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	KnowledgeBaseId int64  `thrift:"knowledge_base_id,3" frugal:"3,default,i64" json:"knowledge_base_id"`
+}
+
+func NewUnbindConversationKnowledgeBaseRequest() *UnbindConversationKnowledgeBaseRequest {
+	return &UnbindConversationKnowledgeBaseRequest{}
+}
+
+func (p *UnbindConversationKnowledgeBaseRequest) InitDefault() {
+}
+
+func (p *UnbindConversationKnowledgeBaseRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *UnbindConversationKnowledgeBaseRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *UnbindConversationKnowledgeBaseRequest) GetKnowledgeBaseId() (v int64) {
+	return p.KnowledgeBaseId
+}
+func (p *UnbindConversationKnowledgeBaseRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *UnbindConversationKnowledgeBaseRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *UnbindConversationKnowledgeBaseRequest) SetKnowledgeBaseId(val int64) {
+	p.KnowledgeBaseId = val
+}
+
+func (p *UnbindConversationKnowledgeBaseRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("UnbindConversationKnowledgeBaseRequest(%+v)", *p)
+}
+
+var fieldIDToName_UnbindConversationKnowledgeBaseRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "knowledge_base_id",
+}
+
 type ListMessagesResponse struct {
 	Messages []*MessageInfo `thrift:"messages,1" frugal:"1,default,list<MessageInfo>" json:"messages"`
 }
@@ -3307,6 +4095,20 @@ type ChatService interface {
 	RemoveConversationBot(ctx context.Context, req *RemoveConversationBotRequest) (r *CommonResponse, err error)
 
 	ListAICallLogs(ctx context.Context, req *ListAICallLogsRequest) (r *ListAICallLogsResponse, err error)
+
+	CreateKnowledgeBase(ctx context.Context, req *CreateKnowledgeBaseRequest) (r *CreateKnowledgeBaseResponse, err error)
+
+	AddKnowledgeDocumentText(ctx context.Context, req *AddKnowledgeDocumentTextRequest) (r *AddKnowledgeDocumentTextResponse, err error)
+
+	ListKnowledgeDocuments(ctx context.Context, req *ListKnowledgeDocumentsRequest) (r *ListKnowledgeDocumentsResponse, err error)
+
+	SearchKnowledgeBase(ctx context.Context, req *SearchKnowledgeBaseRequest) (r *SearchKnowledgeBaseResponse, err error)
+
+	BindConversationKnowledgeBase(ctx context.Context, req *BindConversationKnowledgeBaseRequest) (r *CommonResponse, err error)
+
+	ListConversationKnowledgeBases(ctx context.Context, req *ListConversationKnowledgeBasesRequest) (r *ListConversationKnowledgeBasesResponse, err error)
+
+	UnbindConversationKnowledgeBase(ctx context.Context, req *UnbindConversationKnowledgeBaseRequest) (r *CommonResponse, err error)
 
 	CreateMessage(ctx context.Context, req *CreateMessageRequest) (r *CreateMessageResponse, err error)
 
@@ -5286,6 +6088,538 @@ func (p *ChatServiceListAICallLogsResult) String() string {
 }
 
 var fieldIDToName_ChatServiceListAICallLogsResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceCreateKnowledgeBaseArgs struct {
+	Req *CreateKnowledgeBaseRequest `thrift:"req,1" frugal:"1,default,CreateKnowledgeBaseRequest" json:"req"`
+}
+
+func NewChatServiceCreateKnowledgeBaseArgs() *ChatServiceCreateKnowledgeBaseArgs {
+	return &ChatServiceCreateKnowledgeBaseArgs{}
+}
+
+func (p *ChatServiceCreateKnowledgeBaseArgs) InitDefault() {
+}
+
+var ChatServiceCreateKnowledgeBaseArgs_Req_DEFAULT *CreateKnowledgeBaseRequest
+
+func (p *ChatServiceCreateKnowledgeBaseArgs) GetReq() (v *CreateKnowledgeBaseRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceCreateKnowledgeBaseArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceCreateKnowledgeBaseArgs) SetReq(val *CreateKnowledgeBaseRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceCreateKnowledgeBaseArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceCreateKnowledgeBaseArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceCreateKnowledgeBaseArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceCreateKnowledgeBaseArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceCreateKnowledgeBaseResult struct {
+	Success *CreateKnowledgeBaseResponse `thrift:"success,0,optional" frugal:"0,optional,CreateKnowledgeBaseResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceCreateKnowledgeBaseResult() *ChatServiceCreateKnowledgeBaseResult {
+	return &ChatServiceCreateKnowledgeBaseResult{}
+}
+
+func (p *ChatServiceCreateKnowledgeBaseResult) InitDefault() {
+}
+
+var ChatServiceCreateKnowledgeBaseResult_Success_DEFAULT *CreateKnowledgeBaseResponse
+
+func (p *ChatServiceCreateKnowledgeBaseResult) GetSuccess() (v *CreateKnowledgeBaseResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceCreateKnowledgeBaseResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceCreateKnowledgeBaseResult) SetSuccess(x interface{}) {
+	p.Success = x.(*CreateKnowledgeBaseResponse)
+}
+
+func (p *ChatServiceCreateKnowledgeBaseResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceCreateKnowledgeBaseResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceCreateKnowledgeBaseResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceCreateKnowledgeBaseResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceAddKnowledgeDocumentTextArgs struct {
+	Req *AddKnowledgeDocumentTextRequest `thrift:"req,1" frugal:"1,default,AddKnowledgeDocumentTextRequest" json:"req"`
+}
+
+func NewChatServiceAddKnowledgeDocumentTextArgs() *ChatServiceAddKnowledgeDocumentTextArgs {
+	return &ChatServiceAddKnowledgeDocumentTextArgs{}
+}
+
+func (p *ChatServiceAddKnowledgeDocumentTextArgs) InitDefault() {
+}
+
+var ChatServiceAddKnowledgeDocumentTextArgs_Req_DEFAULT *AddKnowledgeDocumentTextRequest
+
+func (p *ChatServiceAddKnowledgeDocumentTextArgs) GetReq() (v *AddKnowledgeDocumentTextRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceAddKnowledgeDocumentTextArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceAddKnowledgeDocumentTextArgs) SetReq(val *AddKnowledgeDocumentTextRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceAddKnowledgeDocumentTextArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceAddKnowledgeDocumentTextArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceAddKnowledgeDocumentTextArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceAddKnowledgeDocumentTextArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceAddKnowledgeDocumentTextResult struct {
+	Success *AddKnowledgeDocumentTextResponse `thrift:"success,0,optional" frugal:"0,optional,AddKnowledgeDocumentTextResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceAddKnowledgeDocumentTextResult() *ChatServiceAddKnowledgeDocumentTextResult {
+	return &ChatServiceAddKnowledgeDocumentTextResult{}
+}
+
+func (p *ChatServiceAddKnowledgeDocumentTextResult) InitDefault() {
+}
+
+var ChatServiceAddKnowledgeDocumentTextResult_Success_DEFAULT *AddKnowledgeDocumentTextResponse
+
+func (p *ChatServiceAddKnowledgeDocumentTextResult) GetSuccess() (v *AddKnowledgeDocumentTextResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceAddKnowledgeDocumentTextResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceAddKnowledgeDocumentTextResult) SetSuccess(x interface{}) {
+	p.Success = x.(*AddKnowledgeDocumentTextResponse)
+}
+
+func (p *ChatServiceAddKnowledgeDocumentTextResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceAddKnowledgeDocumentTextResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceAddKnowledgeDocumentTextResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceAddKnowledgeDocumentTextResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceListKnowledgeDocumentsArgs struct {
+	Req *ListKnowledgeDocumentsRequest `thrift:"req,1" frugal:"1,default,ListKnowledgeDocumentsRequest" json:"req"`
+}
+
+func NewChatServiceListKnowledgeDocumentsArgs() *ChatServiceListKnowledgeDocumentsArgs {
+	return &ChatServiceListKnowledgeDocumentsArgs{}
+}
+
+func (p *ChatServiceListKnowledgeDocumentsArgs) InitDefault() {
+}
+
+var ChatServiceListKnowledgeDocumentsArgs_Req_DEFAULT *ListKnowledgeDocumentsRequest
+
+func (p *ChatServiceListKnowledgeDocumentsArgs) GetReq() (v *ListKnowledgeDocumentsRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceListKnowledgeDocumentsArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceListKnowledgeDocumentsArgs) SetReq(val *ListKnowledgeDocumentsRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceListKnowledgeDocumentsArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceListKnowledgeDocumentsArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListKnowledgeDocumentsArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListKnowledgeDocumentsArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceListKnowledgeDocumentsResult struct {
+	Success *ListKnowledgeDocumentsResponse `thrift:"success,0,optional" frugal:"0,optional,ListKnowledgeDocumentsResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceListKnowledgeDocumentsResult() *ChatServiceListKnowledgeDocumentsResult {
+	return &ChatServiceListKnowledgeDocumentsResult{}
+}
+
+func (p *ChatServiceListKnowledgeDocumentsResult) InitDefault() {
+}
+
+var ChatServiceListKnowledgeDocumentsResult_Success_DEFAULT *ListKnowledgeDocumentsResponse
+
+func (p *ChatServiceListKnowledgeDocumentsResult) GetSuccess() (v *ListKnowledgeDocumentsResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceListKnowledgeDocumentsResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceListKnowledgeDocumentsResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ListKnowledgeDocumentsResponse)
+}
+
+func (p *ChatServiceListKnowledgeDocumentsResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceListKnowledgeDocumentsResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListKnowledgeDocumentsResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListKnowledgeDocumentsResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceSearchKnowledgeBaseArgs struct {
+	Req *SearchKnowledgeBaseRequest `thrift:"req,1" frugal:"1,default,SearchKnowledgeBaseRequest" json:"req"`
+}
+
+func NewChatServiceSearchKnowledgeBaseArgs() *ChatServiceSearchKnowledgeBaseArgs {
+	return &ChatServiceSearchKnowledgeBaseArgs{}
+}
+
+func (p *ChatServiceSearchKnowledgeBaseArgs) InitDefault() {
+}
+
+var ChatServiceSearchKnowledgeBaseArgs_Req_DEFAULT *SearchKnowledgeBaseRequest
+
+func (p *ChatServiceSearchKnowledgeBaseArgs) GetReq() (v *SearchKnowledgeBaseRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceSearchKnowledgeBaseArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceSearchKnowledgeBaseArgs) SetReq(val *SearchKnowledgeBaseRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceSearchKnowledgeBaseArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceSearchKnowledgeBaseArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceSearchKnowledgeBaseArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceSearchKnowledgeBaseArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceSearchKnowledgeBaseResult struct {
+	Success *SearchKnowledgeBaseResponse `thrift:"success,0,optional" frugal:"0,optional,SearchKnowledgeBaseResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceSearchKnowledgeBaseResult() *ChatServiceSearchKnowledgeBaseResult {
+	return &ChatServiceSearchKnowledgeBaseResult{}
+}
+
+func (p *ChatServiceSearchKnowledgeBaseResult) InitDefault() {
+}
+
+var ChatServiceSearchKnowledgeBaseResult_Success_DEFAULT *SearchKnowledgeBaseResponse
+
+func (p *ChatServiceSearchKnowledgeBaseResult) GetSuccess() (v *SearchKnowledgeBaseResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceSearchKnowledgeBaseResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceSearchKnowledgeBaseResult) SetSuccess(x interface{}) {
+	p.Success = x.(*SearchKnowledgeBaseResponse)
+}
+
+func (p *ChatServiceSearchKnowledgeBaseResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceSearchKnowledgeBaseResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceSearchKnowledgeBaseResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceSearchKnowledgeBaseResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceBindConversationKnowledgeBaseArgs struct {
+	Req *BindConversationKnowledgeBaseRequest `thrift:"req,1" frugal:"1,default,BindConversationKnowledgeBaseRequest" json:"req"`
+}
+
+func NewChatServiceBindConversationKnowledgeBaseArgs() *ChatServiceBindConversationKnowledgeBaseArgs {
+	return &ChatServiceBindConversationKnowledgeBaseArgs{}
+}
+
+func (p *ChatServiceBindConversationKnowledgeBaseArgs) InitDefault() {
+}
+
+var ChatServiceBindConversationKnowledgeBaseArgs_Req_DEFAULT *BindConversationKnowledgeBaseRequest
+
+func (p *ChatServiceBindConversationKnowledgeBaseArgs) GetReq() (v *BindConversationKnowledgeBaseRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceBindConversationKnowledgeBaseArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceBindConversationKnowledgeBaseArgs) SetReq(val *BindConversationKnowledgeBaseRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceBindConversationKnowledgeBaseArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceBindConversationKnowledgeBaseArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceBindConversationKnowledgeBaseArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceBindConversationKnowledgeBaseArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceBindConversationKnowledgeBaseResult struct {
+	Success *CommonResponse `thrift:"success,0,optional" frugal:"0,optional,CommonResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceBindConversationKnowledgeBaseResult() *ChatServiceBindConversationKnowledgeBaseResult {
+	return &ChatServiceBindConversationKnowledgeBaseResult{}
+}
+
+func (p *ChatServiceBindConversationKnowledgeBaseResult) InitDefault() {
+}
+
+var ChatServiceBindConversationKnowledgeBaseResult_Success_DEFAULT *CommonResponse
+
+func (p *ChatServiceBindConversationKnowledgeBaseResult) GetSuccess() (v *CommonResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceBindConversationKnowledgeBaseResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceBindConversationKnowledgeBaseResult) SetSuccess(x interface{}) {
+	p.Success = x.(*CommonResponse)
+}
+
+func (p *ChatServiceBindConversationKnowledgeBaseResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceBindConversationKnowledgeBaseResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceBindConversationKnowledgeBaseResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceBindConversationKnowledgeBaseResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceListConversationKnowledgeBasesArgs struct {
+	Req *ListConversationKnowledgeBasesRequest `thrift:"req,1" frugal:"1,default,ListConversationKnowledgeBasesRequest" json:"req"`
+}
+
+func NewChatServiceListConversationKnowledgeBasesArgs() *ChatServiceListConversationKnowledgeBasesArgs {
+	return &ChatServiceListConversationKnowledgeBasesArgs{}
+}
+
+func (p *ChatServiceListConversationKnowledgeBasesArgs) InitDefault() {
+}
+
+var ChatServiceListConversationKnowledgeBasesArgs_Req_DEFAULT *ListConversationKnowledgeBasesRequest
+
+func (p *ChatServiceListConversationKnowledgeBasesArgs) GetReq() (v *ListConversationKnowledgeBasesRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceListConversationKnowledgeBasesArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceListConversationKnowledgeBasesArgs) SetReq(val *ListConversationKnowledgeBasesRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceListConversationKnowledgeBasesArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceListConversationKnowledgeBasesArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListConversationKnowledgeBasesArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListConversationKnowledgeBasesArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceListConversationKnowledgeBasesResult struct {
+	Success *ListConversationKnowledgeBasesResponse `thrift:"success,0,optional" frugal:"0,optional,ListConversationKnowledgeBasesResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceListConversationKnowledgeBasesResult() *ChatServiceListConversationKnowledgeBasesResult {
+	return &ChatServiceListConversationKnowledgeBasesResult{}
+}
+
+func (p *ChatServiceListConversationKnowledgeBasesResult) InitDefault() {
+}
+
+var ChatServiceListConversationKnowledgeBasesResult_Success_DEFAULT *ListConversationKnowledgeBasesResponse
+
+func (p *ChatServiceListConversationKnowledgeBasesResult) GetSuccess() (v *ListConversationKnowledgeBasesResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceListConversationKnowledgeBasesResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceListConversationKnowledgeBasesResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ListConversationKnowledgeBasesResponse)
+}
+
+func (p *ChatServiceListConversationKnowledgeBasesResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceListConversationKnowledgeBasesResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListConversationKnowledgeBasesResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListConversationKnowledgeBasesResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceUnbindConversationKnowledgeBaseArgs struct {
+	Req *UnbindConversationKnowledgeBaseRequest `thrift:"req,1" frugal:"1,default,UnbindConversationKnowledgeBaseRequest" json:"req"`
+}
+
+func NewChatServiceUnbindConversationKnowledgeBaseArgs() *ChatServiceUnbindConversationKnowledgeBaseArgs {
+	return &ChatServiceUnbindConversationKnowledgeBaseArgs{}
+}
+
+func (p *ChatServiceUnbindConversationKnowledgeBaseArgs) InitDefault() {
+}
+
+var ChatServiceUnbindConversationKnowledgeBaseArgs_Req_DEFAULT *UnbindConversationKnowledgeBaseRequest
+
+func (p *ChatServiceUnbindConversationKnowledgeBaseArgs) GetReq() (v *UnbindConversationKnowledgeBaseRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceUnbindConversationKnowledgeBaseArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceUnbindConversationKnowledgeBaseArgs) SetReq(val *UnbindConversationKnowledgeBaseRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceUnbindConversationKnowledgeBaseArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceUnbindConversationKnowledgeBaseArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUnbindConversationKnowledgeBaseArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUnbindConversationKnowledgeBaseArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceUnbindConversationKnowledgeBaseResult struct {
+	Success *CommonResponse `thrift:"success,0,optional" frugal:"0,optional,CommonResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceUnbindConversationKnowledgeBaseResult() *ChatServiceUnbindConversationKnowledgeBaseResult {
+	return &ChatServiceUnbindConversationKnowledgeBaseResult{}
+}
+
+func (p *ChatServiceUnbindConversationKnowledgeBaseResult) InitDefault() {
+}
+
+var ChatServiceUnbindConversationKnowledgeBaseResult_Success_DEFAULT *CommonResponse
+
+func (p *ChatServiceUnbindConversationKnowledgeBaseResult) GetSuccess() (v *CommonResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceUnbindConversationKnowledgeBaseResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceUnbindConversationKnowledgeBaseResult) SetSuccess(x interface{}) {
+	p.Success = x.(*CommonResponse)
+}
+
+func (p *ChatServiceUnbindConversationKnowledgeBaseResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceUnbindConversationKnowledgeBaseResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUnbindConversationKnowledgeBaseResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUnbindConversationKnowledgeBaseResult = map[int16]string{
 	0: "success",
 }
 

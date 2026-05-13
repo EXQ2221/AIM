@@ -1076,6 +1076,338 @@ func ListAICallLogs(ctx *gin.Context) {
 	})
 }
 
+func CreateKnowledgeBase(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	var req model.CreateKnowledgeBaseRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, 400, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		writeError(ctx, 400, "name is required")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+	resp, err := client.CreateKnowledgeBase(ctx.Request.Context(), &chatpb.CreateKnowledgeBaseRequest{
+		OperatorId:  authCtx.UserID,
+		Name:        req.Name,
+		Description: req.Description,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if resp.KnowledgeBase == nil {
+		writeError(ctx, 500, "knowledge base creation failed")
+		return
+	}
+	writeJSON(ctx, 200, model.APIResponse{
+		Code:    0,
+		Message: "success",
+		Data: model.KnowledgeBaseInfo{
+			KnowledgeBaseID: resp.KnowledgeBase.KnowledgeBaseId,
+			Name:            resp.KnowledgeBase.Name,
+			Description:     resp.KnowledgeBase.Description,
+			Status:          resp.KnowledgeBase.Status,
+		},
+	})
+}
+
+func AddKnowledgeDocumentText(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	kbIDValue := strings.TrimSpace(ctx.Param("knowledgeBaseId"))
+	kbID, err := strconv.ParseInt(kbIDValue, 10, 64)
+	if err != nil || kbID <= 0 {
+		writeError(ctx, 400, "invalid knowledgeBaseId")
+		return
+	}
+
+	var req model.AddKnowledgeDocumentTextRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, 400, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Title) == "" {
+		writeError(ctx, 400, "title is required")
+		return
+	}
+	if strings.TrimSpace(req.Content) == "" {
+		writeError(ctx, 400, "content is required")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+	resp, err := client.AddKnowledgeDocumentText(ctx.Request.Context(), &chatpb.AddKnowledgeDocumentTextRequest{
+		OperatorId:      authCtx.UserID,
+		KnowledgeBaseId: kbID,
+		Title:           req.Title,
+		SourceType:      req.SourceType,
+		Content:         req.Content,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if resp.Document == nil {
+		writeError(ctx, 500, "document creation failed")
+		return
+	}
+	writeJSON(ctx, 200, model.APIResponse{
+		Code:    0,
+		Message: "success",
+		Data: model.KnowledgeDocumentInfo{
+			DocumentID:      resp.Document.DocumentId,
+			KnowledgeBaseID: resp.Document.KnowledgeBaseId,
+			Title:           resp.Document.Title,
+			SourceType:      resp.Document.SourceType,
+			Status:          resp.Document.Status,
+			ErrorMessage:    resp.Document.ErrorMessage,
+			CreatedAt:       resp.Document.CreatedAt,
+		},
+	})
+}
+
+func ListKnowledgeDocuments(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	kbIDValue := strings.TrimSpace(ctx.Param("knowledgeBaseId"))
+	kbID, err := strconv.ParseInt(kbIDValue, 10, 64)
+	if err != nil || kbID <= 0 {
+		writeError(ctx, 400, "invalid knowledgeBaseId")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+	resp, err := client.ListKnowledgeDocuments(ctx.Request.Context(), &chatpb.ListKnowledgeDocumentsRequest{
+		OperatorId:      authCtx.UserID,
+		KnowledgeBaseId: kbID,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+
+	docs := make([]model.KnowledgeDocumentInfo, 0, len(resp.Documents))
+	for _, item := range resp.Documents {
+		docs = append(docs, model.KnowledgeDocumentInfo{
+			DocumentID:      item.DocumentId,
+			KnowledgeBaseID: item.KnowledgeBaseId,
+			Title:           item.Title,
+			SourceType:      item.SourceType,
+			Status:          item.Status,
+			ErrorMessage:    item.ErrorMessage,
+			CreatedAt:       item.CreatedAt,
+		})
+	}
+	writeJSON(ctx, 200, model.APIResponse{
+		Code:    0,
+		Message: "success",
+		Data:    docs,
+	})
+}
+
+func SearchKnowledgeBase(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	kbIDValue := strings.TrimSpace(ctx.Param("knowledgeBaseId"))
+	kbID, err := strconv.ParseInt(kbIDValue, 10, 64)
+	if err != nil || kbID <= 0 {
+		writeError(ctx, 400, "invalid knowledgeBaseId")
+		return
+	}
+
+	var req model.SearchKnowledgeBaseRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, 400, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Query) == "" {
+		writeError(ctx, 400, "query is required")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+	resp, err := client.SearchKnowledgeBase(ctx.Request.Context(), &chatpb.SearchKnowledgeBaseRequest{
+		OperatorId:      authCtx.UserID,
+		KnowledgeBaseId: kbID,
+		Query:           req.Query,
+		TopK:            req.TopK,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+
+	chunks := make([]model.KnowledgeSearchChunkInfo, 0, len(resp.Chunks))
+	for _, item := range resp.Chunks {
+		chunks = append(chunks, model.KnowledgeSearchChunkInfo{
+			ChunkID:    item.ChunkId,
+			DocumentID: item.DocumentId,
+			Score:      item.Score,
+			Content:    item.Content,
+		})
+	}
+	writeJSON(ctx, 200, model.APIResponse{
+		Code:    0,
+		Message: "success",
+		Data:    chunks,
+	})
+}
+
+func BindConversationKnowledgeBase(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+	var req model.BindConversationKnowledgeBaseRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, 400, "invalid request body")
+		return
+	}
+	if req.KnowledgeBaseID <= 0 {
+		writeError(ctx, 400, "knowledgeBaseId is required")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+	resp, err := client.BindConversationKnowledgeBase(ctx.Request.Context(), &chatpb.BindConversationKnowledgeBaseRequest{
+		OperatorId:      authCtx.UserID,
+		ConversationId:  conversationID,
+		KnowledgeBaseId: req.KnowledgeBaseID,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+}
+
+func ListConversationKnowledgeBases(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+	resp, err := client.ListConversationKnowledgeBases(ctx.Request.Context(), &chatpb.ListConversationKnowledgeBasesRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+
+	items := make([]model.ConversationKnowledgeBaseInfo, 0, len(resp.KnowledgeBases))
+	for _, item := range resp.KnowledgeBases {
+		items = append(items, model.ConversationKnowledgeBaseInfo{
+			ID:              item.Id,
+			ConversationID:  item.ConversationId,
+			KnowledgeBaseID: item.KnowledgeBaseId,
+			Name:            item.Name,
+			Description:     item.Description,
+			Status:          item.Status,
+			Enabled:         item.Enabled,
+		})
+	}
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success", Data: items})
+}
+
+func UnbindConversationKnowledgeBase(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+	kbIDValue := strings.TrimSpace(ctx.Param("knowledgeBaseId"))
+	kbID, err := strconv.ParseInt(kbIDValue, 10, 64)
+	if err != nil || kbID <= 0 {
+		writeError(ctx, 400, "invalid knowledgeBaseId")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+	resp, err := client.UnbindConversationKnowledgeBase(ctx.Request.Context(), &chatpb.UnbindConversationKnowledgeBaseRequest{
+		OperatorId:      authCtx.UserID,
+		ConversationId:  conversationID,
+		KnowledgeBaseId: kbID,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+}
+
 func conversationIDParam(ctx *gin.Context) (string, bool) {
 	value := strings.TrimSpace(ctx.Param("conversationId"))
 	if value == "" {

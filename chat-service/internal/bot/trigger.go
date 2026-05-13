@@ -1,4 +1,4 @@
-﻿package bot
+package bot
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"example.com/aim/chat-service/internal/dal/model"
 )
 
-const fallbackQuestion = "璇烽棶浣犻渶瑕佹垜甯綘鍋氫粈涔堬紵"
+const fallbackQuestion = "\u8bf7\u8bf4\u660e\u4f60\u5e0c\u671b AI \u5e2e\u4f60\u5b8c\u6210\u4ec0\u4e48\u3002"
 
 func ShouldTriggerBot(msg model.Message) bool {
 	if msg.SenderType != model.SenderTypeUser {
@@ -34,4 +34,3 @@ func ExtractQuestion(content string) string {
 	}
 	return trimmed
 }
-

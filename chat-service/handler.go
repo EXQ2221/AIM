@@ -175,3 +175,45 @@ func (s *ChatServiceImpl) FindSingleByUsers(ctx context.Context, req *chat.FindS
 	// TODO: Your code here...
 	return
 }
+
+// CreateKnowledgeBase implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) CreateKnowledgeBase(ctx context.Context, req *chat.CreateKnowledgeBaseRequest) (resp *chat.CreateKnowledgeBaseResponse, err error) {
+	// TODO: Your code here...
+	return
+}
+
+// AddKnowledgeDocumentText implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) AddKnowledgeDocumentText(ctx context.Context, req *chat.AddKnowledgeDocumentTextRequest) (resp *chat.AddKnowledgeDocumentTextResponse, err error) {
+	// TODO: Your code here...
+	return
+}
+
+// ListKnowledgeDocuments implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) ListKnowledgeDocuments(ctx context.Context, req *chat.ListKnowledgeDocumentsRequest) (resp *chat.ListKnowledgeDocumentsResponse, err error) {
+	// TODO: Your code here...
+	return
+}
+
+// SearchKnowledgeBase implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) SearchKnowledgeBase(ctx context.Context, req *chat.SearchKnowledgeBaseRequest) (resp *chat.SearchKnowledgeBaseResponse, err error) {
+	// TODO: Your code here...
+	return
+}
+
+// BindConversationKnowledgeBase implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) BindConversationKnowledgeBase(ctx context.Context, req *chat.BindConversationKnowledgeBaseRequest) (resp *chat.CommonResponse, err error) {
+	// TODO: Your code here...
+	return
+}
+
+// ListConversationKnowledgeBases implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) ListConversationKnowledgeBases(ctx context.Context, req *chat.ListConversationKnowledgeBasesRequest) (resp *chat.ListConversationKnowledgeBasesResponse, err error) {
+	// TODO: Your code here...
+	return
+}
+
+// UnbindConversationKnowledgeBase implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) UnbindConversationKnowledgeBase(ctx context.Context, req *chat.UnbindConversationKnowledgeBaseRequest) (resp *chat.CommonResponse, err error) {
+	// TODO: Your code here...
+	return
+}

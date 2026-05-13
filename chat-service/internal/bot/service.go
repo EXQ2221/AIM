@@ -1,4 +1,4 @@
-﻿package bot
+package bot
 
 import (
 	"context"
@@ -50,6 +50,24 @@ type Service struct {
 	AICallLogRepo       repository.AICallLogRepository
 	ReplyPublisher      ReplyPublisher
 	UserClient          rpc.UserClient
+	RAGSearcher         RAGSearcher
+	RAGTopK             int
+}
+
+type RAGChunk struct {
+	Index   int
+	Content string
+	Score   float64
+}
+
+type RAGSearchRequest struct {
+	ConversationID uint64
+	Question       string
+	TopK           int
+}
+
+type RAGSearcher interface {
+	SearchForConversation(ctx context.Context, req RAGSearchRequest) ([]RAGChunk, error)
 }
 
 func NewService(
@@ -112,6 +130,20 @@ func (s *Service) SetUserClient(userClient rpc.UserClient) {
 	s.UserClient = userClient
 }
 
+func (s *Service) SetRAGSearcher(searcher RAGSearcher) {
+	s.RAGSearcher = searcher
+}
+
+func (s *Service) SetRAGTopK(topK int) {
+	if topK <= 0 {
+		return
+	}
+	if topK > 10 {
+		topK = 10
+	}
+	s.RAGTopK = topK
+}
+
 func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) error {
 	if s == nil {
 		return errors.New("bot service is nil")
@@ -148,10 +180,6 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	if resolved == nil {
 		return nil
 	}
-	if resolved.ConversationBot.PermissionScope != model.BotScopeConversationOnly {
-		return nil
-	}
-
 	release, err := s.acquireConcurrencySlot(req.ConversationID, req, resolved.Bot)
 	if err != nil {
 		return err
@@ -179,7 +207,33 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	}
 	recentMessages = filterBotVisibleMessages(recentMessages)
 	userDisplayNames := s.resolveUserDisplayNames(ctx, recentMessages, req.UserID)
-	prompt := BuildPrompt(recentMessages, req.Content, contextLimit, userDisplayNames, req.UserID)
+	question := ExtractQuestion(req.Content)
+	scope := resolved.ConversationBot.PermissionScope
+	if scope == "" {
+		scope = model.BotScopeConversationOnly
+	}
+	ragTopK := s.RAGTopK
+	if ragTopK <= 0 {
+		ragTopK = 5
+	}
+	ragChunks, ragErr := s.searchRAGChunks(ctx, scope, req.ConversationID, question, ragTopK)
+	if ragErr != nil {
+		log.Printf("rag search failed: conversation=%d bot=%d scope=%s err=%v", req.ConversationID, resolved.Bot.ID, scope, ragErr)
+		if scope == model.BotScopeKnowledgeBaseOnly {
+			if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, "\u77e5\u8bc6\u5e93\u68c0\u7d22\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5"); replyErr != nil {
+				return replyErr
+			}
+			_ = s.createFailedLog(ctx, req, resolved.Bot, modelName, ragErr, 0)
+			return nil
+		}
+	}
+	prompt := BuildPromptWithRAG(recentMessages, req.Content, contextLimit, userDisplayNames, req.UserID, scope, ragChunks)
+	if scope == model.BotScopeKnowledgeBaseOnly && len(ragChunks) == 0 {
+		if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, "\u5f53\u524d\u4f1a\u8bdd\u672a\u7ed1\u5b9a\u77e5\u8bc6\u5e93\uff0c\u65e0\u6cd5\u57fa\u4e8e\u77e5\u8bc6\u5e93\u56de\u7b54\u3002"); replyErr != nil {
+			return replyErr
+		}
+		return nil
+	}
 	systemPrompt := strings.TrimSpace(resolved.Bot.SystemPrompt)
 	if systemPrompt == "" {
 		systemPrompt = DefaultSystemPrompt
@@ -236,7 +290,7 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 		}
 		var statusErr *llm.HTTPStatusError
 		if errors.As(err, &statusErr) {
-			if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, "璋冪敤閿欒锛岃绋嶅悗鍐嶈瘯"); replyErr != nil {
+			if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, "\u6a21\u578b\u8c03\u7528\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002"); replyErr != nil {
 				return fmt.Errorf("create bot failure reply error: %w; llm error: %v", replyErr, err)
 			}
 			return nil
@@ -259,6 +313,27 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 		return err
 	}
 	return s.createSuccessLog(ctx, req, resolved.Bot, modelName, botMessage.ID, resp, latencyMS)
+}
+
+func (s *Service) searchRAGChunks(ctx context.Context, scope model.BotPermissionScope, conversationID uint64, question string, topK int) ([]RAGChunk, error) {
+	if scope == model.BotScopeConversationOnly {
+		return nil, nil
+	}
+	if strings.TrimSpace(question) == "" {
+		return nil, nil
+	}
+	if s.RAGSearcher == nil {
+		return nil, nil
+	}
+	chunks, err := s.RAGSearcher.SearchForConversation(ctx, RAGSearchRequest{
+		ConversationID: conversationID,
+		Question:       question,
+		TopK:           topK,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return chunks, nil
 }
 
 func (s *Service) resolveTargetBot(ctx context.Context, conversationID uint64, content string) (*resolvedBot, error) {
@@ -685,4 +760,3 @@ func fetchAndEncodeImageToDataURL(ctx context.Context, sourceURL string) (string
 }
 
 var _ MentionHandler = (*Service)(nil)
-

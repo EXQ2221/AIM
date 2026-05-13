@@ -368,6 +368,136 @@ func (h *ChatServiceImpl) ListAICallLogs(ctx context.Context, req *chatpb.ListAI
 	}, nil
 }
 
+func (h *ChatServiceImpl) CreateKnowledgeBase(ctx context.Context, req *chatpb.CreateKnowledgeBaseRequest) (*chatpb.CreateKnowledgeBaseResponse, error) {
+	item, err := h.Service.CreateKnowledgeBase(ctx, biz.CreateKnowledgeBaseInput{
+		OperatorID:  uint64(req.OperatorId),
+		Name:        req.Name,
+		Description: req.Description,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &chatpb.CreateKnowledgeBaseResponse{
+		KnowledgeBase: &chatpb.KnowledgeBaseInfo{
+			KnowledgeBaseId: int64(item.KnowledgeBaseID),
+			Name:            item.Name,
+			Description:     item.Description,
+			Status:          item.Status,
+		},
+	}, nil
+}
+
+func (h *ChatServiceImpl) AddKnowledgeDocumentText(ctx context.Context, req *chatpb.AddKnowledgeDocumentTextRequest) (*chatpb.AddKnowledgeDocumentTextResponse, error) {
+	item, err := h.Service.AddKnowledgeDocumentText(ctx, biz.AddKnowledgeDocumentTextInput{
+		OperatorID:      uint64(req.OperatorId),
+		KnowledgeBaseID: uint64(req.KnowledgeBaseId),
+		Title:           req.Title,
+		SourceType:      req.SourceType,
+		Content:         req.Content,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &chatpb.AddKnowledgeDocumentTextResponse{
+		Document: &chatpb.KnowledgeDocumentInfo{
+			DocumentId:      int64(item.DocumentID),
+			KnowledgeBaseId: int64(item.KnowledgeBaseID),
+			Title:           item.Title,
+			SourceType:      item.SourceType,
+			Status:          item.Status,
+			ErrorMessage:    item.ErrorMessage,
+			CreatedAt:       item.CreatedAt,
+		},
+	}, nil
+}
+
+func (h *ChatServiceImpl) ListKnowledgeDocuments(ctx context.Context, req *chatpb.ListKnowledgeDocumentsRequest) (*chatpb.ListKnowledgeDocumentsResponse, error) {
+	items, err := h.Service.ListKnowledgeDocuments(ctx, biz.ListKnowledgeDocumentsInput{
+		OperatorID:      uint64(req.OperatorId),
+		KnowledgeBaseID: uint64(req.KnowledgeBaseId),
+	})
+	if err != nil {
+		return nil, err
+	}
+	docs := make([]*chatpb.KnowledgeDocumentInfo, 0, len(items))
+	for _, item := range items {
+		docs = append(docs, &chatpb.KnowledgeDocumentInfo{
+			DocumentId:      int64(item.DocumentID),
+			KnowledgeBaseId: int64(item.KnowledgeBaseID),
+			Title:           item.Title,
+			SourceType:      item.SourceType,
+			Status:          item.Status,
+			ErrorMessage:    item.ErrorMessage,
+			CreatedAt:       item.CreatedAt,
+		})
+	}
+	return &chatpb.ListKnowledgeDocumentsResponse{Documents: docs}, nil
+}
+
+func (h *ChatServiceImpl) SearchKnowledgeBase(ctx context.Context, req *chatpb.SearchKnowledgeBaseRequest) (*chatpb.SearchKnowledgeBaseResponse, error) {
+	items, err := h.Service.SearchKnowledgeBase(ctx, biz.SearchKnowledgeBaseInput{
+		OperatorID:      uint64(req.OperatorId),
+		KnowledgeBaseID: uint64(req.KnowledgeBaseId),
+		Query:           req.Query,
+		TopK:            req.TopK,
+	})
+	if err != nil {
+		return nil, err
+	}
+	chunks := make([]*chatpb.KnowledgeSearchChunkInfo, 0, len(items))
+	for _, item := range items {
+		chunks = append(chunks, &chatpb.KnowledgeSearchChunkInfo{
+			ChunkId:    int64(item.ChunkID),
+			DocumentId: int64(item.DocumentID),
+			Score:      item.Score,
+			Content:    item.Content,
+		})
+	}
+	return &chatpb.SearchKnowledgeBaseResponse{Chunks: chunks}, nil
+}
+
+func (h *ChatServiceImpl) BindConversationKnowledgeBase(ctx context.Context, req *chatpb.BindConversationKnowledgeBaseRequest) (*chatpb.CommonResponse, error) {
+	if err := h.Service.BindConversationKnowledgeBase(ctx, biz.BindConversationKnowledgeBaseInput{
+		OperatorID:      uint64(req.OperatorId),
+		ConversationID:  req.ConversationId,
+		KnowledgeBaseID: uint64(req.KnowledgeBaseId),
+	}); err != nil {
+		return &chatpb.CommonResponse{Success: false, Message: err.Error()}, nil
+	}
+	return &chatpb.CommonResponse{Success: true, Message: "ok"}, nil
+}
+
+func (h *ChatServiceImpl) ListConversationKnowledgeBases(ctx context.Context, req *chatpb.ListConversationKnowledgeBasesRequest) (*chatpb.ListConversationKnowledgeBasesResponse, error) {
+	items, err := h.Service.ListConversationKnowledgeBases(ctx, uint64(req.OperatorId), req.ConversationId)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*chatpb.ConversationKnowledgeBaseInfo, 0, len(items))
+	for _, item := range items {
+		result = append(result, &chatpb.ConversationKnowledgeBaseInfo{
+			Id:              int64(item.ID),
+			ConversationId:  item.ConversationID,
+			KnowledgeBaseId: int64(item.KnowledgeBaseID),
+			Name:            item.Name,
+			Description:     item.Description,
+			Status:          item.Status,
+			Enabled:         item.Enabled,
+		})
+	}
+	return &chatpb.ListConversationKnowledgeBasesResponse{KnowledgeBases: result}, nil
+}
+
+func (h *ChatServiceImpl) UnbindConversationKnowledgeBase(ctx context.Context, req *chatpb.UnbindConversationKnowledgeBaseRequest) (*chatpb.CommonResponse, error) {
+	if err := h.Service.UnbindConversationKnowledgeBase(ctx, biz.UnbindConversationKnowledgeBaseInput{
+		OperatorID:      uint64(req.OperatorId),
+		ConversationID:  req.ConversationId,
+		KnowledgeBaseID: uint64(req.KnowledgeBaseId),
+	}); err != nil {
+		return &chatpb.CommonResponse{Success: false, Message: err.Error()}, nil
+	}
+	return &chatpb.CommonResponse{Success: true, Message: "ok"}, nil
+}
+
 func (h *ChatServiceImpl) CreateMessage(ctx context.Context, req *chatpb.CreateMessageRequest) (*chatpb.CreateMessageResponse, error) {
 	var replyToID *uint64
 	if req.ReplyToId != nil {

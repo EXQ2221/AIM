@@ -6,7 +6,7 @@ export type ToastState = {
 export type ToastTone = "success" | "error" | "info";
 export type AuthMode = "login" | "register";
 export type WsStatus = "connecting" | "open" | "closed";
-export type DetailTab = "friends" | "members" | "bots" | "logs" | "account";
+export type DetailTab = "friends" | "members" | "bots" | "knowledge" | "logs" | "account";
 export type BrowserNotificationStatus = NotificationPermission | "unsupported";
 
 export type PendingMessageEntry = {

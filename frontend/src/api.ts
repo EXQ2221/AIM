@@ -3,12 +3,16 @@ import type {
   APIResponse,
   AuthSessionResponse,
   BotInfo,
+  ConversationKnowledgeBaseInfo,
   ConversationInfo,
   FriendGroupInfo,
   FriendInfo,
   FriendRequestInfo,
   FriendRequestResponse,
   GroupInfo,
+  KnowledgeBaseInfo,
+  KnowledgeDocumentInfo,
+  KnowledgeSearchChunkInfo,
   MemberInfo,
   MessageInfo,
   SessionInfo,
@@ -339,6 +343,57 @@ export const api = {
     if (options.status) params.set("status", options.status);
     return request<AICallLogListResponse>(
       `/api/v1/conversations/${encodeURIComponent(conversationId)}/ai-call-logs?${params.toString()}`
+    );
+  },
+  createKnowledgeBase(input: { name: string; description: string }) {
+    return request<KnowledgeBaseInfo>("/api/v1/knowledge-bases", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  },
+  addKnowledgeDocumentText(
+    knowledgeBaseId: number,
+    input: { title: string; sourceType: "TEXT" | "MARKDOWN"; content: string }
+  ) {
+    return request<KnowledgeDocumentInfo>(
+      `/api/v1/knowledge-bases/${encodeURIComponent(String(knowledgeBaseId))}/documents/text`,
+      {
+        method: "POST",
+        body: JSON.stringify(input)
+      }
+    );
+  },
+  listKnowledgeDocuments(knowledgeBaseId: number) {
+    return request<KnowledgeDocumentInfo[]>(
+      `/api/v1/knowledge-bases/${encodeURIComponent(String(knowledgeBaseId))}/documents`
+    );
+  },
+  searchKnowledgeBase(knowledgeBaseId: number, input: { query: string; topK?: number }) {
+    return request<KnowledgeSearchChunkInfo[]>(
+      `/api/v1/knowledge-bases/${encodeURIComponent(String(knowledgeBaseId))}/search`,
+      {
+        method: "POST",
+        body: JSON.stringify(input)
+      }
+    );
+  },
+  bindConversationKnowledgeBase(conversationId: string, knowledgeBaseId: number) {
+    return request<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/knowledge-bases`, {
+      method: "POST",
+      body: JSON.stringify({ knowledgeBaseId })
+    });
+  },
+  listConversationKnowledgeBases(conversationId: string) {
+    return request<ConversationKnowledgeBaseInfo[]>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/knowledge-bases`
+    );
+  },
+  unbindConversationKnowledgeBase(conversationId: string, knowledgeBaseId: number) {
+    return request<void>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/knowledge-bases/${encodeURIComponent(String(knowledgeBaseId))}`,
+      {
+        method: "DELETE"
+      }
     );
   }
 };

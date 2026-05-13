@@ -32,8 +32,8 @@ import {
   FormEvent,
   KeyboardEvent,
   type ChangeEvent,
-  useCallback,
   useEffect,
+  useCallback,
   useMemo,
   useRef,
   useState
@@ -70,11 +70,15 @@ import type {
   AICallLogInfo,
   AICallLogQuotaInfo,
   BotInfo,
+  ConversationKnowledgeBaseInfo,
   ConversationInfo,
   FriendGroupInfo,
   FriendInfo,
   FriendRequestInfo,
   GroupInfo,
+  KnowledgeBaseInfo,
+  KnowledgeDocumentInfo,
+  KnowledgeSearchChunkInfo,
   MemberInfo,
   MessageInfo,
   MobilePane,
@@ -151,6 +155,12 @@ function App() {
   });
   const [loadingAICallLogs, setLoadingAICallLogs] = useState(false);
   const [aiCallLogStatus, setAICallLogStatus] = useState<"" | "SUCCESS" | "FAILED">("");
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseInfo[]>([]);
+  const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] = useState<number | null>(null);
+  const [knowledgeDocuments, setKnowledgeDocuments] = useState<KnowledgeDocumentInfo[]>([]);
+  const [knowledgeSearchChunks, setKnowledgeSearchChunks] = useState<KnowledgeSearchChunkInfo[]>([]);
+  const [conversationKnowledgeBases, setConversationKnowledgeBases] = useState<ConversationKnowledgeBaseInfo[]>([]);
+  const [loadingKnowledge, setLoadingKnowledge] = useState(false);
 
   const selectedConversationIdRef = useRef<string | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
@@ -519,6 +529,195 @@ function App() {
     showToast
   });
 
+  const refreshConversationKnowledgeBases = useCallback(async () => {
+    if (!selectedConversationId) {
+      setConversationKnowledgeBases([]);
+      return [];
+    }
+    const data = await api.listConversationKnowledgeBases(selectedConversationId);
+    setConversationKnowledgeBases(data);
+    setKnowledgeBases((current) => {
+      const map = new Map<number, KnowledgeBaseInfo>();
+      for (const item of current) {
+        map.set(item.knowledgeBaseId, item);
+      }
+      for (const item of data) {
+        map.set(item.knowledgeBaseId, {
+          knowledgeBaseId: item.knowledgeBaseId,
+          name: item.name,
+          description: item.description,
+          status: item.status
+        });
+      }
+      return Array.from(map.values());
+    });
+    return data;
+  }, [selectedConversationId]);
+
+  const refreshKnowledgeDocuments = useCallback(async () => {
+    if (!selectedKnowledgeBaseId) {
+      setKnowledgeDocuments([]);
+      return [];
+    }
+    const data = await api.listKnowledgeDocuments(selectedKnowledgeBaseId);
+    setKnowledgeDocuments(data);
+    return data;
+  }, [selectedKnowledgeBaseId]);
+
+  const loadKnowledgePanelData = useCallback(async () => {
+    setLoadingKnowledge(true);
+    try {
+      const tasks: Array<Promise<unknown>> = [];
+      if (selectedConversationId) {
+        tasks.push(refreshConversationKnowledgeBases());
+      } else {
+        setConversationKnowledgeBases([]);
+      }
+      if (selectedKnowledgeBaseId) {
+        tasks.push(refreshKnowledgeDocuments());
+      } else {
+        setKnowledgeDocuments([]);
+      }
+      await Promise.all(tasks);
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+    } finally {
+      setLoadingKnowledge(false);
+    }
+  }, [refreshConversationKnowledgeBases, refreshKnowledgeDocuments, selectedConversationId, selectedKnowledgeBaseId, showToast]);
+
+  useEffect(() => {
+    if (detailTab !== "knowledge") {
+      return;
+    }
+    void loadKnowledgePanelData();
+  }, [detailTab, loadKnowledgePanelData]);
+
+  useEffect(() => {
+    if (!selectedConversationId) {
+      setConversationKnowledgeBases([]);
+      return;
+    }
+    if (detailTab === "knowledge") {
+      void refreshConversationKnowledgeBases();
+    }
+  }, [detailTab, refreshConversationKnowledgeBases, selectedConversationId]);
+
+  useEffect(() => {
+    if (!selectedKnowledgeBaseId) {
+      setKnowledgeDocuments([]);
+      setKnowledgeSearchChunks([]);
+      return;
+    }
+    if (detailTab === "knowledge") {
+      void refreshKnowledgeDocuments();
+    }
+  }, [detailTab, refreshKnowledgeDocuments, selectedKnowledgeBaseId]);
+
+  const handleCreateKnowledgeBase = async (input: { name: string; description: string }) => {
+    setBusyAction(true);
+    try {
+      const created = await api.createKnowledgeBase(input);
+      setKnowledgeBases((current) => {
+        const map = new Map<number, KnowledgeBaseInfo>();
+        for (const item of current) {
+          map.set(item.knowledgeBaseId, item);
+        }
+        map.set(created.knowledgeBaseId, created);
+        return Array.from(map.values());
+      });
+      setSelectedKnowledgeBaseId(created.knowledgeBaseId);
+      showToast("知识库创建成功", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+      throw error;
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleAddKnowledgeDocument = async (input: {
+    knowledgeBaseId: number;
+    title: string;
+    sourceType: "TEXT" | "MARKDOWN";
+    content: string;
+  }) => {
+    setBusyAction(true);
+    try {
+      await api.addKnowledgeDocumentText(input.knowledgeBaseId, {
+        title: input.title,
+        sourceType: input.sourceType,
+        content: input.content
+      });
+      if (selectedKnowledgeBaseId === input.knowledgeBaseId) {
+        await refreshKnowledgeDocuments();
+      }
+      showToast("文档导入成功", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+      throw error;
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleSearchKnowledgeBase = async (input: { knowledgeBaseId: number; query: string; topK: number }) => {
+    setBusyAction(true);
+    try {
+      const data = await api.searchKnowledgeBase(input.knowledgeBaseId, {
+        query: input.query,
+        topK: input.topK
+      });
+      setKnowledgeSearchChunks(data);
+    } catch (error) {
+      setKnowledgeSearchChunks([]);
+      showToast(errorMessage(error), "error");
+      throw error;
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleBindConversationKnowledgeBase = async (knowledgeBaseId: number) => {
+    if (!selectedConversationId) return;
+    setBusyAction(true);
+    try {
+      await api.bindConversationKnowledgeBase(selectedConversationId, knowledgeBaseId);
+      await refreshConversationKnowledgeBases();
+      showToast("已绑定知识库", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+      throw error;
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleUnbindConversationKnowledgeBase = async (knowledgeBaseId: number) => {
+    if (!selectedConversationId) return;
+    setBusyAction(true);
+    try {
+      await api.unbindConversationKnowledgeBase(selectedConversationId, knowledgeBaseId);
+      await refreshConversationKnowledgeBases();
+      showToast("已解绑知识库", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+      throw error;
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedKnowledgeBaseId) {
+      return;
+    }
+    const first = conversationKnowledgeBases[0];
+    if (first) {
+      setSelectedKnowledgeBaseId(first.knowledgeBaseId);
+    }
+  }, [conversationKnowledgeBases, selectedKnowledgeBaseId]);
+
   if (booting) {
     return (
       <div className="boot-screen">
@@ -592,7 +791,12 @@ function App() {
       />
 
       <DetailPanel
-        active={mobilePane === "friends" || mobilePane === "members" || mobilePane === "bots" || mobilePane === "account"}
+        active={
+          mobilePane === "friends" ||
+          mobilePane === "members" ||
+          mobilePane === "bots" ||
+          mobilePane === "account"
+        }
         tab={detailTab}
         user={user}
         friendGroups={friendGroups}
@@ -616,6 +820,12 @@ function App() {
         aiCallLogQuota={aiCallLogQuota}
         loadingAICallLogs={loadingAICallLogs}
         aiCallLogStatus={aiCallLogStatus}
+        knowledgeBases={knowledgeBases}
+        selectedKnowledgeBaseId={selectedKnowledgeBaseId}
+        knowledgeDocuments={knowledgeDocuments}
+        knowledgeSearchChunks={knowledgeSearchChunks}
+        conversationKnowledgeBases={conversationKnowledgeBases}
+        loadingKnowledge={loadingKnowledge}
         onTabChange={setDetailTab}
         onCreateFriendGroup={handleCreateFriendGroup}
         onAddFriend={handleAddFriend}
@@ -641,6 +851,13 @@ function App() {
         onRemoveBot={handleRemoveBot}
         onAICallLogStatusChange={setAICallLogStatus}
         onRefreshAICallLogs={refreshAICallLogs}
+        onSelectKnowledgeBase={setSelectedKnowledgeBaseId}
+        onCreateKnowledgeBase={handleCreateKnowledgeBase}
+        onAddKnowledgeDocument={handleAddKnowledgeDocument}
+        onSearchKnowledgeBase={handleSearchKnowledgeBase}
+        onBindConversationKnowledgeBase={handleBindConversationKnowledgeBase}
+        onUnbindConversationKnowledgeBase={handleUnbindConversationKnowledgeBase}
+        onRefreshKnowledgePanelData={loadKnowledgePanelData}
         onMention={handleMention}
         onClose={() => setMobilePane(selectedConversation ? "chat" : "conversations")}
       />

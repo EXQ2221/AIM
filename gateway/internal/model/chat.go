@@ -171,3 +171,57 @@ type AICallLogListResponse struct {
 	Logs  []AICallLogInfo    `json:"logs"`
 	Quota AICallLogQuotaInfo `json:"quota"`
 }
+
+type CreateKnowledgeBaseRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type KnowledgeBaseInfo struct {
+	KnowledgeBaseID int64  `json:"knowledgeBaseId"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	Status          string `json:"status"`
+}
+
+type AddKnowledgeDocumentTextRequest struct {
+	Title      string `json:"title"`
+	SourceType string `json:"sourceType"`
+	Content    string `json:"content"`
+}
+
+type KnowledgeDocumentInfo struct {
+	DocumentID      int64  `json:"documentId"`
+	KnowledgeBaseID int64  `json:"knowledgeBaseId"`
+	Title           string `json:"title"`
+	SourceType      string `json:"sourceType"`
+	Status          string `json:"status"`
+	ErrorMessage    string `json:"errorMessage"`
+	CreatedAt       int64  `json:"createdAt"`
+}
+
+type SearchKnowledgeBaseRequest struct {
+	Query string `json:"query"`
+	TopK  *int32 `json:"topK,omitempty"`
+}
+
+type KnowledgeSearchChunkInfo struct {
+	ChunkID    int64   `json:"chunkId"`
+	DocumentID int64   `json:"documentId"`
+	Score      float64 `json:"score"`
+	Content    string  `json:"content"`
+}
+
+type BindConversationKnowledgeBaseRequest struct {
+	KnowledgeBaseID int64 `json:"knowledgeBaseId"`
+}
+
+type ConversationKnowledgeBaseInfo struct {
+	ID              int64  `json:"id"`
+	ConversationID  string `json:"conversationId"`
+	KnowledgeBaseID int64  `json:"knowledgeBaseId"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	Status          string `json:"status"`
+	Enabled         bool   `json:"enabled"`
+}

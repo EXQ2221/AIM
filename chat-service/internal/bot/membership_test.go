@@ -391,6 +391,15 @@ func (r *fakeBotRepo) WithTx(tx *gorm.DB) repository.BotRepository {
 	return r
 }
 
+func (r *fakeBotRepo) Create(ctx context.Context, bot *model.Bot) error {
+	if r.bots == nil {
+		r.bots = make(map[uint64]*model.Bot)
+	}
+	botCopy := *bot
+	r.bots[bot.ID] = &botCopy
+	return nil
+}
+
 func (r *fakeBotRepo) GetByID(ctx context.Context, id uint64) (*model.Bot, error) {
 	if bot, ok := r.bots[id]; ok {
 		return bot, nil
@@ -398,6 +407,19 @@ func (r *fakeBotRepo) GetByID(ctx context.Context, id uint64) (*model.Bot, error
 	return nil, gorm.ErrRecordNotFound
 }
 
+func (r *fakeBotRepo) ListEnabledByOwner(ctx context.Context, ownerID uint64) ([]model.Bot, error) {
+	result := make([]model.Bot, 0, len(r.bots))
+	for _, item := range r.bots {
+		if item.Status == "" || item.Status == model.BotStatusEnabled {
+			if item.CreatedBy == 0 || item.CreatedBy == ownerID {
+				result = append(result, *item)
+			}
+		}
+	}
+	return result, nil
+}
+
+// Keep compatibility for older tests that might call the old helper.
 func (r *fakeBotRepo) ListEnabled(ctx context.Context) ([]model.Bot, error) {
 	result := make([]model.Bot, 0, len(r.bots))
 	for _, item := range r.bots {

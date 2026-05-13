@@ -299,3 +299,37 @@ export type AICallLogListResponse = {
   logs: AICallLogInfo[];
   quota: AICallLogQuotaInfo;
 };
+
+export type KnowledgeBaseInfo = {
+  knowledgeBaseId: number;
+  name: string;
+  description: string;
+  status: string;
+};
+
+export type KnowledgeDocumentInfo = {
+  documentId: number;
+  knowledgeBaseId: number;
+  title: string;
+  sourceType: string;
+  status: string;
+  errorMessage: string;
+  createdAt: number;
+};
+
+export type KnowledgeSearchChunkInfo = {
+  chunkId: number;
+  documentId: number;
+  score: number;
+  content: string;
+};
+
+export type ConversationKnowledgeBaseInfo = {
+  id: number;
+  conversationId: string;
+  knowledgeBaseId: number;
+  name: string;
+  description: string;
+  status: string;
+  enabled: boolean;
+};

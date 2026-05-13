@@ -267,6 +267,10 @@ select:focus {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.tabs-six {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
 .field {
   display: grid;
   gap: 7px;
@@ -1379,6 +1383,63 @@ select:focus {
   display: grid;
   align-content: start;
   gap: 2px;
+}
+
+.knowledge-body {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.kb-card {
+  margin: 0 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f7faf8;
+  display: grid;
+  gap: 8px;
+}
+
+.kb-list {
+  display: grid;
+  gap: 8px;
+}
+
+.kb-row {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.kb-row p {
+  margin: 0;
+  color: #3f4d49;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.kb-empty {
+  color: #6a7f78;
+  font-size: 12px;
+}
+
+.kb-bind-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.kb-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6a7f78;
+  font-size: 12px;
 }
 
 .log-body {

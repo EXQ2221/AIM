@@ -195,6 +195,55 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"CreateKnowledgeBase": kitex.NewMethodInfo(
+		createKnowledgeBaseHandler,
+		newChatServiceCreateKnowledgeBaseArgs,
+		newChatServiceCreateKnowledgeBaseResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"AddKnowledgeDocumentText": kitex.NewMethodInfo(
+		addKnowledgeDocumentTextHandler,
+		newChatServiceAddKnowledgeDocumentTextArgs,
+		newChatServiceAddKnowledgeDocumentTextResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ListKnowledgeDocuments": kitex.NewMethodInfo(
+		listKnowledgeDocumentsHandler,
+		newChatServiceListKnowledgeDocumentsArgs,
+		newChatServiceListKnowledgeDocumentsResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"SearchKnowledgeBase": kitex.NewMethodInfo(
+		searchKnowledgeBaseHandler,
+		newChatServiceSearchKnowledgeBaseArgs,
+		newChatServiceSearchKnowledgeBaseResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"BindConversationKnowledgeBase": kitex.NewMethodInfo(
+		bindConversationKnowledgeBaseHandler,
+		newChatServiceBindConversationKnowledgeBaseArgs,
+		newChatServiceBindConversationKnowledgeBaseResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ListConversationKnowledgeBases": kitex.NewMethodInfo(
+		listConversationKnowledgeBasesHandler,
+		newChatServiceListConversationKnowledgeBasesArgs,
+		newChatServiceListConversationKnowledgeBasesResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"UnbindConversationKnowledgeBase": kitex.NewMethodInfo(
+		unbindConversationKnowledgeBaseHandler,
+		newChatServiceUnbindConversationKnowledgeBaseArgs,
+		newChatServiceUnbindConversationKnowledgeBaseResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"CreateMessage": kitex.NewMethodInfo(
 		createMessageHandler,
 		newChatServiceCreateMessageArgs,
@@ -743,6 +792,132 @@ func newChatServiceListAICallLogsResult() interface{} {
 	return chat.NewChatServiceListAICallLogsResult()
 }
 
+func createKnowledgeBaseHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceCreateKnowledgeBaseArgs)
+	realResult := result.(*chat.ChatServiceCreateKnowledgeBaseResult)
+	success, err := handler.(chat.ChatService).CreateKnowledgeBase(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceCreateKnowledgeBaseArgs() interface{} {
+	return chat.NewChatServiceCreateKnowledgeBaseArgs()
+}
+
+func newChatServiceCreateKnowledgeBaseResult() interface{} {
+	return chat.NewChatServiceCreateKnowledgeBaseResult()
+}
+
+func addKnowledgeDocumentTextHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceAddKnowledgeDocumentTextArgs)
+	realResult := result.(*chat.ChatServiceAddKnowledgeDocumentTextResult)
+	success, err := handler.(chat.ChatService).AddKnowledgeDocumentText(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceAddKnowledgeDocumentTextArgs() interface{} {
+	return chat.NewChatServiceAddKnowledgeDocumentTextArgs()
+}
+
+func newChatServiceAddKnowledgeDocumentTextResult() interface{} {
+	return chat.NewChatServiceAddKnowledgeDocumentTextResult()
+}
+
+func listKnowledgeDocumentsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceListKnowledgeDocumentsArgs)
+	realResult := result.(*chat.ChatServiceListKnowledgeDocumentsResult)
+	success, err := handler.(chat.ChatService).ListKnowledgeDocuments(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceListKnowledgeDocumentsArgs() interface{} {
+	return chat.NewChatServiceListKnowledgeDocumentsArgs()
+}
+
+func newChatServiceListKnowledgeDocumentsResult() interface{} {
+	return chat.NewChatServiceListKnowledgeDocumentsResult()
+}
+
+func searchKnowledgeBaseHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceSearchKnowledgeBaseArgs)
+	realResult := result.(*chat.ChatServiceSearchKnowledgeBaseResult)
+	success, err := handler.(chat.ChatService).SearchKnowledgeBase(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceSearchKnowledgeBaseArgs() interface{} {
+	return chat.NewChatServiceSearchKnowledgeBaseArgs()
+}
+
+func newChatServiceSearchKnowledgeBaseResult() interface{} {
+	return chat.NewChatServiceSearchKnowledgeBaseResult()
+}
+
+func bindConversationKnowledgeBaseHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceBindConversationKnowledgeBaseArgs)
+	realResult := result.(*chat.ChatServiceBindConversationKnowledgeBaseResult)
+	success, err := handler.(chat.ChatService).BindConversationKnowledgeBase(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceBindConversationKnowledgeBaseArgs() interface{} {
+	return chat.NewChatServiceBindConversationKnowledgeBaseArgs()
+}
+
+func newChatServiceBindConversationKnowledgeBaseResult() interface{} {
+	return chat.NewChatServiceBindConversationKnowledgeBaseResult()
+}
+
+func listConversationKnowledgeBasesHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceListConversationKnowledgeBasesArgs)
+	realResult := result.(*chat.ChatServiceListConversationKnowledgeBasesResult)
+	success, err := handler.(chat.ChatService).ListConversationKnowledgeBases(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceListConversationKnowledgeBasesArgs() interface{} {
+	return chat.NewChatServiceListConversationKnowledgeBasesArgs()
+}
+
+func newChatServiceListConversationKnowledgeBasesResult() interface{} {
+	return chat.NewChatServiceListConversationKnowledgeBasesResult()
+}
+
+func unbindConversationKnowledgeBaseHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceUnbindConversationKnowledgeBaseArgs)
+	realResult := result.(*chat.ChatServiceUnbindConversationKnowledgeBaseResult)
+	success, err := handler.(chat.ChatService).UnbindConversationKnowledgeBase(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceUnbindConversationKnowledgeBaseArgs() interface{} {
+	return chat.NewChatServiceUnbindConversationKnowledgeBaseArgs()
+}
+
+func newChatServiceUnbindConversationKnowledgeBaseResult() interface{} {
+	return chat.NewChatServiceUnbindConversationKnowledgeBaseResult()
+}
+
 func createMessageHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	realArg := arg.(*chat.ChatServiceCreateMessageArgs)
 	realResult := result.(*chat.ChatServiceCreateMessageResult)
@@ -1044,6 +1219,76 @@ func (p *kClient) ListAICallLogs(ctx context.Context, req *chat.ListAICallLogsRe
 	_args.Req = req
 	var _result chat.ChatServiceListAICallLogsResult
 	if err = p.c.Call(ctx, "ListAICallLogs", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) CreateKnowledgeBase(ctx context.Context, req *chat.CreateKnowledgeBaseRequest) (r *chat.CreateKnowledgeBaseResponse, err error) {
+	var _args chat.ChatServiceCreateKnowledgeBaseArgs
+	_args.Req = req
+	var _result chat.ChatServiceCreateKnowledgeBaseResult
+	if err = p.c.Call(ctx, "CreateKnowledgeBase", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) AddKnowledgeDocumentText(ctx context.Context, req *chat.AddKnowledgeDocumentTextRequest) (r *chat.AddKnowledgeDocumentTextResponse, err error) {
+	var _args chat.ChatServiceAddKnowledgeDocumentTextArgs
+	_args.Req = req
+	var _result chat.ChatServiceAddKnowledgeDocumentTextResult
+	if err = p.c.Call(ctx, "AddKnowledgeDocumentText", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListKnowledgeDocuments(ctx context.Context, req *chat.ListKnowledgeDocumentsRequest) (r *chat.ListKnowledgeDocumentsResponse, err error) {
+	var _args chat.ChatServiceListKnowledgeDocumentsArgs
+	_args.Req = req
+	var _result chat.ChatServiceListKnowledgeDocumentsResult
+	if err = p.c.Call(ctx, "ListKnowledgeDocuments", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) SearchKnowledgeBase(ctx context.Context, req *chat.SearchKnowledgeBaseRequest) (r *chat.SearchKnowledgeBaseResponse, err error) {
+	var _args chat.ChatServiceSearchKnowledgeBaseArgs
+	_args.Req = req
+	var _result chat.ChatServiceSearchKnowledgeBaseResult
+	if err = p.c.Call(ctx, "SearchKnowledgeBase", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) BindConversationKnowledgeBase(ctx context.Context, req *chat.BindConversationKnowledgeBaseRequest) (r *chat.CommonResponse, err error) {
+	var _args chat.ChatServiceBindConversationKnowledgeBaseArgs
+	_args.Req = req
+	var _result chat.ChatServiceBindConversationKnowledgeBaseResult
+	if err = p.c.Call(ctx, "BindConversationKnowledgeBase", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListConversationKnowledgeBases(ctx context.Context, req *chat.ListConversationKnowledgeBasesRequest) (r *chat.ListConversationKnowledgeBasesResponse, err error) {
+	var _args chat.ChatServiceListConversationKnowledgeBasesArgs
+	_args.Req = req
+	var _result chat.ChatServiceListConversationKnowledgeBasesResult
+	if err = p.c.Call(ctx, "ListConversationKnowledgeBases", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) UnbindConversationKnowledgeBase(ctx context.Context, req *chat.UnbindConversationKnowledgeBaseRequest) (r *chat.CommonResponse, err error) {
+	var _args chat.ChatServiceUnbindConversationKnowledgeBaseArgs
+	_args.Req = req
+	var _result chat.ChatServiceUnbindConversationKnowledgeBaseResult
+	if err = p.c.Call(ctx, "UnbindConversationKnowledgeBase", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

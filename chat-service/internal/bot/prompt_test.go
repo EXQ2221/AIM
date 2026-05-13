@@ -6,17 +6,18 @@ import (
 	"testing"
 
 	"example.com/aim/chat-service/internal/dal/model"
+	"gorm.io/datatypes"
 )
 
 func TestBuildPromptWithEmptyMessages(t *testing.T) {
-	prompt := BuildPrompt(nil, "@AIM 你好", 20, nil, 10001)
-	if !strings.Contains(prompt, "暂无最近消息") {
+	prompt := BuildPrompt(nil, "@AIM \u4f60\u597d", 20, nil, 10001)
+	if !strings.Contains(prompt, "\u6682\u65e0\u6700\u8fd1\u6d88\u606f") {
 		t.Fatalf("expected empty context text, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "当前提问用户：用户10001") {
+	if !strings.Contains(prompt, "\u3010\u5f53\u524d\u63d0\u95ee\u7528\u6237\u3011\u7528\u623710001") {
 		t.Fatalf("expected current user fallback label, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "当前用户问题：你好") {
+	if !strings.Contains(prompt, "\u3010\u7528\u6237\u95ee\u9898\u3011\u4f60\u597d") {
 		t.Fatalf("expected extracted question, got %q", prompt)
 	}
 }
@@ -28,12 +29,12 @@ func TestBuildPromptLimitsRecentMessages(t *testing.T) {
 			SenderID:    uint64(i),
 			SenderType:  model.SenderTypeUser,
 			MessageType: model.MessageTypeText,
-			Content:     fmt.Sprintf(`{"text":"message-%d"}`, i),
+			Content:     datatypes.JSON(fmt.Sprintf(`{"text":"message-%d"}`, i)),
 		})
 	}
 
 	prompt := BuildPrompt(messages, "@AIM summarize", 20, nil, 25)
-	if strings.Contains(prompt, "[用户1]: message-1") || strings.Contains(prompt, "[用户5]: message-5") {
+	if strings.Contains(prompt, "[\u7528\u62371]: message-1") || strings.Contains(prompt, "[\u7528\u62375]: message-5") {
 		t.Fatalf("prompt kept messages outside the limit: %q", prompt)
 	}
 	if !strings.Contains(prompt, "message-6") || !strings.Contains(prompt, "message-25") {
@@ -43,21 +44,21 @@ func TestBuildPromptLimitsRecentMessages(t *testing.T) {
 
 func TestBuildPromptFormatsSenders(t *testing.T) {
 	prompt := BuildPrompt([]model.Message{
-		{SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"user text"}`},
-		{SenderID: 10002, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: `{"url":"https://cdn.example.com/a.png","name":"a.png","size":123,"mimeType":"image/png","width":640,"height":480}`},
-		{SenderID: 1, SenderType: model.SenderTypeBot, MessageType: model.MessageTypeBotReply, Content: "bot text"},
+		{SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"user text"}`)},
+		{SenderID: 10002, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: datatypes.JSON(`{"url":"https://cdn.example.com/a.png","name":"a.png","size":123,"mimeType":"image/png","width":640,"height":480}`)},
+		{SenderID: 1, SenderType: model.SenderTypeBot, MessageType: model.MessageTypeBotReply, Content: datatypes.JSON(`{"text":"bot text"}`)},
 	}, "@AIM next", 20, map[uint64]string{10001: "Alice"}, 10001)
 
 	if !strings.Contains(prompt, "[Alice]: user text") {
 		t.Fatalf("missing user line: %q", prompt)
 	}
-	if !strings.Contains(prompt, "[用户10002]: [图片]") {
+	if !strings.Contains(prompt, "[\u7528\u623710002]: [\u56fe\u7247]") {
 		t.Fatalf("missing image placeholder line: %q", prompt)
 	}
 	if !strings.Contains(prompt, "[AIM]: bot text") {
 		t.Fatalf("missing bot line: %q", prompt)
 	}
-	if !strings.Contains(prompt, "当前提问用户：Alice") {
+	if !strings.Contains(prompt, "\u3010\u5f53\u524d\u63d0\u95ee\u7528\u6237\u3011Alice") {
 		t.Fatalf("missing current user display name: %q", prompt)
 	}
 }

@@ -15,8 +15,10 @@ import (
 	"example.com/aim/chat-service/internal/bot"
 	"example.com/aim/chat-service/internal/dal/model"
 	pgstore "example.com/aim/chat-service/internal/dal/postgres"
+	"example.com/aim/chat-service/internal/embedding"
 	"example.com/aim/chat-service/internal/handler"
 	"example.com/aim/chat-service/internal/llm"
+	"example.com/aim/chat-service/internal/rag"
 	"example.com/aim/chat-service/internal/repository"
 	"example.com/aim/chat-service/internal/rpc"
 	"example.com/aim/chat-service/kitex_gen/chat/chatservice"
@@ -50,6 +52,7 @@ func main() {
 	memberRepo := repository.NewMemberRepository(db)
 	botRepo := repository.NewBotRepository(db)
 	conversationBotRepo := repository.NewConversationBotRepository(db)
+	ragRepo := repository.NewRAGRepository(db)
 	messageRepo := repository.NewMessageRepository(db)
 	aiCallLogRepo := repository.NewAICallLogRepository(db)
 	redisClient := newRedisClient(context.Background(), strings.TrimSpace(os.Getenv("REDIS_ADDR")))
@@ -72,7 +75,10 @@ func main() {
 		conversationBotRepo,
 		bot.NewMembershipService(repository.NewTxManager(db), conversationRepo, memberRepo, botRepo, conversationBotRepo),
 	)
-	if botService := newBotServiceFromEnv(messageRepo, conversationRepo, memberRepo, botRepo, conversationBotRepo, aiCallLogRepo, redisClient, userClient); botService != nil {
+	if ragService := newRAGServiceFromEnv(ragRepo); ragService != nil {
+		chatService.SetRAGService(ragService)
+	}
+	if botService := newBotServiceFromEnv(messageRepo, conversationRepo, memberRepo, botRepo, conversationBotRepo, ragRepo, aiCallLogRepo, redisClient, userClient); botService != nil {
 		chatService.SetBotService(botService)
 	}
 
@@ -125,6 +131,7 @@ func newBotServiceFromEnv(
 	memberRepo repository.MemberRepository,
 	botRepo repository.BotRepository,
 	conversationBotRepo repository.ConversationBotRepository,
+	ragRepo repository.RAGRepository,
 	aiCallLogRepo repository.AICallLogRepository,
 	redisClient *redisv9.Client,
 	userClient rpc.UserClient,
@@ -149,7 +156,8 @@ func newBotServiceFromEnv(
 	botService.SetDefaultModel(llmConfig.Model)
 	botService.SetLLMSelector(func(botModel model.Bot) (llm.Client, string, error) {
 		provider := "primary"
-		if strings.EqualFold(strings.TrimSpace(botModel.MentionName), "qwen") {
+		mentionName := strings.ToLower(strings.TrimSpace(botModel.MentionName))
+		if mentionName == "qwen" || mentionName == "mrag" {
 			provider = "secondary"
 		}
 		client, _, providerName, selectErr := registry.Client(provider)
@@ -163,6 +171,10 @@ func newBotServiceFromEnv(
 	})
 	botService.SetLimiter(bot.NewLimiter(botMaxConcurrencyFromEnv(), botMaxConversationConcurrencyFromEnv()))
 	botService.SetContextMessages(botContextMessagesFromEnv())
+	botService.SetRAGTopK(ragTopKFromEnv())
+	if ragSearcher := newBotRAGSearcherFromEnv(ragRepo); ragSearcher != nil {
+		botService.SetRAGSearcher(ragSearcher)
+	}
 	botService.SetMemberRepository(memberRepo)
 	botService.SetBotRepository(botRepo)
 	botService.SetConversationBotRepository(conversationBotRepo)
@@ -178,6 +190,57 @@ func newBotServiceFromEnv(
 		strings.Join(registry.ProviderNames(), ","),
 	)
 	return botService
+}
+
+func newBotRAGSearcherFromEnv(ragRepo repository.RAGRepository) bot.RAGSearcher {
+	if ragRepo == nil {
+		return nil
+	}
+	cfg, err := embedding.LoadConfigFromEnv()
+	if err != nil {
+		log.Printf("bot rag search disabled: %v", err)
+		return nil
+	}
+	embedClient, err := embedding.NewClient(cfg)
+	if err != nil {
+		log.Printf("bot rag search disabled: %v", err)
+		return nil
+	}
+	return bot.NewConversationRAGSearcher(embedClient, ragRepo)
+}
+
+func newRAGServiceFromEnv(ragRepo repository.RAGRepository) *biz.RAGService {
+	cfg, err := embedding.LoadConfigFromEnv()
+	if err != nil {
+		log.Printf("rag service disabled: %v", err)
+		return nil
+	}
+	embedClient, err := embedding.NewClient(cfg)
+	if err != nil {
+		log.Printf("rag service disabled: %v", err)
+		return nil
+	}
+	splitterCfg, err := rag.LoadSplitterConfigFromEnv()
+	if err != nil {
+		log.Printf("rag service disabled: %v", err)
+		return nil
+	}
+	processor := rag.NewDocumentProcessor(embedClient, ragRepo, splitterCfg)
+	service := biz.NewRAGService(ragRepo, embedClient, processor)
+	service.DefaultTopK = ragTopKFromEnv()
+	log.Printf("rag service enabled: provider=%s, model=%s, chunk_size=%d, chunk_overlap=%d, top_k=%d", cfg.Provider, cfg.Model, splitterCfg.ChunkSize, splitterCfg.ChunkOverlap, service.DefaultTopK)
+	return service
+}
+
+func ragTopKFromEnv() int {
+	value := intFromEnv("RAG_TOP_K", 5)
+	if value < 1 {
+		return 1
+	}
+	if value > 10 {
+		return 10
+	}
+	return value
 }
 
 func builtInBotConfigsFromEnv() []pgstore.BuiltInBotConfig {
@@ -203,25 +266,46 @@ func builtInBotConfigsFromEnv() []pgstore.BuiltInBotConfig {
 		}
 	}
 
+	multiModalSupportedModels := []string{"qwen3.6-plus"}
+	multiModalModelName := multiModalSupportedModels[0]
+	if envModel := strings.TrimSpace(os.Getenv("LLM2_MODEL")); envModel != "" {
+		for _, supportedModel := range multiModalSupportedModels {
+			if supportedModel == envModel {
+				multiModalModelName = envModel
+				break
+			}
+		}
+	}
+
 	return []pgstore.BuiltInBotConfig{
 		{
 			ID:              uint64(intFromEnv("BOT_ID", 100000)),
 			Name:            "DeepSeek",
 			MentionName:     "ai",
 			Aliases:         []string{"deepseek"},
-			Description:     "平台内置 AI 助手（文本推理优先）。",
+			Description:     "\u5e73\u53f0\u5185\u7f6e AI \u52a9\u624b\uff08\u6587\u672c\u63a8\u7406\u4f18\u5148\uff09\u3002",
 			ModelName:       deepSeekModelName,
 			SupportedModels: deepSeekSupportedModels,
 			SystemPrompt:    bot.DefaultSystemPrompt,
 		},
 		{
 			ID:              uint64(intFromEnv("BOT2_ID", 100001)),
-			Name:            "千问",
+			Name:            "\u5343\u95ee",
 			MentionName:     "qwen",
 			Aliases:         []string{"tongyi", "qw"},
-			Description:     "平台内置通义千问助手：qwen-turbo（速度快）、qwen-plus（均衡）、qwen-max（效果最好）、qwen3.6-plus（支持读图）。",
+			Description:     "\u5e73\u53f0\u5185\u7f6e\u901a\u4e49\u5343\u95ee\u52a9\u624b\uff1aqwen-turbo\uff08\u901f\u5ea6\u5feb\uff09\u3001qwen-plus\uff08\u5747\u8861\uff09\u3001qwen-max\uff08\u6548\u679c\u6700\u597d\uff09\u3001qwen3.6-plus\uff08\u652f\u6301\u8bfb\u56fe\uff09\u3002",
 			ModelName:       qwenModelName,
 			SupportedModels: qwenSupportedModels,
+			SystemPrompt:    bot.DefaultSystemPrompt,
+		},
+		{
+			ID:              uint64(intFromEnv("BOT3_ID", 100002)),
+			Name:            "\u591a\u6a21\u6001\u77e5\u8bc6\u5e93\u52a9\u624b",
+			MentionName:     "mrag",
+			Aliases:         []string{"kb", "visionkb"},
+			Description:     "\u5e73\u53f0\u5185\u7f6e\u591a\u6a21\u6001\u77e5\u8bc6\u5e93 Bot\uff0c\u53ef\u7ed3\u5408\u6587\u672c\u4e0e\u56fe\u7247\u8f93\u5165\uff0c\u9ed8\u8ba4 qwen3.6-plus\u3002",
+			ModelName:       multiModalModelName,
+			SupportedModels: multiModalSupportedModels,
 			SystemPrompt:    bot.DefaultSystemPrompt,
 		},
 	}

@@ -45,11 +45,13 @@ type ChatService struct {
 	MemberRepo           repository.MemberRepository
 	BotRepo              repository.BotRepository
 	ConversationBotRepo  repository.ConversationBotRepository
+	RAGRepo              repository.RAGRepository
 	MessageRepo          repository.MessageRepository
 	AICallLogRepo        repository.AICallLogRepository
 	TxManager            repository.TxManager
 	UserClient           rpc.UserClient
 	BotService           bot.MentionHandler
+	RAGService           *RAGService
 	BotMembershipService *bot.MembershipService
 	BotTaskTimeout       time.Duration
 }
@@ -91,6 +93,10 @@ func (s *ChatService) SetBotManagement(botRepo repository.BotRepository, convers
 	s.BotRepo = botRepo
 	s.ConversationBotRepo = conversationBotRepo
 	s.BotMembershipService = membershipService
+}
+
+func (s *ChatService) SetRAGService(ragService *RAGService) {
+	s.RAGService = ragService
 }
 
 func (s *ChatService) CreateGroup(ctx context.Context, input CreateGroupInput) (*GroupView, error) {

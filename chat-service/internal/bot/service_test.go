@@ -11,13 +11,14 @@ import (
 	"example.com/aim/chat-service/internal/llm"
 	"example.com/aim/chat-service/internal/repository"
 	"example.com/aim/chat-service/internal/rpc"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
 func TestServiceHandleMentionCreatesBotReply(t *testing.T) {
 	messageRepo := &fakeMessageRepo{
 		recent: []model.Message{
-			{ID: 1, ConversationID: 10, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: "hello"},
+			{ID: 1, ConversationID: 10, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"hello"}`)},
 		},
 	}
 	conversationRepo := &fakeConversationRepo{}
@@ -91,7 +92,7 @@ func TestServiceHandleMentionCreatesBotReply(t *testing.T) {
 	if len(req.Messages) != 2 || req.Messages[0].Role != "system" || req.Messages[0].Content != "system prompt" {
 		t.Fatalf("unexpected LLM messages: %+v", req.Messages)
 	}
-	if !strings.Contains(req.Messages[1].Content, "当前用户问题：summarize") {
+	if !strings.Contains(req.Messages[1].Content, "\u3010\u7528\u6237\u95ee\u9898\u3011summarize") {
 		t.Fatalf("prompt did not include extracted question: %q", req.Messages[1].Content)
 	}
 
@@ -103,7 +104,7 @@ func TestServiceHandleMentionCreatesBotReply(t *testing.T) {
 		created.SenderID != 7 ||
 		created.SenderType != model.SenderTypeBot ||
 		created.MessageType != model.MessageTypeBotReply ||
-		created.Content != "bot reply" ||
+		model.ExtractTextMessageContent(created.Content) != "bot reply" ||
 		created.Status != model.MessageStatusNormal {
 		t.Fatalf("unexpected bot message: %+v", created)
 	}
@@ -122,7 +123,7 @@ func TestServiceHandleMentionCreatesBotReply(t *testing.T) {
 		event.Message.SenderID != 7 ||
 		event.Message.SenderType != string(model.SenderTypeBot) ||
 		event.Message.MessageType != string(model.MessageTypeBotReply) ||
-		event.Message.Content != "bot reply" ||
+		!strings.Contains(event.Message.Content, "bot reply") ||
 		event.Message.Status != string(model.MessageStatusNormal) ||
 		event.Message.CreatedAt == 0 ||
 		len(event.RecipientUserIDs) != 2 ||
@@ -191,8 +192,8 @@ func TestServiceHandleMentionReturnsNilWhenNoBotMatches(t *testing.T) {
 func TestServiceHandleMentionFiltersRecalledMessagesFromContext(t *testing.T) {
 	messageRepo := &fakeMessageRepo{
 		recent: []model.Message{
-			{ID: 1, ConversationID: 10, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"normal text"}`, Status: model.MessageStatusNormal},
-			{ID: 2, ConversationID: 10, SenderID: 10002, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: `{"text":"should not be seen"}`, Status: model.MessageStatusRecalled},
+			{ID: 1, ConversationID: 10, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"normal text"}`), Status: model.MessageStatusNormal},
+			{ID: 2, ConversationID: 10, SenderID: 10002, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"should not be seen"}`), Status: model.MessageStatusRecalled},
 		},
 	}
 	conversationRepo := &fakeConversationRepo{}
@@ -239,7 +240,7 @@ func TestServiceHandleMentionFiltersRecalledMessagesFromContext(t *testing.T) {
 func TestServiceHandleMentionNonVisionModelSendsTextOnly(t *testing.T) {
 	messageRepo := &fakeMessageRepo{
 		recent: []model.Message{
-			{ID: 1, ConversationID: 10, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: `{"url":"https://cdn.example.com/a.png","name":"a.png","mimeType":"image/png","text":"look"}`, Status: model.MessageStatusNormal},
+			{ID: 1, ConversationID: 10, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeImage, Content: datatypes.JSON(`{"url":"https://cdn.example.com/a.png","name":"a.png","mimeType":"image/png","text":"look"}`), Status: model.MessageStatusNormal},
 		},
 	}
 	conversationRepo := &fakeConversationRepo{}
@@ -782,4 +783,185 @@ func (c *fakeBotUserClient) GetUser(ctx context.Context, userID uint64) (*rpc.Us
 
 func (c *fakeBotUserClient) CheckFriendRelation(ctx context.Context, userID uint64, friendUserID uint64) (bool, error) {
 	return false, nil
+}
+
+type fakeRAGSearcher struct {
+	chunks []RAGChunk
+	err    error
+	last   RAGSearchRequest
+	called int
+}
+
+func (s *fakeRAGSearcher) SearchForConversation(ctx context.Context, req RAGSearchRequest) ([]RAGChunk, error) {
+	s.called++
+	s.last = req
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.chunks, nil
+}
+
+func TestServiceHandleMentionKnowledgeBaseOnlyUsesRAG(t *testing.T) {
+	messageRepo := &fakeMessageRepo{
+		recent: []model.Message{
+			{ID: 1, ConversationID: 10, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"history message"}`), Status: model.MessageStatusNormal},
+		},
+	}
+	conversationRepo := &fakeConversationRepo{}
+	aiCallLogRepo := &fakeAICallLogRepo{}
+	llmClient := &fakeLLMClient{response: &llm.GenerateResponse{Content: "ok"}}
+	service := NewService(llmClient, messageRepo, conversationRepo, aiCallLogRepo)
+	service.SetDefaultModel("env-model")
+	service.SetLimiter(NewLimiter(10, 1))
+	service.SetRAGTopK(3)
+	searcher := &fakeRAGSearcher{
+		chunks: []RAGChunk{
+			{Index: 1, Content: "kb-1", Score: 0.92},
+		},
+	}
+	service.SetRAGSearcher(searcher)
+	service.SetMemberRepository(&fakeMemberRepo{
+		members: []model.ConversationMember{
+			{ConversationID: 10, MemberType: model.MemberTypeBot, MemberID: 7, Role: model.MemberRoleBot, Status: model.MemberStatusNormal},
+		},
+	})
+	service.SetBotRepository(&fakeBotRepo{
+		bots: map[uint64]*model.Bot{
+			7: {ID: 7, MentionName: "aim", ModelName: "db-model", Status: model.BotStatusEnabled},
+		},
+	})
+	conversationBotRepo := newFakeConversationBotRepo()
+	_ = conversationBotRepo.Create(context.Background(), &model.ConversationBot{
+		ConversationID:  10,
+		BotID:           7,
+		Enabled:         true,
+		PermissionScope: model.BotScopeKnowledgeBaseOnly,
+	})
+	service.SetConversationBotRepository(conversationBotRepo)
+
+	err := service.HandleMention(context.Background(), HandleMentionRequest{
+		ConversationID: 10,
+		UserID:         10001,
+		Content:        "@aim summarize",
+	})
+	if err != nil {
+		t.Fatalf("HandleMention returned error: %v", err)
+	}
+	if searcher.called != 1 {
+		t.Fatalf("expected rag search once, got %d", searcher.called)
+	}
+	if searcher.last.TopK != 3 || searcher.last.ConversationID != 10 || searcher.last.Question != "summarize" {
+		t.Fatalf("unexpected rag search request: %+v", searcher.last)
+	}
+	if len(llmClient.requests) != 1 {
+		t.Fatalf("expected one llm call, got %d", len(llmClient.requests))
+	}
+	prompt := llmClient.requests[0].Messages[1].Content
+	if strings.Contains(prompt, "\u3010\u7fa4\u804a\u4e0a\u4e0b\u6587\u3011") {
+		t.Fatalf("knowledge-base-only prompt should not include conversation context: %q", prompt)
+	}
+	if !strings.Contains(prompt, "\u3010\u77e5\u8bc6\u5e93\u8d44\u6599\u3011") || !strings.Contains(prompt, "kb-1") {
+		t.Fatalf("knowledge-base-only prompt should include rag chunks: %q", prompt)
+	}
+}
+
+func TestServiceHandleMentionKnowledgeBaseOnlyNoBindingReply(t *testing.T) {
+	messageRepo := &fakeMessageRepo{}
+	conversationRepo := &fakeConversationRepo{}
+	aiCallLogRepo := &fakeAICallLogRepo{}
+	llmClient := &fakeLLMClient{response: &llm.GenerateResponse{Content: "ok"}}
+	service := NewService(llmClient, messageRepo, conversationRepo, aiCallLogRepo)
+	service.SetDefaultModel("env-model")
+	service.SetLimiter(NewLimiter(10, 1))
+	searcher := &fakeRAGSearcher{chunks: nil}
+	service.SetRAGSearcher(searcher)
+	service.SetMemberRepository(&fakeMemberRepo{
+		members: []model.ConversationMember{
+			{ConversationID: 10, MemberType: model.MemberTypeBot, MemberID: 7, Role: model.MemberRoleBot, Status: model.MemberStatusNormal},
+		},
+	})
+	service.SetBotRepository(&fakeBotRepo{
+		bots: map[uint64]*model.Bot{
+			7: {ID: 7, MentionName: "aim", ModelName: "db-model", Status: model.BotStatusEnabled},
+		},
+	})
+	conversationBotRepo := newFakeConversationBotRepo()
+	_ = conversationBotRepo.Create(context.Background(), &model.ConversationBot{
+		ConversationID:  10,
+		BotID:           7,
+		Enabled:         true,
+		PermissionScope: model.BotScopeKnowledgeBaseOnly,
+	})
+	service.SetConversationBotRepository(conversationBotRepo)
+
+	err := service.HandleMention(context.Background(), HandleMentionRequest{
+		ConversationID: 10,
+		UserID:         10001,
+		Content:        "@aim summarize",
+	})
+	if err != nil {
+		t.Fatalf("HandleMention returned error: %v", err)
+	}
+	if len(llmClient.requests) != 0 {
+		t.Fatalf("llm should not be called when kb-only has no rag chunks")
+	}
+	if len(messageRepo.created) != 1 {
+		t.Fatalf("expected one fallback bot reply, got %d", len(messageRepo.created))
+	}
+	got := string(messageRepo.created[0].Content)
+	if !strings.Contains(got, "\u5f53\u524d\u4f1a\u8bdd\u672a\u7ed1\u5b9a\u77e5\u8bc6\u5e93") {
+		t.Fatalf("unexpected fallback reply: %q", got)
+	}
+}
+
+func TestServiceHandleMentionConversationAndKBContinuesOnRAGError(t *testing.T) {
+	messageRepo := &fakeMessageRepo{
+		recent: []model.Message{
+			{ID: 1, ConversationID: 10, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"history message"}`), Status: model.MessageStatusNormal},
+		},
+	}
+	conversationRepo := &fakeConversationRepo{}
+	aiCallLogRepo := &fakeAICallLogRepo{}
+	llmClient := &fakeLLMClient{response: &llm.GenerateResponse{Content: "ok"}}
+	service := NewService(llmClient, messageRepo, conversationRepo, aiCallLogRepo)
+	service.SetDefaultModel("env-model")
+	service.SetLimiter(NewLimiter(10, 1))
+	searcher := &fakeRAGSearcher{err: errors.New("rag failed")}
+	service.SetRAGSearcher(searcher)
+	service.SetMemberRepository(&fakeMemberRepo{
+		members: []model.ConversationMember{
+			{ConversationID: 10, MemberType: model.MemberTypeBot, MemberID: 7, Role: model.MemberRoleBot, Status: model.MemberStatusNormal},
+		},
+	})
+	service.SetBotRepository(&fakeBotRepo{
+		bots: map[uint64]*model.Bot{
+			7: {ID: 7, MentionName: "aim", ModelName: "db-model", Status: model.BotStatusEnabled},
+		},
+	})
+	conversationBotRepo := newFakeConversationBotRepo()
+	_ = conversationBotRepo.Create(context.Background(), &model.ConversationBot{
+		ConversationID:  10,
+		BotID:           7,
+		Enabled:         true,
+		PermissionScope: model.BotScopeConversationAndKB,
+	})
+	service.SetConversationBotRepository(conversationBotRepo)
+
+	err := service.HandleMention(context.Background(), HandleMentionRequest{
+		ConversationID: 10,
+		UserID:         10001,
+		Content:        "@aim summarize",
+	})
+	if err != nil {
+		t.Fatalf("HandleMention returned error: %v", err)
+	}
+	if searcher.called != 1 {
+		t.Fatalf("expected rag search once, got %d", searcher.called)
+	}
+	if len(llmClient.requests) != 1 {
+		t.Fatalf("llm should continue when rag fails in mixed scope")
+	}
+	if len(messageRepo.created) != 1 {
+		t.Fatalf("expected normal bot reply, got %d", len(messageRepo.created))
+	}
 }

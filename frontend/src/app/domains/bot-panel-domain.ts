@@ -1,5 +1,5 @@
 import { useCallback, useEffect } from "react";
-import type { AICallLogQuotaInfo } from "../../types";
+import type { AICallLogInfo, AICallLogQuotaInfo, BotInfo } from "../../types";
 import type { DetailTab } from "../types";
 import { errorMessage } from "../utils";
 import { addBotToConversationAction, type BotDomainDeps, refreshAICallLogsAction, refreshAvailableBotsAction, refreshConversationBotsAction, removeBotFromConversationAction } from "./bot-domain";
@@ -9,9 +9,9 @@ type UseBotPanelDomainDeps = {
   selectedConversationId: string | null;
   selectedConversationType: string | null;
   botDomainDeps: BotDomainDeps;
-  setAvailableBots: (value: any[]) => void;
-  setConversationBots: (value: any[]) => void;
-  setAICallLogs: (value: any[]) => void;
+  setAvailableBots: (value: BotInfo[]) => void;
+  setConversationBots: (value: BotInfo[]) => void;
+  setAICallLogs: (value: AICallLogInfo[]) => void;
   setAICallLogQuota: (value: AICallLogQuotaInfo) => void;
   setLoadingAICallLogs: (value: boolean) => void;
   showToast: (message: string, tone?: "success" | "error" | "info") => void;

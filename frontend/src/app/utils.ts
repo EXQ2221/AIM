@@ -49,6 +49,15 @@ function parseJSONObject(value: string): Record<string, unknown> | null {
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as Record<string, unknown>;
     }
+    // Compatible with double-encoded JSON payloads, e.g. "\"{\\\"text\\\":\\\"...\\\"}\"".
+    if (typeof parsed === "string") {
+      const nested = parsed.trim();
+      if (!nested) return null;
+      const parsedNested = JSON.parse(nested) as unknown;
+      if (parsedNested && typeof parsedNested === "object" && !Array.isArray(parsedNested)) {
+        return parsedNested as Record<string, unknown>;
+      }
+    }
   } catch {
     return null;
   }
@@ -156,6 +165,8 @@ export function messageText(message: Pick<MessageInfo, "messageType" | "content"
       return "[语音]";
     case "SYSTEM":
       return parseSystemMessageContent(message.content)?.text || message.content.trim();
+    case "BOT_REPLY":
+      return parseTextMessageContent(message.content)?.text || message.content.trim();
     default:
       return message.content.trim();
   }
