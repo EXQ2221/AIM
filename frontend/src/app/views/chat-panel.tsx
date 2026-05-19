@@ -29,6 +29,25 @@ function formatMuteUntil(value?: number | null) {
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleString("zh-CN", { hour12: false });
 }
+
+type PendingImageDraft = {
+  id: string;
+  file: File;
+  previewURL: string;
+};
+
+type PendingFileDraft = {
+  id: string;
+  file: File;
+};
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
 export function ChatPanel({
   active,
   conversation,
@@ -40,6 +59,7 @@ export function ChatPanel({
   messages,
   messageDraft,
   replyingTo,
+  peerTypingText,
   wsStatus,
   busy,
   messageListRef,
@@ -54,6 +74,7 @@ export function ChatPanel({
   onMention,
   onReplySelect,
   onRecallMessage,
+  onDeleteLocalMessage,
   onCancelReply,
   onSend
 }: {
@@ -67,6 +88,7 @@ export function ChatPanel({
   messages: MessageInfo[];
   messageDraft: string;
   replyingTo: ReplyPreviewInfo | null;
+  peerTypingText?: string;
   wsStatus: WsStatus;
   busy: boolean;
   messageListRef: React.RefObject<HTMLDivElement | null>;
@@ -81,6 +103,7 @@ export function ChatPanel({
   onMention: (mentionTarget: string) => void;
   onReplySelect: (message: MessageInfo) => void;
   onRecallMessage: (message: MessageInfo) => Promise<void>;
+  onDeleteLocalMessage: (message: MessageInfo) => void;
   onCancelReply: () => void;
   onSend: (payload?: OutgoingMessagePayload) => void;
 }) {
@@ -88,14 +111,21 @@ export function ChatPanel({
   const [inviteFriends, setInviteFriends] = useState<FriendInfo[]>([]);
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteInvitingId, setInviteInvitingId] = useState<number | null>(null);
-  const [mediaMode, setMediaMode] = useState<"IMAGE" | "FILE" | "VOICE" | null>(null);
-  const [mediaURL, setMediaURL] = useState("");
-  const [mediaName, setMediaName] = useState("");
-  const [mediaMimeType, setMediaMimeType] = useState("");
-  const [mediaSize, setMediaSize] = useState("");
-  const [imageWidth, setImageWidth] = useState("");
-  const [imageHeight, setImageHeight] = useState("");
-  const [voiceDurationMs, setVoiceDurationMs] = useState("");
+  const [uploadingKind, setUploadingKind] = useState<"IMAGE" | "FILE" | "VOICE" | null>(null);
+  const [voicePanelOpen, setVoicePanelOpen] = useState(false);
+  const [voiceRecording, setVoiceRecording] = useState(false);
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const [mediaStatus, setMediaStatus] = useState("");
+  const [imageDrafts, setImageDrafts] = useState<PendingImageDraft[]>([]);
+  const [fileDrafts, setFileDrafts] = useState<PendingFileDraft[]>([]);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const voiceChunksRef = useRef<BlobPart[]>([]);
+  const voiceStartedAtRef = useRef(0);
+  const voiceTimerRef = useRef<number | null>(null);
+  const discardVoiceUploadRef = useRef(false);
 
   const isGroupChat = conversation?.type === "GROUP";
   const memberUserIds = useMemo(() => new Set(members.filter((m) => m.memberType !== "BOT").map((m) => m.userId)), [members]);
@@ -128,102 +158,282 @@ export function ChatPanel({
     }
   };
 
-  const resetMediaComposer = useCallback(() => {
-    setMediaMode(null);
-    setMediaURL("");
-    setMediaName("");
-    setMediaMimeType("");
-    setMediaSize("");
-    setImageWidth("");
-    setImageHeight("");
-    setVoiceDurationMs("");
+  const isRealtimeReady = Boolean(conversation && canSend && wsStatus === "open");
+  const mediaBusy = uploadingKind !== null || voiceRecording;
+
+  const ensureMediaReady = useCallback(() => {
+    if (!isRealtimeReady) {
+      alert("当前连接不可用，请等待实时连接恢复后再发送。");
+      return false;
+    }
+    return true;
+  }, [isRealtimeReady]);
+
+  const stopVoiceTimer = useCallback(() => {
+    if (voiceTimerRef.current !== null) {
+      window.clearInterval(voiceTimerRef.current);
+      voiceTimerRef.current = null;
+    }
   }, []);
 
-  const toggleMediaMode = useCallback(
-    (mode: "IMAGE" | "FILE" | "VOICE") => {
-      if (mediaMode === mode) {
-        resetMediaComposer();
+  const stopVoiceStream = useCallback(() => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+  }, []);
+
+  const clearImageDrafts = useCallback(() => {
+    setImageDrafts((current) => {
+      current.forEach((item) => URL.revokeObjectURL(item.previewURL));
+      return [];
+    });
+  }, []);
+
+  const clearFileDrafts = useCallback(() => {
+    setFileDrafts([]);
+  }, []);
+
+  const removeImageDraft = useCallback((id: string) => {
+    setImageDrafts((current) => {
+      const target = current.find((item) => item.id === id);
+      if (target) {
+        URL.revokeObjectURL(target.previewURL);
+      }
+      return current.filter((item) => item.id !== id);
+    });
+  }, []);
+
+  const removeFileDraft = useCallback((id: string) => {
+    setFileDrafts((current) => current.filter((item) => item.id !== id));
+  }, []);
+
+  const triggerPickImage = useCallback(() => {
+    if (mediaBusy) {
+      return;
+    }
+    imageInputRef.current?.click();
+  }, [mediaBusy]);
+
+  const triggerPickFile = useCallback(() => {
+    if (mediaBusy) {
+      return;
+    }
+    fileInputRef.current?.click();
+  }, [mediaBusy]);
+
+  const handleImageChosen = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files ?? []);
+      event.target.value = "";
+      if (files.length === 0) {
         return;
       }
-      setMediaMode(mode);
-      setMediaURL("");
-      setMediaName("");
-      setMediaMimeType("");
-      setMediaSize("");
-      setImageWidth("");
-      setImageHeight("");
-      setVoiceDurationMs("");
+      const created = files.map((file, index) => ({
+        id: `${Date.now()}-${index}-${Math.random().toString(16).slice(2)}`,
+        file,
+        previewURL: URL.createObjectURL(file)
+      }));
+      setImageDrafts((current) => [...current, ...created]);
     },
-    [mediaMode, resetMediaComposer]
+    []
   );
 
-  const handleSendMedia = () => {
-    if (!mediaMode) return;
-    const url = mediaURL.trim();
-    const name = mediaName.trim();
-    const mimeType = mediaMimeType.trim();
-    if (!url || !name || !mimeType) return;
-
-    if (mediaMode === "IMAGE") {
-      const payload = {
-        url,
-        name,
-        mimeType,
-        size: mediaSize.trim() ? Number(mediaSize) : undefined,
-        width: imageWidth.trim() ? Number(imageWidth) : undefined,
-        height: imageHeight.trim() ? Number(imageHeight) : undefined
-      };
-      onSend({
-        messageType: "IMAGE",
-        contentPayload: payload
-      });
-      resetMediaComposer();
-      return;
-    }
-
-    if (mediaMode === "FILE") {
-      const size = Number(mediaSize);
-      if (!Number.isFinite(size) || size <= 0) return;
-      onSend({
-        messageType: "FILE",
-        contentPayload: {
-          url,
-          name,
-          mimeType,
-          size
-        }
-      });
-      resetMediaComposer();
-      return;
-    }
-
-    const durationMs = Number(voiceDurationMs);
-    if (!Number.isFinite(durationMs) || durationMs <= 0) return;
-    onSend({
-      messageType: "VOICE",
-      contentPayload: {
-        url,
-        name,
-        mimeType,
-        size: mediaSize.trim() ? Number(mediaSize) : undefined,
-        durationMs
+  const handleFileChosen = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files ?? []);
+      event.target.value = "";
+      if (files.length === 0) {
+        return;
       }
-    });
-    resetMediaComposer();
-  };
+      const created = files.map((file, index) => ({
+        id: `${Date.now()}-${index}-${Math.random().toString(16).slice(2)}`,
+        file
+      }));
+      setFileDrafts((current) => [...current, ...created]);
+    },
+    []
+  );
+
+  const handleSendMediaDrafts = useCallback(async () => {
+    if (!ensureMediaReady() || mediaBusy) {
+      return;
+    }
+    if (imageDrafts.length === 0 && fileDrafts.length === 0) {
+      return;
+    }
+
+    const failedImages: PendingImageDraft[] = [];
+    const failedFiles: PendingFileDraft[] = [];
+    const failedNames: string[] = [];
+
+    try {
+      if (imageDrafts.length > 0) {
+        setUploadingKind("IMAGE");
+        for (let index = 0; index < imageDrafts.length; index += 1) {
+          const draft = imageDrafts[index];
+          setMediaStatus(`图片上传中 (${index + 1}/${imageDrafts.length})：${draft.file.name}`);
+          try {
+            const uploaded = await api.uploadImage(draft.file);
+            onSend({
+              messageType: "IMAGE",
+              contentPayload: {
+                url: uploaded.file.url,
+                name: uploaded.file.filename || draft.file.name,
+                mimeType: uploaded.file.content_type || draft.file.type || "image/*",
+                size: uploaded.file.size
+              }
+            });
+            URL.revokeObjectURL(draft.previewURL);
+          } catch {
+            failedImages.push(draft);
+            failedNames.push(draft.file.name);
+          }
+        }
+      }
+
+      if (fileDrafts.length > 0) {
+        setUploadingKind("FILE");
+        for (let index = 0; index < fileDrafts.length; index += 1) {
+          const draft = fileDrafts[index];
+          setMediaStatus(`文件上传中 (${index + 1}/${fileDrafts.length})：${draft.file.name}`);
+          try {
+            const uploaded = await api.uploadFile(draft.file);
+            onSend({
+              messageType: "FILE",
+              contentPayload: {
+                url: uploaded.file.url,
+                name: uploaded.file.filename || draft.file.name,
+                mimeType: uploaded.file.content_type || draft.file.type || "application/octet-stream",
+                size: uploaded.file.size
+              }
+            });
+          } catch {
+            failedFiles.push(draft);
+            failedNames.push(draft.file.name);
+          }
+        }
+      }
+    } finally {
+      setImageDrafts(failedImages);
+      setFileDrafts(failedFiles);
+      setUploadingKind(null);
+      setMediaStatus("");
+    }
+
+    if (failedNames.length > 0) {
+      alert(`以下文件发送失败，请重试：\n${failedNames.join("\n")}`);
+    }
+  }, [ensureMediaReady, fileDrafts, imageDrafts, mediaBusy, onSend]);
+
+  const stopVoiceRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") {
+      return;
+    }
+    recorder.stop();
+  }, []);
+
+  const startVoiceRecording = useCallback(async () => {
+    if (!ensureMediaReady() || mediaBusy || voiceRecording) {
+      return;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      alert("当前浏览器不支持录音，请使用文件发送语音。");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      voiceChunksRef.current = [];
+      discardVoiceUploadRef.current = false;
+      voiceStartedAtRef.current = Date.now();
+      setVoiceSeconds(0);
+      setMediaStatus("录音中，松开发送");
+
+      const preferredMimeTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+      const selectedMimeType = preferredMimeTypes.find((item) => MediaRecorder.isTypeSupported(item));
+      const recorder = selectedMimeType ? new MediaRecorder(stream, { mimeType: selectedMimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (dataEvent: BlobEvent) => {
+        if (dataEvent.data.size > 0) {
+          voiceChunksRef.current.push(dataEvent.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        setVoiceRecording(false);
+        stopVoiceTimer();
+        stopVoiceStream();
+
+        const durationMs = Math.max(1, Date.now() - voiceStartedAtRef.current);
+        const blob = new Blob(voiceChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        mediaRecorderRef.current = null;
+        voiceChunksRef.current = [];
+        if (discardVoiceUploadRef.current) {
+          discardVoiceUploadRef.current = false;
+          setMediaStatus("");
+          return;
+        }
+
+        if (blob.size <= 0) {
+          setMediaStatus("未录到声音，请重试");
+          return;
+        }
+
+        setUploadingKind("VOICE");
+        setMediaStatus("语音上传中...");
+        try {
+          const ext = recorder.mimeType.includes("mp4") ? "m4a" : "webm";
+          const file = new File([blob], `voice-${Date.now()}.${ext}`, {
+            type: recorder.mimeType || "audio/webm"
+          });
+          const uploaded = await api.uploadVoice(file);
+          onSend({
+            messageType: "VOICE",
+            contentPayload: {
+              url: uploaded.file.url,
+              name: uploaded.file.filename || file.name,
+              mimeType: uploaded.file.content_type || file.type || "audio/webm",
+              size: uploaded.file.size,
+              durationMs
+            }
+          });
+          setMediaStatus("");
+        } catch (error) {
+          setMediaStatus("");
+          alert(error instanceof Error ? error.message : "语音上传失败");
+        } finally {
+          setUploadingKind(null);
+        }
+      };
+
+      recorder.onerror = () => {
+        setMediaStatus("录音失败，请重试");
+      };
+
+      recorder.start();
+      setVoiceRecording(true);
+      voiceTimerRef.current = window.setInterval(() => {
+        setVoiceSeconds(Math.floor((Date.now() - voiceStartedAtRef.current) / 1000));
+      }, 250);
+    } catch (error) {
+      setVoiceRecording(false);
+      stopVoiceTimer();
+      stopVoiceStream();
+      setMediaStatus("");
+      alert(error instanceof Error ? error.message : "无法启用麦克风");
+    }
+  }, [ensureMediaReady, mediaBusy, onSend, stopVoiceStream, stopVoiceTimer, voiceRecording]);
 
   const sendDisabled = !conversation || !canSend || !messageDraft.trim() || wsStatus !== "open";
   const composerDisabled = !conversation || !canSend || wsStatus !== "open";
-  const mediaSendDisabled =
-    !conversation ||
-    !canSend ||
-    wsStatus !== "open" ||
-    !mediaMode ||
-    !mediaURL.trim() ||
-    !mediaName.trim() ||
-    !mediaMimeType.trim() ||
-    (mediaMode === "FILE" && (!mediaSize.trim() || Number(mediaSize) <= 0)) ||
-    (mediaMode === "VOICE" && (!voiceDurationMs.trim() || Number(voiceDurationMs) <= 0));
+  const hasMediaDrafts = imageDrafts.length > 0 || fileDrafts.length > 0;
   const memberMap = useMemo(() => new Map(members.map((member) => [member.userId, member])), [members]);
   const resolveReplySenderLabel = useCallback(
     (replyPreview: ReplyPreviewInfo | null | undefined) => {
@@ -275,9 +485,29 @@ export function ChatPanel({
     }
   };
 
+  useEffect(
+    () => () => {
+      discardVoiceUploadRef.current = true;
+      clearImageDrafts();
+      clearFileDrafts();
+      stopVoiceRecording();
+      stopVoiceTimer();
+      stopVoiceStream();
+    },
+    [clearFileDrafts, clearImageDrafts, stopVoiceRecording, stopVoiceStream, stopVoiceTimer]
+  );
+
   useEffect(() => {
-    resetMediaComposer();
-  }, [conversation?.conversationId, resetMediaComposer]);
+    setMediaStatus("");
+    setVoicePanelOpen(false);
+    setVoiceSeconds(0);
+    clearImageDrafts();
+    clearFileDrafts();
+    discardVoiceUploadRef.current = true;
+    stopVoiceRecording();
+    stopVoiceTimer();
+    stopVoiceStream();
+  }, [clearFileDrafts, clearImageDrafts, conversation?.conversationId, stopVoiceRecording, stopVoiceStream, stopVoiceTimer]);
 
   return (
     <main className={cx("pane chat-pane", active && "mobile-active")}>
@@ -293,6 +523,7 @@ export function ChatPanel({
               <span>
                 conversationId: {conversation.conversationId} · {currentMember ? roleLabel(currentMember.role) : roleLabel(conversation.role)}
               </span>
+              {peerTypingText && <span className="chat-typing-status">{peerTypingText}</span>}
             </div>
             <span className="chat-id-badge">ID {conversation.conversationId}</span>
             <WsBadge status={wsStatus} />
@@ -348,8 +579,11 @@ export function ChatPanel({
                     onMention={onMention}
                     onReply={() => onReplySelect(message)}
                     onRecall={() => void onRecallMessage(message)}
-                    mentionTarget={message.senderType === "BOT" ? sender?.mentionName || sender?.nickname : sender?.nickname}
-                    senderName={sender?.nickname || `用户 ${message.senderId}`}
+                    onDeleteLocal={() => onDeleteLocalMessage(message)}
+                    mentionTarget={message.senderType === "BOT" ? sender?.mentionName || sender?.nickname || "ai" : sender?.nickname}
+                    senderName={
+                      message.senderType === "BOT" ? sender?.nickname || sender?.mentionName || "AI 助手" : sender?.nickname || `用户 ${message.senderId}`
+                    }
                   />
                 );
               })
@@ -374,58 +608,108 @@ export function ChatPanel({
                   </button>
                 </div>
               )}
-              {mediaMode && (
+              <input ref={imageInputRef} className="visually-hidden" type="file" accept="image/*" multiple onChange={handleImageChosen} />
+              <input ref={fileInputRef} className="visually-hidden" type="file" multiple onChange={handleFileChosen} />
+
+              {hasMediaDrafts && (
                 <div className="media-composer">
-                  <div className="media-composer-grid">
-                    <input value={mediaURL} onChange={(event) => setMediaURL(event.target.value)} placeholder="Media URL" />
-                    <input value={mediaName} onChange={(event) => setMediaName(event.target.value)} placeholder="Name" />
-                    <input value={mediaMimeType} onChange={(event) => setMediaMimeType(event.target.value)} placeholder="MIME type" />
-                    <input
-                      value={mediaSize}
-                      onChange={(event) => setMediaSize(event.target.value)}
-                      inputMode="numeric"
-                      placeholder={mediaMode === "FILE" ? "Size in bytes (required)" : "Size in bytes (optional)"}
-                    />
-                    {mediaMode === "IMAGE" && (
-                      <>
-                        <input value={imageWidth} onChange={(event) => setImageWidth(event.target.value)} inputMode="numeric" placeholder="Width (optional)" />
-                        <input value={imageHeight} onChange={(event) => setImageHeight(event.target.value)} inputMode="numeric" placeholder="Height (optional)" />
-                      </>
-                    )}
-                    {mediaMode === "VOICE" && (
-                      <input
-                        value={voiceDurationMs}
-                        onChange={(event) => setVoiceDurationMs(event.target.value)}
-                        inputMode="numeric"
-                        placeholder="Duration ms (required)"
-                      />
-                    )}
+                  <div className="composer-draft-header">
+                    <strong>待发送附件</strong>
+                    <span>{`图片 ${imageDrafts.length} · 文件 ${fileDrafts.length}`}</span>
                   </div>
+                  {imageDrafts.length > 0 && (
+                    <div className="composer-image-draft-list">
+                      {imageDrafts.map((draft) => (
+                        <div key={draft.id} className="composer-image-draft-item">
+                          <img alt={draft.file.name} src={draft.previewURL} />
+                          <div className="composer-image-draft-meta">
+                            <span title={draft.file.name}>{draft.file.name}</span>
+                            <small>{formatBytes(draft.file.size)}</small>
+                          </div>
+                          <button disabled={mediaBusy} type="button" onClick={() => removeImageDraft(draft.id)}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {fileDrafts.length > 0 && (
+                    <div className="composer-file-draft-list">
+                      {fileDrafts.map((draft) => (
+                        <div key={draft.id} className="composer-file-draft-item">
+                          <div className="composer-file-draft-meta">
+                            <span title={draft.file.name}>{draft.file.name}</span>
+                            <small>{formatBytes(draft.file.size)}</small>
+                          </div>
+                          <button disabled={mediaBusy} type="button" onClick={() => removeFileDraft(draft.id)}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <div className="media-composer-actions">
-                    <button disabled={mediaSendDisabled} type="button" onClick={handleSendMedia}>
-                      {mediaMode === "IMAGE" ? "Send image" : mediaMode === "FILE" ? "Send file" : "Send voice"}
+                    <button disabled={mediaBusy || composerDisabled} type="button" onClick={() => void handleSendMediaDrafts()}>
+                      发送全部
                     </button>
-                    <button type="button" onClick={resetMediaComposer}>
-                      Cancel
+                    <button
+                      disabled={mediaBusy}
+                      type="button"
+                      onClick={() => {
+                        clearImageDrafts();
+                        clearFileDrafts();
+                      }}
+                    >
+                      清空
                     </button>
                   </div>
                 </div>
               )}
 
               <div className="composer-tools">
-                <button className={cx(mediaMode === "IMAGE" && "active")} type="button" onClick={() => toggleMediaMode("IMAGE")}>
+                <button disabled={mediaBusy || composerDisabled} type="button" onClick={triggerPickImage}>
                   <FileImage size={16} />
-                  Image
+                  图片
                 </button>
-                <button className={cx(mediaMode === "FILE" && "active")} type="button" onClick={() => toggleMediaMode("FILE")}>
+                <button disabled={mediaBusy || composerDisabled} type="button" onClick={triggerPickFile}>
                   <Paperclip size={16} />
-                  File
+                  文件
                 </button>
-                <button className={cx(mediaMode === "VOICE" && "active")} type="button" onClick={() => toggleMediaMode("VOICE")}>
+                <button
+                  className={cx("voice-toggle-button", voiceRecording && "recording", voicePanelOpen && "active")}
+                  disabled={uploadingKind !== null || composerDisabled}
+                  type="button"
+                  onClick={() => setVoicePanelOpen((current) => !current)}
+                >
                   <Mic size={16} />
-                  Voice
+                  {voiceRecording ? `录音中 ${voiceSeconds}s` : "语音"}
                 </button>
               </div>
+              {voicePanelOpen && (
+                <div className="media-composer">
+                  <div className="voice-preview-meta">
+                    <strong>{voiceRecording ? `录音中 ${voiceSeconds}s` : "按住说话，松开发送"}</strong>
+                    <span>和 QQ 一样：按住按钮录音，松开发送。</span>
+                  </div>
+                  <div className="media-composer-actions">
+                    <button
+                      className={cx("voice-toggle-button", voiceRecording && "recording")}
+                      disabled={uploadingKind !== null || composerDisabled}
+                      type="button"
+                      onMouseDown={() => void startVoiceRecording()}
+                      onMouseUp={stopVoiceRecording}
+                      onMouseLeave={stopVoiceRecording}
+                      onTouchStart={() => void startVoiceRecording()}
+                      onTouchEnd={stopVoiceRecording}
+                      onTouchCancel={stopVoiceRecording}
+                      onContextMenu={(event) => event.preventDefault()}
+                    >
+                      {voiceRecording ? "松开发送" : "按住说话"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {mediaStatus && <div className="composer-media-status">{mediaStatus}</div>}
 
               <div className="composer-input-row">
                 <textarea

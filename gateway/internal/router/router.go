@@ -3,6 +3,7 @@ package router
 import (
 	"example.com/aim/gateway/internal/handler"
 	"example.com/aim/gateway/internal/middleware"
+	"example.com/aim/gateway/internal/observability"
 	"example.com/aim/gateway/internal/upload"
 	"github.com/gin-gonic/gin"
 )
@@ -12,10 +13,12 @@ func New() *gin.Engine {
 
 	engine := gin.New()
 	engine.Use(middleware.Recovery())
+	engine.Use(observability.MetricsMiddleware())
 
 	engine.GET("/healthz", func(ctx *gin.Context) {
 		ctx.String(200, "ok")
 	})
+	engine.GET("/metrics", observability.MetricsHandler())
 	engine.Static(upload.PublicPrefix(), upload.Dir())
 	engine.GET("/ws/chat", handler.ChatWebSocket)
 
@@ -86,13 +89,21 @@ func New() *gin.Engine {
 	knowledgeBaseGroup.GET("", handler.ListKnowledgeBases)
 	knowledgeBaseGroup.POST("", handler.CreateKnowledgeBase)
 	knowledgeBaseGroup.POST("/:knowledgeBaseId/documents/text", handler.AddKnowledgeDocumentText)
+	knowledgeBaseGroup.POST("/:knowledgeBaseId/documents/file", handler.AddKnowledgeDocumentFile)
 	knowledgeBaseGroup.GET("/:knowledgeBaseId/documents", handler.ListKnowledgeDocuments)
+	knowledgeBaseGroup.DELETE("/:knowledgeBaseId/documents/:documentId", handler.DeleteKnowledgeDocument)
 	knowledgeBaseGroup.POST("/:knowledgeBaseId/search", handler.SearchKnowledgeBase)
 
 	botGroup := engine.Group("/api/v1/bots")
 	botGroup.Use(middleware.Auth())
 	botGroup.GET("", handler.ListBots)
 	botGroup.POST("", handler.CreateCustomBot)
+
+	notificationGroup := engine.Group("/api/v1/notifications")
+	notificationGroup.Use(middleware.Auth())
+	notificationGroup.GET("", handler.ListNotifications)
+	notificationGroup.POST("/read-all", handler.MarkAllNotificationsRead)
+	notificationGroup.POST("/:notificationId/read", handler.MarkNotificationRead)
 
 	return engine
 }

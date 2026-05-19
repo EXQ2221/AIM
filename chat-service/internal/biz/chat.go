@@ -1,4 +1,4 @@
-﻿package biz
+package biz
 
 import (
 	"context"
@@ -9,7 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"example.com/aim/chat-service/internal/bot"
+	bot "example.com/aim/chat-service/bot-internal/biz"
+	botrepo "example.com/aim/chat-service/bot-internal/repository"
 	"example.com/aim/chat-service/internal/dal/model"
 	"example.com/aim/chat-service/internal/repository"
 	"example.com/aim/chat-service/internal/rpc"
@@ -45,14 +46,13 @@ type ChatService struct {
 	MemberRepo           repository.MemberRepository
 	BotRepo              repository.BotRepository
 	ConversationBotRepo  repository.ConversationBotRepository
-	RAGRepo              repository.RAGRepository
 	MessageRepo          repository.MessageRepository
 	AICallLogRepo        repository.AICallLogRepository
+	NotificationRepo     repository.NotificationRepository
 	TxManager            repository.TxManager
 	UserClient           rpc.UserClient
 	BotService           bot.MentionHandler
-	RAGService           *RAGService
-	BotMembershipService *bot.MembershipService
+	BotMembershipService botrepo.MembershipManager
 	BotTaskTimeout       time.Duration
 }
 
@@ -89,14 +89,14 @@ func (s *ChatService) SetAICallLogRepository(aiCallLogRepo repository.AICallLogR
 	s.AICallLogRepo = aiCallLogRepo
 }
 
-func (s *ChatService) SetBotManagement(botRepo repository.BotRepository, conversationBotRepo repository.ConversationBotRepository, membershipService *bot.MembershipService) {
+func (s *ChatService) SetNotificationRepository(notificationRepo repository.NotificationRepository) {
+	s.NotificationRepo = notificationRepo
+}
+
+func (s *ChatService) SetBotManagement(botRepo repository.BotRepository, conversationBotRepo repository.ConversationBotRepository, membershipService botrepo.MembershipManager) {
 	s.BotRepo = botRepo
 	s.ConversationBotRepo = conversationBotRepo
 	s.BotMembershipService = membershipService
-}
-
-func (s *ChatService) SetRAGService(ragService *RAGService) {
-	s.RAGService = ragService
 }
 
 func (s *ChatService) CreateGroup(ctx context.Context, input CreateGroupInput) (*GroupView, error) {
@@ -379,6 +379,7 @@ func (s *ChatService) JoinGroup(ctx context.Context, operatorID uint64, conversa
 			conversationRepo,
 			memberRepo,
 			messageRepo,
+			s.notificationRepoWithTx(tx),
 			model.SystemEventMemberJoined,
 			operatorID,
 			[]uint64{operatorID},
@@ -446,6 +447,7 @@ func (s *ChatService) InviteMember(ctx context.Context, input InviteMemberInput,
 			conversationRepo,
 			memberRepo,
 			messageRepo,
+			s.notificationRepoWithTx(tx),
 			model.SystemEventMemberInvited,
 			input.OperatorID,
 			[]uint64{input.TargetUserID},
@@ -497,6 +499,7 @@ func (s *ChatService) LeaveGroup(ctx context.Context, operatorID uint64, convers
 			conversationRepo,
 			memberRepo,
 			messageRepo,
+			s.notificationRepoWithTx(tx),
 			model.SystemEventMemberLeft,
 			operatorID,
 			[]uint64{operatorID},
@@ -1256,6 +1259,7 @@ func (s *ChatService) createSystemMessageTx(
 	conversationRepo repository.ConversationRepository,
 	memberRepo repository.MemberRepository,
 	messageRepo repository.MessageRepository,
+	notificationRepo repository.NotificationRepository,
 	eventType string,
 	actorUserID uint64,
 	targetUserIDs []uint64,
@@ -1291,6 +1295,9 @@ func (s *ChatService) createSystemMessageTx(
 	if err := conversationRepo.UpdateLastMessage(ctx, conversation.ID, message.ID, message.CreatedAt); err != nil {
 		return nil, nil, err
 	}
+	if err := s.createEventNotificationsTx(ctx, notificationRepo, conversation, eventType, actorUserID, targetUserIDs, message.ID); err != nil {
+		return nil, nil, err
+	}
 
 	recipientUserIDs, err := memberRepo.ListUserMemberIDs(ctx, conversation.ID)
 	if err != nil {
@@ -1305,7 +1312,7 @@ func (s *ChatService) renderSystemMessageText(ctx context.Context, eventType str
 	for _, targetUserID := range targetUserIDs {
 		targetNames = append(targetNames, s.lookupUserDisplayName(ctx, targetUserID))
 	}
-	targetText := strings.Join(targetNames, ", ")
+	targetText := strings.Join(targetNames, "、")
 
 	switch eventType {
 	case model.SystemEventMemberJoined:
@@ -1362,56 +1369,56 @@ func (s *ChatService) renderSystemMessageTextV2(ctx context.Context, eventType s
 	for _, targetUserID := range targetUserIDs {
 		targetNames = append(targetNames, s.lookupUserDisplayName(ctx, targetUserID))
 	}
-	targetText := strings.Join(targetNames, ", ")
+	targetText := strings.Join(targetNames, "、")
 
 	switch eventType {
 	case model.SystemEventMemberJoined:
-		return fmt.Sprintf("%s joined the group", actorName)
+		return fmt.Sprintf("%s 加入了群聊", actorName)
 	case model.SystemEventMemberLeft:
-		return fmt.Sprintf("%s left the group", actorName)
+		return fmt.Sprintf("%s 退出了群聊", actorName)
 	case model.SystemEventMemberInvited:
 		if targetText == "" {
-			return fmt.Sprintf("%s invited a new member", actorName)
+			return fmt.Sprintf("%s 邀请了新成员加入群聊", actorName)
 		}
-		return fmt.Sprintf("%s invited %s to the group", actorName, targetText)
+		return fmt.Sprintf("%s 邀请 %s 加入了群聊", actorName, targetText)
 	case model.SystemEventMemberRemoved:
 		if targetText == "" {
-			return fmt.Sprintf("%s removed a member", actorName)
+			return fmt.Sprintf("%s 移出了一名成员", actorName)
 		}
-		return fmt.Sprintf("%s removed %s from the group", actorName, targetText)
+		return fmt.Sprintf("%s 将 %s 移出了群聊", actorName, targetText)
 	case model.SystemEventMemberMuted:
 		if targetText == "" {
-			return fmt.Sprintf("%s muted a member", actorName)
+			return fmt.Sprintf("%s 禁言了一名成员", actorName)
 		}
-		return fmt.Sprintf("%s muted %s", actorName, targetText)
+		return fmt.Sprintf("%s 禁言了 %s", actorName, targetText)
 	case model.SystemEventMemberUnmuted:
 		if targetText == "" {
-			return fmt.Sprintf("%s unmuted a member", actorName)
+			return fmt.Sprintf("%s 解除了成员禁言", actorName)
 		}
-		return fmt.Sprintf("%s unmuted %s", actorName, targetText)
+		return fmt.Sprintf("%s 解除了 %s 的禁言", actorName, targetText)
 	case model.SystemEventGroupMuted:
-		return fmt.Sprintf("%s enabled mute all", actorName)
+		return fmt.Sprintf("%s 开启了全员禁言", actorName)
 	case model.SystemEventGroupUnmuted:
-		return fmt.Sprintf("%s disabled mute all", actorName)
+		return fmt.Sprintf("%s 关闭了全员禁言", actorName)
 	case model.SystemEventAdminAdded:
 		if targetText == "" {
-			return fmt.Sprintf("%s set a new admin", actorName)
+			return fmt.Sprintf("%s 设置了新管理员", actorName)
 		}
-		return fmt.Sprintf("%s set %s as admin", actorName, targetText)
+		return fmt.Sprintf("%s 将 %s 设为管理员", actorName, targetText)
 	case model.SystemEventAdminRemoved:
 		if targetText == "" {
-			return fmt.Sprintf("%s removed an admin", actorName)
+			return fmt.Sprintf("%s 取消了一名管理员", actorName)
 		}
-		return fmt.Sprintf("%s removed admin role from %s", actorName, targetText)
+		return fmt.Sprintf("%s 取消了 %s 的管理员身份", actorName, targetText)
 	case model.SystemEventOwnerTransferred:
 		if targetText == "" {
-			return fmt.Sprintf("%s transferred ownership", actorName)
+			return fmt.Sprintf("%s 转让了群主", actorName)
 		}
-		return fmt.Sprintf("%s transferred ownership to %s", actorName, targetText)
+		return fmt.Sprintf("%s 将群主转让给 %s", actorName, targetText)
 	case model.SystemEventAnnouncementUpdated:
-		return fmt.Sprintf("%s updated the group announcement", actorName)
+		return fmt.Sprintf("%s 更新了群公告", actorName)
 	default:
-		return "Group system message"
+		return "群系统消息"
 	}
 }
 
@@ -1468,4 +1475,3 @@ func (s *ChatService) decorateMessageReadState(ctx context.Context, conversation
 
 	return nil
 }
-

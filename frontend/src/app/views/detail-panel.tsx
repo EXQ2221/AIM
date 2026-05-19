@@ -39,7 +39,17 @@ import type {
 import { AvatarUploader } from "../avatar-uploader";
 import { Avatar, IconButton, StatusPill, WsBadge } from "../ui";
 import type { BrowserNotificationStatus, DetailTab, WsStatus } from "../types";
-import { cx, formatRelative, handleAvatarMention, parseGroupValue, roleLabel, statusLabel } from "../utils";
+import {
+  cx,
+  formatRelative,
+  handleAvatarMention,
+  knowledgeBaseStatusLabel,
+  knowledgeDocumentStatusLabel,
+  knowledgeSourceTypeLabel,
+  parseGroupValue,
+  roleLabel,
+  statusLabel
+} from "../utils";
 
 function isMemberMuted(member: Pick<MemberInfo, "muteUntil"> | null | undefined) {
   return Boolean(member?.muteUntil && member.muteUntil > Math.floor(Date.now() / 1000));
@@ -50,6 +60,12 @@ function formatMuteUntil(value?: number | null) {
   const date = new Date(value * 1000);
   if (Number.isNaN(date.getTime())) return "";
   return date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function isTextImportFile(file: File | null) {
+  if (!file) return false;
+  const lowerName = (file.name || "").toLowerCase();
+  return lowerName.endsWith(".txt") || lowerName.endsWith(".md") || lowerName.endsWith(".markdown");
 }
 
 export function DetailPanel({
@@ -83,6 +99,7 @@ export function DetailPanel({
   knowledgeSearchChunks,
   conversationKnowledgeBases,
   loadingKnowledge,
+  knowledgeBusy,
   onTabChange,
   onCreateFriendGroup,
   onAddFriend,
@@ -112,6 +129,7 @@ export function DetailPanel({
   onCreateKnowledgeBase,
   onAddKnowledgeDocument,
   onSearchKnowledgeBase,
+  onDeleteKnowledgeDocument,
   onBindConversationKnowledgeBase,
   onUnbindConversationKnowledgeBase,
   onRefreshKnowledgePanelData,
@@ -148,6 +166,7 @@ export function DetailPanel({
   knowledgeSearchChunks: KnowledgeSearchChunkInfo[];
   conversationKnowledgeBases: ConversationKnowledgeBaseInfo[];
   loadingKnowledge: boolean;
+  knowledgeBusy: boolean;
   onTabChange: (tab: DetailTab) => void;
   onCreateFriendGroup: (name: string) => Promise<void>;
   onAddFriend: (input: { targetAimId: string; remark: string; groupId: number | null }) => Promise<void>;
@@ -185,10 +204,12 @@ export function DetailPanel({
   onAddKnowledgeDocument: (input: {
     knowledgeBaseId: number;
     title: string;
-    sourceType: "TEXT" | "MARKDOWN";
-    content: string;
+    sourceType?: "TEXT" | "MARKDOWN";
+    content?: string;
+    file?: File | null;
   }) => Promise<void>;
   onSearchKnowledgeBase: (input: { knowledgeBaseId: number; query: string; topK: number }) => Promise<void>;
+  onDeleteKnowledgeDocument: (knowledgeBaseId: number, documentId: number) => Promise<void>;
   onBindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
   onUnbindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
   onRefreshKnowledgePanelData: () => Promise<void>;
@@ -286,11 +307,12 @@ export function DetailPanel({
           knowledgeSearchChunks={knowledgeSearchChunks}
           conversationKnowledgeBases={conversationKnowledgeBases}
           loading={loadingKnowledge}
-          busy={busy}
+          busy={knowledgeBusy}
           onSelectKnowledgeBase={onSelectKnowledgeBase}
           onCreateKnowledgeBase={onCreateKnowledgeBase}
           onAddKnowledgeDocument={onAddKnowledgeDocument}
           onSearchKnowledgeBase={onSearchKnowledgeBase}
+          onDeleteKnowledgeDocument={onDeleteKnowledgeDocument}
           onBindConversationKnowledgeBase={onBindConversationKnowledgeBase}
           onUnbindConversationKnowledgeBase={onUnbindConversationKnowledgeBase}
           onRefresh={onRefreshKnowledgePanelData}
@@ -330,6 +352,7 @@ function KnowledgeBasePanel({
   onCreateKnowledgeBase,
   onAddKnowledgeDocument,
   onSearchKnowledgeBase,
+  onDeleteKnowledgeDocument,
   onBindConversationKnowledgeBase,
   onUnbindConversationKnowledgeBase,
   onRefresh
@@ -349,10 +372,12 @@ function KnowledgeBasePanel({
   onAddKnowledgeDocument: (input: {
     knowledgeBaseId: number;
     title: string;
-    sourceType: "TEXT" | "MARKDOWN";
-    content: string;
+    sourceType?: "TEXT" | "MARKDOWN";
+    content?: string;
+    file?: File | null;
   }) => Promise<void>;
   onSearchKnowledgeBase: (input: { knowledgeBaseId: number; query: string; topK: number }) => Promise<void>;
+  onDeleteKnowledgeDocument: (knowledgeBaseId: number, documentId: number) => Promise<void>;
   onBindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
   onUnbindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
   onRefresh: () => Promise<void>;
@@ -360,7 +385,6 @@ function KnowledgeBasePanel({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [title, setTitle] = useState("");
-  const [sourceType, setSourceType] = useState<"TEXT" | "MARKDOWN">("MARKDOWN");
   const [content, setContent] = useState("");
   const [selectedDocumentFile, setSelectedDocumentFile] = useState<File | null>(null);
   const [query, setQuery] = useState("");
@@ -369,6 +393,8 @@ function KnowledgeBasePanel({
 
   const canManageBinding =
     selectedConversationType === "GROUP" && (currentMember?.role === "OWNER" || currentMember?.role === "ADMIN");
+  const visibleKnowledgeDocuments = knowledgeDocuments.filter((item) => (item.status || "").toUpperCase() !== "FAILED");
+  const failedKnowledgeDocuments = knowledgeDocuments.filter((item) => (item.status || "").toUpperCase() === "FAILED");
   const enabledBindings = conversationKnowledgeBases.filter((item) => item.enabled);
   const enabledBindingIds = new Set(enabledBindings.map((item) => item.knowledgeBaseId));
   const bindCandidates = knowledgeBases.filter((item) => !enabledBindingIds.has(item.knowledgeBaseId));
@@ -399,14 +425,23 @@ function KnowledgeBasePanel({
     event.preventDefault();
     if (!selectedKnowledgeBaseId) return;
     const nextTitle = title.trim();
-    const nextContent = content.trim();
-    if (!nextTitle || !nextContent) return;
-    await onAddKnowledgeDocument({
-      knowledgeBaseId: selectedKnowledgeBaseId,
-      title: nextTitle,
-      sourceType,
-      content: nextContent
-    });
+    if (!nextTitle) return;
+    if (selectedDocumentFile) {
+      await onAddKnowledgeDocument({
+        knowledgeBaseId: selectedKnowledgeBaseId,
+        title: nextTitle,
+        file: selectedDocumentFile
+      });
+    } else {
+      const nextContent = content.trim();
+      if (!nextContent) return;
+      await onAddKnowledgeDocument({
+        knowledgeBaseId: selectedKnowledgeBaseId,
+        title: nextTitle,
+        sourceType: "TEXT",
+        content: nextContent
+      });
+    }
     setTitle("");
     setContent("");
     setSelectedDocumentFile(null);
@@ -421,15 +456,15 @@ function KnowledgeBasePanel({
     }
     const fileName = file.name || "";
     const lowerName = fileName.toLowerCase();
-    if (lowerName.endsWith(".md") || lowerName.endsWith(".markdown")) {
-      setSourceType("MARKDOWN");
-    } else if (lowerName.endsWith(".txt")) {
-      setSourceType("TEXT");
-    }
     setSelectedDocumentFile(file);
     if (!title.trim()) {
       const dotIndex = fileName.lastIndexOf(".");
       setTitle(dotIndex > 0 ? fileName.slice(0, dotIndex) : fileName);
+    }
+
+    if (!isTextImportFile(file)) {
+      setContent("");
+      return;
     }
 
     const reader = new FileReader();
@@ -523,32 +558,43 @@ function KnowledgeBasePanel({
             required
           />
         </label>
-        <select
-          value={sourceType}
-          onChange={(event) => setSourceType(event.target.value as "TEXT" | "MARKDOWN")}
-          disabled={!selectedKnowledgeBaseId}
-        >
-          <option value="TEXT">TEXT</option>
-          <option value="MARKDOWN">MARKDOWN</option>
-        </select>
+        <span className="form-hint">系统会自动识别并处理文档类型，无需手动选择。</span>
         <label className="field">
           <span>选择文件</span>
           <input
             type="file"
-            accept=".txt,.md,.markdown,text/plain,text/markdown"
+            accept=".txt,.md,.markdown,.pdf,.docx,.pptx,.ppt,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
             onChange={handleDocumentFileChange}
             disabled={!selectedKnowledgeBaseId}
           />
         </label>
         {selectedDocumentFile && <span className="form-hint">已选择：{selectedDocumentFile.name}</span>}
+        {selectedDocumentFile && !isTextImportFile(selectedDocumentFile) && (
+          <span className="form-hint">PDF / DOCX / PPTX 文件会在服务端解析后再进入 RAG 链路。</span>
+        )}
         <textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}
-          placeholder="文件内容会自动填充，也可手动补充编辑"
+          placeholder={
+            selectedDocumentFile && !isTextImportFile(selectedDocumentFile)
+              ? "PDF / DOCX / PPTX 会由后端直接解析，无需在这里粘贴内容"
+              : "文件内容会自动填充，也可手动补充编辑"
+          }
           rows={5}
           disabled={!selectedKnowledgeBaseId}
         />
-        <button disabled={busy || !selectedKnowledgeBaseId} type="submit">
+        <span className="form-hint">
+          支持直接粘贴，或上传 txt / md / pdf / docx / pptx 文件。文件导入时会自动识别类型。
+        </span>
+        <button
+          disabled={
+            busy ||
+            !selectedKnowledgeBaseId ||
+            !title.trim() ||
+            (!selectedDocumentFile && !content.trim())
+          }
+          type="submit"
+        >
           {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
           导入文档
         </button>
@@ -557,19 +603,34 @@ function KnowledgeBasePanel({
       <div className="kb-card">
         <div className="section-title">
           <span>文档状态</span>
-          <strong>{knowledgeDocuments.length}</strong>
+          <strong>{visibleKnowledgeDocuments.length}</strong>
         </div>
+        {failedKnowledgeDocuments.length > 0 && (
+          <span className="form-hint">有 {failedKnowledgeDocuments.length} 条导入失败，失败原因已推送到通知中心。</span>
+        )}
         <div className="kb-list">
-          {knowledgeDocuments.map((item) => (
+          {visibleKnowledgeDocuments.map((item) => (
             <div className="kb-row" key={item.documentId}>
               <strong>{item.title}</strong>
               <span>
-                {item.sourceType} · {item.status}
+                {knowledgeSourceTypeLabel(item.sourceType)} · {knowledgeDocumentStatusLabel(item.status)}
               </span>
-              {!!item.errorMessage && <p className="log-error">{item.errorMessage}</p>}
+              <button
+                className="danger-button compact-button"
+                disabled={busy || !selectedKnowledgeBaseId}
+                type="button"
+                onClick={() => {
+                  if (!selectedKnowledgeBaseId) return;
+                  if (!window.confirm(`确认删除文档「${item.title}」吗？`)) return;
+                  void onDeleteKnowledgeDocument(selectedKnowledgeBaseId, item.documentId);
+                }}
+              >
+                <Trash2 size={14} />
+                删除
+              </button>
             </div>
           ))}
-          {knowledgeDocuments.length === 0 && <span className="kb-empty">暂无文档</span>}
+          {visibleKnowledgeDocuments.length === 0 && <span className="kb-empty">暂无文档</span>}
         </div>
       </div>
 
@@ -654,7 +715,7 @@ function KnowledgeBasePanel({
               <strong>
                 {item.name} (#{item.knowledgeBaseId})
               </strong>
-              <span>{item.status}</span>
+              <span>{knowledgeBaseStatusLabel(item.status)}</span>
               {canManageBinding && selectedConversationType === "GROUP" && (
                 <button
                   className="danger-button compact-button"

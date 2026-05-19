@@ -164,20 +164,38 @@ func (s *ChatServiceImpl) ListAICallLogs(ctx context.Context, req *chat.ListAICa
 	return
 }
 
-// CreateMessage implements the ChatServiceImpl interface.
-func (s *ChatServiceImpl) CreateMessage(ctx context.Context, req *chat.CreateMessageRequest) (resp *chat.CreateMessageResponse, err error) {
+// ListNotifications implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) ListNotifications(ctx context.Context, req *chat.ListNotificationsRequest) (resp *chat.ListNotificationsResponse, err error) {
 	// TODO: Your code here...
 	return
 }
 
-// FindSingleByUsers implements the ChatServiceImpl interface.
-func (s *ChatServiceImpl) FindSingleByUsers(ctx context.Context, req *chat.FindSingleByUsersRequest) (resp *chat.FindSingleByUsersResponse, err error) {
+// MarkNotificationRead implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) MarkNotificationRead(ctx context.Context, req *chat.MarkNotificationReadRequest) (resp *chat.CommonResponse, err error) {
+	// TODO: Your code here...
+	return
+}
+
+// MarkAllNotificationsRead implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) MarkAllNotificationsRead(ctx context.Context, req *chat.MarkAllNotificationsReadRequest) (resp *chat.CommonResponse, err error) {
+	// TODO: Your code here...
+	return
+}
+
+// CreateNotification implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) CreateNotification(ctx context.Context, req *chat.CreateNotificationRequest) (resp *chat.CreateNotificationResponse, err error) {
 	// TODO: Your code here...
 	return
 }
 
 // CreateKnowledgeBase implements the ChatServiceImpl interface.
 func (s *ChatServiceImpl) CreateKnowledgeBase(ctx context.Context, req *chat.CreateKnowledgeBaseRequest) (resp *chat.CreateKnowledgeBaseResponse, err error) {
+	// TODO: Your code here...
+	return
+}
+
+// ListKnowledgeBases implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) ListKnowledgeBases(ctx context.Context, req *chat.ListKnowledgeBasesRequest) (resp *chat.ListKnowledgeBasesResponse, err error) {
 	// TODO: Your code here...
 	return
 }
@@ -218,8 +236,14 @@ func (s *ChatServiceImpl) UnbindConversationKnowledgeBase(ctx context.Context, r
 	return
 }
 
-// ListKnowledgeBases implements the ChatServiceImpl interface.
-func (s *ChatServiceImpl) ListKnowledgeBases(ctx context.Context, req *chat.ListKnowledgeBasesRequest) (resp *chat.ListKnowledgeBasesResponse, err error) {
+// CreateMessage implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) CreateMessage(ctx context.Context, req *chat.CreateMessageRequest) (resp *chat.CreateMessageResponse, err error) {
+	// TODO: Your code here...
+	return
+}
+
+// FindSingleByUsers implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) FindSingleByUsers(ctx context.Context, req *chat.FindSingleByUsersRequest) (resp *chat.FindSingleByUsersResponse, err error) {
 	// TODO: Your code here...
 	return
 }

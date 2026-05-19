@@ -7,7 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"example.com/aim/chat-service/internal/bot"
+	bot "example.com/aim/chat-service/bot-internal/biz"
+	botrepo "example.com/aim/chat-service/bot-internal/repository"
 	"example.com/aim/chat-service/internal/dal/model"
 	"gorm.io/gorm"
 )
@@ -141,7 +142,7 @@ func (s *ChatService) AddConversationBot(ctx context.Context, input AddConversat
 		return nil, err
 	}
 	if botModel.Status != model.BotStatusEnabled {
-		return nil, bot.ErrBotNotFound
+		return nil, botrepo.ErrBotNotFound
 	}
 	if botModel.CreatedBy != 0 && botModel.CreatedBy != input.OperatorID {
 		return nil, ErrBotOwnerRequired
@@ -169,7 +170,7 @@ func (s *ChatService) AddConversationBot(ctx context.Context, input AddConversat
 		}
 	}
 
-	if err := s.BotMembershipService.AddBotToConversationWithConfig(ctx, conversation.ID, input.BotID, bot.ConversationBotConfig{
+	if err := s.BotMembershipService.AddBotToConversationWithConfig(ctx, conversation.ID, input.BotID, botrepo.ConversationBotConfig{
 		ModelNameOverride:   modelNameOverride,
 		DisplayNameOverride: strings.TrimSpace(input.DisplayNameOverride),
 		MentionNameOverride: normalizeOptionalName(input.MentionNameOverride),

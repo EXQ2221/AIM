@@ -1,13 +1,16 @@
-﻿import { CheckCircle2, Loader2, MessageSquarePlus, RefreshCw, Search, UserPlus, UsersRound } from "lucide-react";
+import { Bell, CheckCircle2, ChevronDown, Loader2, MessageSquarePlus, RefreshCw, Search, UserPlus, UsersRound } from "lucide-react";
 import { FormEvent, useState } from "react";
+import type { ConversationInfo, NotificationInfo, UserInfo } from "../../types";
 import { Avatar, IconButton } from "../ui";
 import { joinPolicies } from "../types";
 import { conversationPreview, cx, formatRelative } from "../utils";
-import type { ConversationInfo, UserInfo } from "../../types";
+
 export function ConversationPanel({
   active,
   busy,
   conversations,
+  notifications,
+  notificationUnreadCount,
   unreadCounts,
   rawConversationCount,
   currentUser,
@@ -17,11 +20,15 @@ export function ConversationPanel({
   onCreateGroup,
   onJoinGroup,
   onRefresh,
+  onMarkNotificationRead,
+  onMarkAllNotificationsRead,
   onSelect
 }: {
   active: boolean;
   busy: boolean;
   conversations: ConversationInfo[];
+  notifications: NotificationInfo[];
+  notificationUnreadCount: number;
   unreadCounts: Record<string, number>;
   rawConversationCount: number;
   currentUser: UserInfo;
@@ -31,6 +38,8 @@ export function ConversationPanel({
   onCreateGroup: (input: { name: string; announcement: string; joinPolicy: string }) => Promise<void>;
   onJoinGroup: (conversationId: string) => Promise<void>;
   onRefresh: () => Promise<ConversationInfo[]>;
+  onMarkNotificationRead: (notificationId: number) => Promise<void>;
+  onMarkAllNotificationsRead: () => Promise<void>;
   onSelect: (conversationId: string) => void;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
@@ -39,6 +48,8 @@ export function ConversationPanel({
   const [announcement, setAnnouncement] = useState("");
   const [joinPolicy, setJoinPolicy] = useState("FREE");
   const [joinID, setJoinID] = useState("");
+  const [expandedNotificationId, setExpandedNotificationId] = useState<number | null>(null);
+  const [notificationCollapsed, setNotificationCollapsed] = useState(true);
 
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -129,30 +140,88 @@ export function ConversationPanel({
         <strong>{rawConversationCount}</strong>
       </div>
 
+      <div className="conversation-notification-card">
+        <div className="conversation-notification-header">
+          <button
+            className="conversation-notification-toggle"
+            type="button"
+            onClick={() => setNotificationCollapsed((current) => !current)}
+          >
+            <Bell size={14} />
+            通知中心
+          </button>
+          <div className="conversation-notification-header-actions">
+            {notificationUnreadCount > 0 && <span className="notification-unread-pill">{notificationUnreadCount > 99 ? "99+" : notificationUnreadCount}</span>}
+            <button disabled={notificationUnreadCount === 0} type="button" onClick={() => void onMarkAllNotificationsRead()}>
+              全部已读
+            </button>
+            <button
+              aria-label={notificationCollapsed ? "展开通知中心" : "收起通知中心"}
+              className="conversation-notification-collapse-btn"
+              type="button"
+              onClick={() => setNotificationCollapsed((current) => !current)}
+            >
+              <ChevronDown className={cx(notificationCollapsed && "open")} size={14} />
+            </button>
+          </div>
+        </div>
+        <div className={cx("conversation-notification-list", notificationCollapsed && "collapsed")}>
+          {notifications.length === 0 && <span className="empty">暂无通知</span>}
+          {notifications.map((item) => (
+            <button
+              key={item.id}
+              className={cx("notification-item", !item.isRead && "unread")}
+              type="button"
+              onClick={() => {
+                if (!item.isRead) {
+                  void onMarkNotificationRead(item.id);
+                }
+                if (item.conversationId && item.category === "GROUP_SYSTEM") {
+                  onSelect(item.conversationId);
+                  return;
+                }
+                setExpandedNotificationId((current) => (current === item.id ? null : item.id));
+              }}
+            >
+              <span className="notification-copy">
+                <strong>{item.summary || item.title}</strong>
+                {(item.detail || item.content) && <small>{item.detail || item.content}</small>}
+                {expandedNotificationId === item.id && (item.detail || item.content) && (
+                  <small className="notification-detail">{item.detail || item.content}</small>
+                )}
+                <time>{formatRelative(item.createdAt)}</time>
+              </span>
+              {!(item.conversationId && item.category === "GROUP_SYSTEM") && (
+                <ChevronDown className={cx("notification-expand", expandedNotificationId === item.id && "open")} size={14} />
+              )}
+              {!item.isRead && <i />}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="conversation-list">
         {conversations.map((conversation) => {
           const unread = unreadCounts[conversation.conversationId] ?? 0;
           const preview = conversationPreview(conversation);
           const title = conversation.title || conversation.type;
           return (
-          <button
-            key={conversation.conversationId}
-            className={cx("conversation-item", selectedConversationId === conversation.conversationId && "active")}
-            type="button"
-            onClick={() => onSelect(conversation.conversationId)}
-          >
-            <Avatar name={title} src={conversation.avatar} />
-            <span className="conversation-text">
-              <strong>{conversation.title || `会话 ${conversation.conversationId}`}</strong>
-              <span className="conversation-preview">
-                {preview}
+            <button
+              key={conversation.conversationId}
+              className={cx("conversation-item", selectedConversationId === conversation.conversationId && "active")}
+              type="button"
+              onClick={() => onSelect(conversation.conversationId)}
+            >
+              <Avatar name={title} src={conversation.avatar} />
+              <span className="conversation-text">
+                <strong>{conversation.title || `会话 ${conversation.conversationId}`}</strong>
+                <span className="conversation-preview">{preview}</span>
               </span>
-            </span>
-            <span className="conversation-side">
-              <time>{formatRelative(conversation.lastMessageAt ?? conversation.updatedAt)}</time>
-              {unread > 0 && <span className="unread-badge">{unread > 99 ? "99+" : unread}</span>}
-            </span>
-          </button>
+              <span className="conversation-side">
+                <time>{formatRelative(conversation.lastMessageAt ?? conversation.updatedAt)}</time>
+                {unread > 0 && <span className="unread-badge">{unread > 99 ? "99+" : unread}</span>}
+              </span>
+            </button>
           );
         })}
 
@@ -167,5 +236,3 @@ export function ConversationPanel({
     </aside>
   );
 }
-
-

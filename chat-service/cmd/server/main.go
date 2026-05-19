@@ -11,17 +11,20 @@ import (
 	"strings"
 	"time"
 
+	bot "example.com/aim/chat-service/bot-internal/biz"
+	botclient "example.com/aim/chat-service/bot-internal/client"
+	botconf "example.com/aim/chat-service/bot-internal/conf"
+	botdal "example.com/aim/chat-service/bot-internal/dal"
+	botrepo "example.com/aim/chat-service/bot-internal/repository"
 	"example.com/aim/chat-service/internal/biz"
-	"example.com/aim/chat-service/internal/bot"
 	"example.com/aim/chat-service/internal/dal/model"
 	pgstore "example.com/aim/chat-service/internal/dal/postgres"
-	"example.com/aim/chat-service/internal/embedding"
 	"example.com/aim/chat-service/internal/handler"
-	"example.com/aim/chat-service/internal/llm"
-	"example.com/aim/chat-service/internal/rag"
 	"example.com/aim/chat-service/internal/repository"
 	"example.com/aim/chat-service/internal/rpc"
 	"example.com/aim/chat-service/kitex_gen/chat/chatservice"
+	"example.com/aim/chat-service/kitex_gen/rag/ragservice"
+	llm "example.com/aim/chat-service/llm-internal/client"
 	"github.com/cloudwego/kitex/server"
 	redisv9 "github.com/redis/go-redis/v9"
 )
@@ -46,15 +49,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	ragClient, err := rpc.NewRAGClient(getenv("RAG_SERVICE_ADDR", "127.0.0.1:9004"))
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	conversationRepo := repository.NewConversationRepository(db)
 	groupRepo := repository.NewGroupRepository(db)
 	memberRepo := repository.NewMemberRepository(db)
 	botRepo := repository.NewBotRepository(db)
 	conversationBotRepo := repository.NewConversationBotRepository(db)
-	ragRepo := repository.NewRAGRepository(db)
 	messageRepo := repository.NewMessageRepository(db)
 	aiCallLogRepo := repository.NewAICallLogRepository(db)
+	notificationRepo := repository.NewNotificationRepository(db)
 	redisClient := newRedisClient(context.Background(), strings.TrimSpace(os.Getenv("REDIS_ADDR")))
 	if redisClient != nil {
 		defer redisClient.Close()
@@ -69,16 +76,14 @@ func main() {
 		userClient,
 	)
 	chatService.SetAICallLogRepository(aiCallLogRepo)
-	chatService.SetBotTaskTimeout(botTaskTimeoutFromEnv())
+	chatService.SetNotificationRepository(notificationRepo)
+	chatService.SetBotTaskTimeout(botconf.BotTaskTimeoutFromEnv())
 	chatService.SetBotManagement(
 		botRepo,
 		conversationBotRepo,
-		bot.NewMembershipService(repository.NewTxManager(db), conversationRepo, memberRepo, botRepo, conversationBotRepo),
+		botrepo.NewMembershipService(repository.NewTxManager(db), conversationRepo, memberRepo, botRepo, conversationBotRepo),
 	)
-	if ragService := newRAGServiceFromEnv(ragRepo); ragService != nil {
-		chatService.SetRAGService(ragService)
-	}
-	if botService := newBotServiceFromEnv(messageRepo, conversationRepo, memberRepo, botRepo, conversationBotRepo, ragRepo, aiCallLogRepo, redisClient, userClient); botService != nil {
+	if botService := newBotServiceFromEnv(messageRepo, conversationRepo, memberRepo, botRepo, conversationBotRepo, ragClient, aiCallLogRepo, redisClient, userClient); botService != nil {
 		chatService.SetBotService(botService)
 	}
 
@@ -90,7 +95,7 @@ func main() {
 	}
 
 	svr := chatservice.NewServer(
-		handler.NewChatServiceImpl(chatService),
+		handler.NewChatServiceImpl(chatService, ragClient),
 		server.WithServiceAddr(addr),
 	)
 
@@ -131,7 +136,7 @@ func newBotServiceFromEnv(
 	memberRepo repository.MemberRepository,
 	botRepo repository.BotRepository,
 	conversationBotRepo repository.ConversationBotRepository,
-	ragRepo repository.RAGRepository,
+	ragClient ragservice.Client,
 	aiCallLogRepo repository.AICallLogRepository,
 	redisClient *redisv9.Client,
 	userClient rpc.UserClient,
@@ -169,10 +174,11 @@ func newBotServiceFromEnv(
 		}
 		return client, providerName, nil
 	})
-	botService.SetLimiter(bot.NewLimiter(botMaxConcurrencyFromEnv(), botMaxConversationConcurrencyFromEnv()))
-	botService.SetContextMessages(botContextMessagesFromEnv())
+	botService.SetLimiter(bot.NewLimiter(botconf.BotMaxConcurrencyFromEnv(), botconf.BotMaxConversationConcurrencyFromEnv()))
+	botService.SetLLMTimeout(botconf.BotLLMTimeoutFromEnv())
+	botService.SetContextMessages(botconf.BotContextMessagesFromEnv())
 	botService.SetRAGTopK(ragTopKFromEnv())
-	if ragSearcher := newBotRAGSearcherFromEnv(ragRepo); ragSearcher != nil {
+	if ragSearcher := newBotRAGSearcher(ragClient); ragSearcher != nil {
 		botService.SetRAGSearcher(ragSearcher)
 	}
 	botService.SetMemberRepository(memberRepo)
@@ -180,57 +186,24 @@ func newBotServiceFromEnv(
 	botService.SetConversationBotRepository(conversationBotRepo)
 	botService.SetUserClient(userClient)
 	if redisClient != nil {
-		botService.SetReplyPublisher(bot.NewRedisReplyPublisher(redisClient))
+		botService.SetReplyPublisher(botclient.NewRedisReplyPublisher(redisClient))
 	}
 	log.Printf(
-		"bot service enabled: provider=%s, model=%s, context_messages=%d, providers=%s",
+		"bot service enabled: provider=%s, model=%s, context_messages=%d, llm_timeout=%s, providers=%s",
 		providerName,
 		llmConfig.Model,
-		botContextMessagesFromEnv(),
+		botconf.BotContextMessagesFromEnv(),
+		botconf.BotLLMTimeoutFromEnv().String(),
 		strings.Join(registry.ProviderNames(), ","),
 	)
 	return botService
 }
 
-func newBotRAGSearcherFromEnv(ragRepo repository.RAGRepository) bot.RAGSearcher {
-	if ragRepo == nil {
+func newBotRAGSearcher(ragClient ragservice.Client) bot.RAGSearcher {
+	if ragClient == nil {
 		return nil
 	}
-	cfg, err := embedding.LoadConfigFromEnv()
-	if err != nil {
-		log.Printf("bot rag search disabled: %v", err)
-		return nil
-	}
-	embedClient, err := embedding.NewClient(cfg)
-	if err != nil {
-		log.Printf("bot rag search disabled: %v", err)
-		return nil
-	}
-	return bot.NewConversationRAGSearcher(embedClient, ragRepo)
-}
-
-func newRAGServiceFromEnv(ragRepo repository.RAGRepository) *biz.RAGService {
-	cfg, err := embedding.LoadConfigFromEnv()
-	if err != nil {
-		log.Printf("rag service disabled: %v", err)
-		return nil
-	}
-	embedClient, err := embedding.NewClient(cfg)
-	if err != nil {
-		log.Printf("rag service disabled: %v", err)
-		return nil
-	}
-	splitterCfg, err := rag.LoadSplitterConfigFromEnv()
-	if err != nil {
-		log.Printf("rag service disabled: %v", err)
-		return nil
-	}
-	processor := rag.NewDocumentProcessor(embedClient, ragRepo, splitterCfg)
-	service := biz.NewRAGService(ragRepo, embedClient, processor)
-	service.DefaultTopK = ragTopKFromEnv()
-	service.SearchTimeout = ragSearchTimeoutFromEnv()
-	log.Printf("rag service enabled: provider=%s, model=%s, chunk_size=%d, chunk_overlap=%d, top_k=%d", cfg.Provider, cfg.Model, splitterCfg.ChunkSize, splitterCfg.ChunkOverlap, service.DefaultTopK)
-	return service
+	return botdal.NewConversationRAGSearcher(ragClient)
 }
 
 func ragTopKFromEnv() int {
@@ -245,9 +218,9 @@ func ragTopKFromEnv() int {
 }
 
 func ragSearchTimeoutFromEnv() time.Duration {
-	seconds := intFromEnv("RAG_SEARCH_TIMEOUT_SECONDS", 20)
+	seconds := intFromEnv("RAG_SEARCH_TIMEOUT_SECONDS", 40)
 	if seconds <= 0 {
-		seconds = 20
+		seconds = 40
 	}
 	return time.Duration(seconds) * time.Second
 }
@@ -264,7 +237,7 @@ func builtInBotConfigsFromEnv() []pgstore.BuiltInBotConfig {
 		}
 	}
 
-	qwenSupportedModels := []string{"qwen-turbo", "qwen-plus", "qwen-max", "qwen3.6-plus"}
+	qwenSupportedModels := []string{"qwen-turbo", "qwen-plus", "qwen-max", "qwen3.6-plus", "qwen3.5-plus"}
 	qwenModelName := qwenSupportedModels[0]
 	if envModel := strings.TrimSpace(os.Getenv("LLM2_MODEL")); envModel != "" {
 		for _, supportedModel := range qwenSupportedModels {
@@ -291,32 +264,12 @@ func builtInBotConfigsFromEnv() []pgstore.BuiltInBotConfig {
 			Name:            "\u901a\u4e49\u5343\u95ee",
 			MentionName:     "qwen",
 			Aliases:         []string{"tongyi", "qw"},
-			Description:     "\u5e73\u53f0\u5185\u7f6e\u901a\u4e49\u5343\u95ee\u52a9\u624b\uff1aqwen-turbo\uff08\u901f\u5ea6\u5feb\uff09\u3001qwen-plus\uff08\u5747\u8861\uff09\u3001qwen-max\uff08\u6548\u679c\u6700\u597d\uff09\u3001qwen3.6-plus\uff08\u652f\u6301\u8bfb\u56fe\uff09\u3002",
+			Description:     "\u5e73\u53f0\u5185\u7f6e\u901a\u4e49\u5343\u95ee\u52a9\u624b\uff1aqwen-turbo\uff08\u901f\u5ea6\u5feb\uff09\u3001qwen-plus\uff08\u5747\u8861\uff09\u3001qwen-max\uff08\u6548\u679c\u6700\u597d\uff09\u3001qwen3.6-plus\uff08\u652f\u6301\u8bfb\u56fe\uff09\u3001qwen3.5-plus\uff08\u652f\u6301\u8bfb\u56fe\uff09\u3002",
 			ModelName:       qwenModelName,
 			SupportedModels: qwenSupportedModels,
 			SystemPrompt:    bot.DefaultSystemPrompt,
 		},
 	}
-}
-
-func botMaxConcurrencyFromEnv() int {
-	return intFromEnv("BOT_MAX_CONCURRENCY", 10)
-}
-
-func botMaxConversationConcurrencyFromEnv() int {
-	return intFromEnv("BOT_MAX_CONVERSATION_CONCURRENCY", 1)
-}
-
-func botTaskTimeoutFromEnv() time.Duration {
-	seconds := intFromEnv("BOT_TASK_TIMEOUT_SECONDS", 30)
-	if seconds <= 0 {
-		seconds = 30
-	}
-	return time.Duration(seconds) * time.Second
-}
-
-func botContextMessagesFromEnv() int {
-	return intFromEnv("BOT_CONTEXT_MESSAGES", 20)
 }
 
 func intFromEnv(key string, fallback int) int {

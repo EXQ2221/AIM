@@ -428,6 +428,35 @@ export function statusLabel(status: string) {
   return map[status] ?? status;
 }
 
+export function knowledgeSourceTypeLabel(sourceType: string) {
+  const normalized = sourceType.trim().toUpperCase();
+  const map: Record<string, string> = {
+    TEXT: "文本",
+    MARKDOWN: "Markdown"
+  };
+  return map[normalized] ?? (sourceType.trim() || "-");
+}
+
+export function knowledgeDocumentStatusLabel(status: string) {
+  const normalized = status.trim().toUpperCase();
+  const map: Record<string, string> = {
+    PENDING: "排队中",
+    PROCESSING: "处理中",
+    READY: "已就绪",
+    FAILED: "失败"
+  };
+  return map[normalized] ?? (status.trim() || "-");
+}
+
+export function knowledgeBaseStatusLabel(status: string) {
+  const normalized = status.trim().toUpperCase();
+  const map: Record<string, string> = {
+    ACTIVE: "可用",
+    DISABLED: "停用"
+  };
+  return map[normalized] ?? (status.trim() || "-");
+}
+
 export function errorMessage(error: unknown) {
   if (error instanceof APIError) return error.message;
   if (error instanceof Error) return error.message;

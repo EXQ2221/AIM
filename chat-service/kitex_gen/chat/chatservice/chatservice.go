@@ -195,6 +195,34 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"ListNotifications": kitex.NewMethodInfo(
+		listNotificationsHandler,
+		newChatServiceListNotificationsArgs,
+		newChatServiceListNotificationsResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"MarkNotificationRead": kitex.NewMethodInfo(
+		markNotificationReadHandler,
+		newChatServiceMarkNotificationReadArgs,
+		newChatServiceMarkNotificationReadResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"MarkAllNotificationsRead": kitex.NewMethodInfo(
+		markAllNotificationsReadHandler,
+		newChatServiceMarkAllNotificationsReadArgs,
+		newChatServiceMarkAllNotificationsReadResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"CreateNotification": kitex.NewMethodInfo(
+		createNotificationHandler,
+		newChatServiceCreateNotificationArgs,
+		newChatServiceCreateNotificationResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"CreateKnowledgeBase": kitex.NewMethodInfo(
 		createKnowledgeBaseHandler,
 		newChatServiceCreateKnowledgeBaseArgs,
@@ -799,6 +827,78 @@ func newChatServiceListAICallLogsResult() interface{} {
 	return chat.NewChatServiceListAICallLogsResult()
 }
 
+func listNotificationsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceListNotificationsArgs)
+	realResult := result.(*chat.ChatServiceListNotificationsResult)
+	success, err := handler.(chat.ChatService).ListNotifications(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceListNotificationsArgs() interface{} {
+	return chat.NewChatServiceListNotificationsArgs()
+}
+
+func newChatServiceListNotificationsResult() interface{} {
+	return chat.NewChatServiceListNotificationsResult()
+}
+
+func markNotificationReadHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceMarkNotificationReadArgs)
+	realResult := result.(*chat.ChatServiceMarkNotificationReadResult)
+	success, err := handler.(chat.ChatService).MarkNotificationRead(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceMarkNotificationReadArgs() interface{} {
+	return chat.NewChatServiceMarkNotificationReadArgs()
+}
+
+func newChatServiceMarkNotificationReadResult() interface{} {
+	return chat.NewChatServiceMarkNotificationReadResult()
+}
+
+func markAllNotificationsReadHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceMarkAllNotificationsReadArgs)
+	realResult := result.(*chat.ChatServiceMarkAllNotificationsReadResult)
+	success, err := handler.(chat.ChatService).MarkAllNotificationsRead(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceMarkAllNotificationsReadArgs() interface{} {
+	return chat.NewChatServiceMarkAllNotificationsReadArgs()
+}
+
+func newChatServiceMarkAllNotificationsReadResult() interface{} {
+	return chat.NewChatServiceMarkAllNotificationsReadResult()
+}
+
+func createNotificationHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceCreateNotificationArgs)
+	realResult := result.(*chat.ChatServiceCreateNotificationResult)
+	success, err := handler.(chat.ChatService).CreateNotification(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceCreateNotificationArgs() interface{} {
+	return chat.NewChatServiceCreateNotificationArgs()
+}
+
+func newChatServiceCreateNotificationResult() interface{} {
+	return chat.NewChatServiceCreateNotificationResult()
+}
+
 func createKnowledgeBaseHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	realArg := arg.(*chat.ChatServiceCreateKnowledgeBaseArgs)
 	realResult := result.(*chat.ChatServiceCreateKnowledgeBaseResult)
@@ -1244,6 +1344,46 @@ func (p *kClient) ListAICallLogs(ctx context.Context, req *chat.ListAICallLogsRe
 	_args.Req = req
 	var _result chat.ChatServiceListAICallLogsResult
 	if err = p.c.Call(ctx, "ListAICallLogs", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListNotifications(ctx context.Context, req *chat.ListNotificationsRequest) (r *chat.ListNotificationsResponse, err error) {
+	var _args chat.ChatServiceListNotificationsArgs
+	_args.Req = req
+	var _result chat.ChatServiceListNotificationsResult
+	if err = p.c.Call(ctx, "ListNotifications", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) MarkNotificationRead(ctx context.Context, req *chat.MarkNotificationReadRequest) (r *chat.CommonResponse, err error) {
+	var _args chat.ChatServiceMarkNotificationReadArgs
+	_args.Req = req
+	var _result chat.ChatServiceMarkNotificationReadResult
+	if err = p.c.Call(ctx, "MarkNotificationRead", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) MarkAllNotificationsRead(ctx context.Context, req *chat.MarkAllNotificationsReadRequest) (r *chat.CommonResponse, err error) {
+	var _args chat.ChatServiceMarkAllNotificationsReadArgs
+	_args.Req = req
+	var _result chat.ChatServiceMarkAllNotificationsReadResult
+	if err = p.c.Call(ctx, "MarkAllNotificationsRead", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) CreateNotification(ctx context.Context, req *chat.CreateNotificationRequest) (r *chat.CreateNotificationResponse, err error) {
+	var _args chat.ChatServiceCreateNotificationArgs
+	_args.Req = req
+	var _result chat.ChatServiceCreateNotificationResult
+	if err = p.c.Call(ctx, "CreateNotification", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

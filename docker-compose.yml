@@ -117,6 +117,7 @@ services:
       HEALTH_PORT: "19003"
       CHAT_POSTGRES_DSN: "${CHAT_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_chat port=5432 sslmode=disable TimeZone=UTC}"
       USER_SERVICE_ADDR: "user-service:9001"
+      RAG_SERVICE_ADDR: "rag-service:9004"
       REDIS_ADDR: "redis:6379"
       BOT_ID: "${BOT_ID:-1}"
       BOT2_ID: "${BOT2_ID:-100001}"
@@ -125,25 +126,36 @@ services:
       LLM_MODEL: "${LLM_MODEL:-}"
       LLM_TIMEOUT_SECONDS: "${LLM_TIMEOUT_SECONDS:-30}"
       LLM_INSECURE_SKIP_VERIFY: "${LLM_INSECURE_SKIP_VERIFY:-false}"
+      LLM_ENABLE_SEARCH: "${LLM_ENABLE_SEARCH:-false}"
+      LLM_FORCE_SEARCH: "${LLM_FORCE_SEARCH:-false}"
+      LLM_SEARCH_STRATEGY: "${LLM_SEARCH_STRATEGY:-}"
+      LLM_ENABLE_THINKING: "${LLM_ENABLE_THINKING:-}"
       LLM2_BASE_URL: "${LLM2_BASE_URL:-}"
       LLM2_API_KEY: "${LLM2_API_KEY:-}"
       LLM2_MODEL: "${LLM2_MODEL:-}"
       LLM2_TIMEOUT_SECONDS: "${LLM2_TIMEOUT_SECONDS:-30}"
       LLM2_INSECURE_SKIP_VERIFY: "${LLM2_INSECURE_SKIP_VERIFY:-false}"
+      LLM2_ENABLE_SEARCH: "${LLM2_ENABLE_SEARCH:-true}"
+      LLM2_FORCE_SEARCH: "${LLM2_FORCE_SEARCH:-true}"
+      LLM2_SEARCH_STRATEGY: "${LLM2_SEARCH_STRATEGY:-turbo}"
+      LLM2_ENABLE_THINKING: "${LLM2_ENABLE_THINKING:-false}"
       LLM_PROVIDER: "${LLM_PROVIDER:-primary}"
       BOT_CONTEXT_MESSAGES: "${BOT_CONTEXT_MESSAGES:-20}"
-      BOT_TASK_TIMEOUT_SECONDS: "${BOT_TASK_TIMEOUT_SECONDS:-30}"
+      BOT_LLM_TIMEOUT_SECONDS: "${BOT_LLM_TIMEOUT_SECONDS:-30}"
+      BOT_TASK_TIMEOUT_SECONDS: "${BOT_TASK_TIMEOUT_SECONDS:-60}"
       EMBEDDING_BASE_URL: "${EMBEDDING_BASE_URL:-}"
       EMBEDDING_API_KEY: "${EMBEDDING_API_KEY:-}"
       EMBEDDING_PROVIDER: "${EMBEDDING_PROVIDER:-}"
       EMBEDDING_MODEL: "${EMBEDDING_MODEL:-text-embedding-3-small}"
       EMBEDDING_DIMENSION: "${EMBEDDING_DIMENSION:-1536}"
-      EMBEDDING_TIMEOUT_SECONDS: "${EMBEDDING_TIMEOUT_SECONDS:-30}"
+      EMBEDDING_TIMEOUT_SECONDS: "${EMBEDDING_TIMEOUT_SECONDS:-60}"
+      EMBEDDING_MAX_RETRIES: "${EMBEDDING_MAX_RETRIES:-2}"
+      EMBEDDING_RETRY_BACKOFF_MS: "${EMBEDDING_RETRY_BACKOFF_MS:-1200}"
       EMBEDDING_INSECURE_SKIP_VERIFY: "${EMBEDDING_INSECURE_SKIP_VERIFY:-false}"
       RAG_CHUNK_SIZE: "${RAG_CHUNK_SIZE:-1000}"
       RAG_CHUNK_OVERLAP: "${RAG_CHUNK_OVERLAP:-150}"
       RAG_TOP_K: "${RAG_TOP_K:-5}"
-      RAG_SEARCH_TIMEOUT_SECONDS: "${RAG_SEARCH_TIMEOUT_SECONDS:-20}"
+      RAG_SEARCH_TIMEOUT_SECONDS: "${RAG_SEARCH_TIMEOUT_SECONDS:-40}"
       TZ: Asia/Shanghai
     depends_on:
       postgres:
@@ -162,6 +174,89 @@ services:
     networks:
       - aim-net
 
+  rag-service:
+    build:
+      context: .
+      dockerfile: rag-service/Dockerfile
+      args:
+        GO_IMAGE: ${GO_IMAGE:-m.daocloud.io/docker.io/library/golang:1.25.2-alpine}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-m.daocloud.io/docker.io/library/alpine:3.20}
+    container_name: aim-rag-service
+    restart: unless-stopped
+    environment:
+      PORT: "9004"
+      HEALTH_PORT: "19004"
+      RAG_POSTGRES_DSN: "${RAG_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_chat port=5432 sslmode=disable TimeZone=UTC}"
+      EMBEDDING_BASE_URL: "${EMBEDDING_BASE_URL:-}"
+      EMBEDDING_API_KEY: "${EMBEDDING_API_KEY:-}"
+      EMBEDDING_PROVIDER: "${EMBEDDING_PROVIDER:-}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-text-embedding-3-small}"
+      EMBEDDING_DIMENSION: "${EMBEDDING_DIMENSION:-1536}"
+      EMBEDDING_TIMEOUT_SECONDS: "${EMBEDDING_TIMEOUT_SECONDS:-60}"
+      EMBEDDING_MAX_RETRIES: "${EMBEDDING_MAX_RETRIES:-2}"
+      EMBEDDING_RETRY_BACKOFF_MS: "${EMBEDDING_RETRY_BACKOFF_MS:-1200}"
+      EMBEDDING_INSECURE_SKIP_VERIFY: "${EMBEDDING_INSECURE_SKIP_VERIFY:-false}"
+      RAG_CHUNK_SIZE: "${RAG_CHUNK_SIZE:-1000}"
+      RAG_CHUNK_OVERLAP: "${RAG_CHUNK_OVERLAP:-150}"
+      RAG_TOP_K: "${RAG_TOP_K:-5}"
+      RAG_SEARCH_TIMEOUT_SECONDS: "${RAG_SEARCH_TIMEOUT_SECONDS:-40}"
+      TZ: Asia/Shanghai
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "9004:9004"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:19004/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  parser-service:
+    build:
+      context: .
+      dockerfile: parser-service/Dockerfile
+    container_name: aim-parser-service
+    restart: unless-stopped
+    environment:
+      VISION_BASE_URL: "${VISION_BASE_URL:-${LLM2_BASE_URL:-}}"
+      VISION_API_KEY: "${VISION_API_KEY:-${LLM2_API_KEY:-}}"
+      VISION_MODEL: "${VISION_MODEL:-qwen3.6-plus}"
+      VISION_TIMEOUT_SECONDS: "${VISION_TIMEOUT_SECONDS:-90}"
+      PARSER_MAX_DESCRIBE_IMAGES: "${PARSER_MAX_DESCRIBE_IMAGES:-8}"
+      PARSER_IMAGE_HEAVY_MIN_IMAGES: "${PARSER_IMAGE_HEAVY_MIN_IMAGES:-4}"
+      PARSER_IMAGE_HEAVY_TEXT_CHARS_PER_IMAGE: "${PARSER_IMAGE_HEAVY_TEXT_CHARS_PER_IMAGE:-800}"
+      TZ: Asia/Shanghai
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  prometheus:
+    image: ${DOCKER_HUB_MIRROR:-m.daocloud.io/docker.io}/prom/prometheus:v2.55.1
+    container_name: aim-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - aim-net
+
   gateway:
     build:
       context: .
@@ -176,6 +271,8 @@ services:
       AUTH_SERVICE_ADDR: "auth-service:9002"
       USER_SERVICE_ADDR: "user-service:9001"
       CHAT_SERVICE_ADDR: "chat-service:9003"
+      RAG_SERVICE_ADDR: "rag-service:9004"
+      PARSER_SERVICE_URL: "http://parser-service:8000"
       REDIS_ADDR: "redis:6379"
       UPLOAD_DIR: "/app/uploads"
       UPLOAD_PUBLIC_PREFIX: "/uploads"
@@ -187,6 +284,10 @@ services:
       user-service:
         condition: service_healthy
       chat-service:
+        condition: service_healthy
+      rag-service:
+        condition: service_healthy
+      parser-service:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -206,6 +307,7 @@ volumes:
   postgres_data:
   redis_data:
   gateway_uploads:
+  prometheus_data:
 
 networks:
   aim-net:

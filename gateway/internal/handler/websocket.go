@@ -14,6 +14,10 @@ func StartBotReplySubscriber(ctx context.Context, client *redisv9.Client) {
 	gatewayws.StartBotReplySubscriber(ctx, client, chatHub)
 }
 
+func StartBotReplyStreamSubscriber(ctx context.Context, client *redisv9.Client) {
+	gatewayws.StartBotReplyStreamSubscriber(ctx, client, chatHub)
+}
+
 func StartFriendSyncSubscriber(ctx context.Context, client *redisv9.Client) {
 	gatewayws.StartFriendSyncSubscriber(ctx, client, chatHub)
 }

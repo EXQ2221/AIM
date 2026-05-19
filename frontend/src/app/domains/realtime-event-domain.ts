@@ -3,11 +3,19 @@ import type {
   ConversationInfo,
   MessageInfo,
   MessageRecalledEventInfo,
+  NotificationInfo,
   UserInfo,
   WebSocketEvent
 } from "../../types";
 import type { PendingMessageEntry, ToastTone } from "../types";
-import { mergeMessagesById, parseSystemMessageContent, reconcilePendingMessage, scrollMessagesToBottom, sortConversations } from "../utils";
+import {
+  mergeMessagesById,
+  parseSystemMessageContent,
+  reconcilePendingMessage,
+  scrollMessagesToBottom,
+  sortConversations,
+  sortMessages
+} from "../utils";
 
 type RealtimeHandlerDeps = {
   user: UserInfo | null;
@@ -18,12 +26,30 @@ type RealtimeHandlerDeps = {
   refreshSelectedGroupInfo: (conversationId: string) => void | Promise<unknown>;
   showMessageNotification: (message: MessageInfo) => void;
   showToast: (message: string, tone?: ToastTone) => void;
+  refreshConversations: () => Promise<ConversationInfo[]>;
   syncFriendStateFromRealtime: (options?: { refreshConversations?: boolean }) => void | Promise<void>;
   applyRecalledMessageEvent: (event: MessageRecalledEventInfo) => void;
   setMessages: Dispatch<SetStateAction<MessageInfo[]>>;
   setUnreadCounts: Dispatch<SetStateAction<Record<string, number>>>;
   setConversations: Dispatch<SetStateAction<ConversationInfo[]>>;
+  setNotifications: Dispatch<SetStateAction<NotificationInfo[]>>;
+  setNotificationUnreadCount: Dispatch<SetStateAction<number>>;
 };
+
+function replaceBotGeneratingMessage(messages: MessageInfo[], incoming: MessageInfo) {
+  if (incoming.senderType !== "BOT" && incoming.messageType !== "BOT_REPLY") {
+    return mergeMessagesById(messages, [incoming]);
+  }
+  let replaced = false;
+  const updated = messages.map((message) => {
+    if (!replaced && message.conversationId === incoming.conversationId && message.isBotGenerating) {
+      replaced = true;
+      return incoming;
+    }
+    return message;
+  });
+  return replaced ? sortMessages(updated) : mergeMessagesById(messages, [incoming]);
+}
 
 export function buildRealtimeEventHandler(deps: RealtimeHandlerDeps) {
   return (raw: string) => {
@@ -44,6 +70,7 @@ export function buildRealtimeEventHandler(deps: RealtimeHandlerDeps) {
         status: "SUCCESS" | "FAILED";
         errorMessage?: string;
       };
+      let failedConversationID = "";
       const clientMsgID = event.clientMsgId?.trim();
       if (clientMsgID) {
         const pendingEntry = deps.pendingMessagesRef.current.get(clientMsgID);
@@ -59,9 +86,17 @@ export function buildRealtimeEventHandler(deps: RealtimeHandlerDeps) {
           if (data.status === "SUCCESS" && pendingEntry.conversationId === deps.selectedConversationIdRef.current && data.messageId) {
             void deps.markConversationRead(pendingEntry.conversationId, data.messageId);
           }
+          if (data.status === "FAILED") {
+            failedConversationID = pendingEntry.conversationId;
+          }
         }
       }
       if (data.status === "FAILED") {
+        if (failedConversationID) {
+          deps.setMessages((current) =>
+            current.filter((item) => !(item.conversationId === failedConversationID && item.isBotGenerating))
+          );
+        }
         deps.showToast(data.errorMessage || "Message send failed", "error");
       }
       return;
@@ -71,9 +106,10 @@ export function buildRealtimeEventHandler(deps: RealtimeHandlerDeps) {
       const incoming = event.data as MessageInfo;
       const systemContent = incoming.messageType === "SYSTEM" ? parseSystemMessageContent(incoming.content) : null;
       deps.showMessageNotification(incoming);
+
       const activeConversationID = deps.selectedConversationIdRef.current;
       if (activeConversationID === incoming.conversationId) {
-        deps.setMessages((current) => mergeMessagesById(current, [incoming]));
+        deps.setMessages((current) => replaceBotGeneratingMessage(current, incoming));
         window.setTimeout(() => scrollMessagesToBottom(deps.messageListRef), 20);
         void deps.markConversationRead(incoming.conversationId, incoming.id);
         if (systemContent?.eventType === "ANNOUNCEMENT_UPDATED") {
@@ -110,6 +146,27 @@ export function buildRealtimeEventHandler(deps: RealtimeHandlerDeps) {
           )
         )
       );
+      return;
+    }
+
+    if (event.type === "NOTIFICATION_CREATED") {
+      const data = event.data as { notification?: NotificationInfo; unreadCount?: number } | undefined;
+      const notification = data?.notification;
+      if (!notification || typeof notification.id !== "number" || notification.id <= 0) {
+        return;
+      }
+
+      deps.setNotifications((current) => [notification, ...current.filter((item) => item.id !== notification.id)].slice(0, 8));
+      if (typeof data?.unreadCount === "number") {
+        deps.setNotificationUnreadCount(data.unreadCount);
+      } else if (!notification.isRead) {
+        deps.setNotificationUnreadCount((current) => current + 1);
+      }
+      if (notification.conversationId) {
+        void deps.refreshConversations();
+      }
+      const summary = (notification.summary || notification.title || "").trim();
+      deps.showToast(summary || "New notification", "info");
       return;
     }
 

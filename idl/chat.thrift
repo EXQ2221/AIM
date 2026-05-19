@@ -449,6 +449,52 @@ struct ListAICallLogsResponse {
   2: AICallLogQuotaInfo quota
 }
 
+struct NotificationInfo {
+  1: i64 id
+  2: string type
+  3: string title
+  4: string content
+  5: string conversation_id
+  6: optional i64 related_message_id
+  7: bool is_read
+  8: i64 created_at
+}
+
+struct ListNotificationsRequest {
+  1: i64 operator_id
+  2: optional bool unread_only
+  3: optional i32 limit
+}
+
+struct ListNotificationsResponse {
+  1: list<NotificationInfo> notifications
+  2: i64 unread_count
+}
+
+struct MarkNotificationReadRequest {
+  1: i64 operator_id
+  2: i64 notification_id
+}
+
+struct MarkAllNotificationsReadRequest {
+  1: i64 operator_id
+}
+
+struct CreateNotificationRequest {
+  1: i64 operator_id
+  2: i64 user_id
+  3: string type
+  4: string title
+  5: string content
+  6: optional string conversation_id
+  7: optional i64 related_message_id
+}
+
+struct CreateNotificationResponse {
+  1: NotificationInfo notification
+  2: i64 unread_count
+}
+
 struct CreateMessageRequest {
   1: i64 operator_id
   2: string conversation_id
@@ -497,6 +543,10 @@ service ChatService {
   AddConversationBotResponse AddConversationBot(1: AddConversationBotRequest req)
   CommonResponse RemoveConversationBot(1: RemoveConversationBotRequest req)
   ListAICallLogsResponse ListAICallLogs(1: ListAICallLogsRequest req)
+  ListNotificationsResponse ListNotifications(1: ListNotificationsRequest req)
+  CommonResponse MarkNotificationRead(1: MarkNotificationReadRequest req)
+  CommonResponse MarkAllNotificationsRead(1: MarkAllNotificationsReadRequest req)
+  CreateNotificationResponse CreateNotification(1: CreateNotificationRequest req)
   CreateKnowledgeBaseResponse CreateKnowledgeBase(1: CreateKnowledgeBaseRequest req)
   ListKnowledgeBasesResponse ListKnowledgeBases(1: ListKnowledgeBasesRequest req)
   AddKnowledgeDocumentTextResponse AddKnowledgeDocumentText(1: AddKnowledgeDocumentTextRequest req)

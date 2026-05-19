@@ -89,6 +89,8 @@ func (c *Client) readLoop(ctx context.Context) {
 		switch strings.ToUpper(strings.TrimSpace(event.Type)) {
 		case EventSendMessage:
 			c.handleSendMessage(ctx, event)
+		case EventTyping:
+			c.handleTyping(ctx, event)
 		default:
 			c.sendFailedAck(event.ClientMsgID, "BAD_REQUEST", "unsupported event type")
 		}
@@ -215,6 +217,52 @@ func (c *Client) broadcastNewMessage(ctx context.Context, message *chatpb.Messag
 	c.hub.SendToUsers(userIDs, OutgoingEvent{
 		Type: EventNewMessage,
 		Data: ToMessageInfo(message),
+	})
+}
+
+func (c *Client) handleTyping(ctx context.Context, event IncomingEvent) {
+	var payload TypingData
+	if err := json.Unmarshal(event.Data, &payload); err != nil {
+		return
+	}
+	payload.ConversationID = strings.TrimSpace(payload.ConversationID)
+	if payload.ConversationID == "" {
+		return
+	}
+
+	members, err := c.chatClient.ListMembers(ctx, &chatpb.ListMembersRequest{
+		OperatorId:     c.UserID,
+		ConversationId: payload.ConversationID,
+	})
+	if err != nil || members == nil {
+		return
+	}
+
+	userIDs := make([]int64, 0, len(members.Members))
+	selfFound := false
+	for _, member := range members.Members {
+		if member == nil {
+			continue
+		}
+		if member.UserId == c.UserID {
+			selfFound = true
+		}
+		if member.UserId != c.UserID && strings.EqualFold(member.MemberType, "USER") {
+			userIDs = append(userIDs, member.UserId)
+		}
+	}
+	if !selfFound || len(userIDs) == 0 {
+		return
+	}
+
+	c.hub.SendToUsers(userIDs, OutgoingEvent{
+		Type: EventTyping,
+		Data: TypingData{
+			ConversationID: payload.ConversationID,
+			IsTyping:       payload.IsTyping,
+			UserID:         c.UserID,
+			At:             time.Now().Unix(),
+		},
 	})
 }
 

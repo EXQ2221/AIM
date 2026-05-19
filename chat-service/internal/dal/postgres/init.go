@@ -5,9 +5,6 @@ import (
 	"encoding/base32"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -44,17 +41,8 @@ func Init(dsn string) (*gorm.DB, error) {
 		&model.Bot{},
 		&model.ConversationBot{},
 		&model.AICallLog{},
-		&model.KnowledgeBase{},
-		&model.KnowledgeDocument{},
-		&model.ConversationKnowledgeBase{},
+		&model.Notification{},
 	); err != nil {
-		return nil, err
-	}
-	embeddingDim, err := embeddingDimensionFromEnv()
-	if err != nil {
-		return nil, err
-	}
-	if err := ensureKnowledgeChunksSchema(db, embeddingDim); err != nil {
 		return nil, err
 	}
 	if err := backfillConversationIDs(db); err != nil {
@@ -62,84 +50,6 @@ func Init(dsn string) (*gorm.DB, error) {
 	}
 
 	return db, nil
-}
-
-func embeddingDimensionFromEnv() (int, error) {
-	value := strings.TrimSpace(os.Getenv("EMBEDDING_DIMENSION"))
-	if value == "" {
-		return 1536, nil
-	}
-	dimension, err := strconv.Atoi(value)
-	if err != nil || dimension <= 0 {
-		return 0, errors.New("EMBEDDING_DIMENSION must be a positive integer")
-	}
-	return dimension, nil
-}
-
-func ensureKnowledgeChunksSchema(db *gorm.DB, embeddingDim int) error {
-	createTableSQL := fmt.Sprintf(`
-CREATE TABLE IF NOT EXISTS knowledge_chunks (
-    id BIGSERIAL PRIMARY KEY,
-    knowledge_base_id BIGINT NOT NULL,
-    document_id BIGINT NOT NULL,
-    chunk_index INT NOT NULL,
-    content TEXT NOT NULL,
-    token_count INT NOT NULL DEFAULT 0,
-    embedding vector(%d) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);`, embeddingDim)
-	if err := db.Exec(createTableSQL).Error; err != nil {
-		return fmt.Errorf("create knowledge_chunks table failed: %w", err)
-	}
-	if err := db.Exec(`
-CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_kb_id
-ON knowledge_chunks (knowledge_base_id);`).Error; err != nil {
-		return fmt.Errorf("create idx_knowledge_chunks_kb_id failed: %w", err)
-	}
-	if err := db.Exec(`
-CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_document_id
-ON knowledge_chunks (document_id);`).Error; err != nil {
-		return fmt.Errorf("create idx_knowledge_chunks_document_id failed: %w", err)
-	}
-	if err := db.Exec(`
-CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_chunks_document_index
-ON knowledge_chunks (document_id, chunk_index);`).Error; err != nil {
-		return fmt.Errorf("create idx_knowledge_chunks_document_index failed: %w", err)
-	}
-	if err := assertKnowledgeChunksEmbeddingDimension(db, embeddingDim); err != nil {
-		return err
-	}
-	return nil
-}
-
-func assertKnowledgeChunksEmbeddingDimension(db *gorm.DB, expected int) error {
-	type result struct {
-		EmbeddingType string
-	}
-	var rows []result
-	if err := db.Raw(`
-SELECT format_type(a.atttypid, a.atttypmod) AS embedding_type
-FROM pg_attribute a
-JOIN pg_class c ON c.oid = a.attrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE c.relname = 'knowledge_chunks'
-  AND n.nspname = current_schema()
-  AND a.attname = 'embedding'
-  AND a.attnum > 0
-  AND NOT a.attisdropped
-LIMIT 1;`).Scan(&rows).Error; err != nil {
-		return fmt.Errorf("query knowledge_chunks.embedding type failed: %w", err)
-	}
-	if len(rows) == 0 {
-		return errors.New("knowledge_chunks.embedding column not found")
-	}
-	expectedType := fmt.Sprintf("vector(%d)", expected)
-	actualType := strings.TrimSpace(rows[0].EmbeddingType)
-	if !strings.EqualFold(actualType, expectedType) {
-		return fmt.Errorf("knowledge_chunks.embedding dimension mismatch: expected %s, got %s", expectedType, actualType)
-	}
-	return nil
 }
 
 func rebuildConversationMemberSchemaIfNeeded(db *gorm.DB) error {

@@ -229,3 +229,22 @@ type ConversationKnowledgeBaseInfo struct {
 	Status          string `json:"status"`
 	Enabled         bool   `json:"enabled"`
 }
+
+type NotificationInfo struct {
+	ID               int64  `json:"id"`
+	Type             string `json:"type"`
+	Category         string `json:"category"`
+	Title            string `json:"title"`
+	Summary          string `json:"summary"`
+	Content          string `json:"content"`
+	Detail           string `json:"detail"`
+	ConversationID   string `json:"conversationId"`
+	RelatedMessageID *int64 `json:"relatedMessageId,omitempty"`
+	IsRead           bool   `json:"isRead"`
+	CreatedAt        int64  `json:"createdAt"`
+}
+
+type NotificationListResponse struct {
+	Notifications []NotificationInfo `json:"notifications"`
+	UnreadCount   int64              `json:"unreadCount"`
+}

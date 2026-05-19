@@ -1,4 +1,4 @@
-﻿package repository
+package repository
 
 import (
 	"context"
@@ -75,6 +75,15 @@ type AICallLogRepository interface {
 	Create(ctx context.Context, callLog *model.AICallLog) error
 	ListByConversationID(ctx context.Context, conversationID uint64, beforeID *uint64, limit int, botID *uint64, status string) ([]model.AICallLog, error)
 	SumTotalTokensByConversationBetween(ctx context.Context, conversationID uint64, startAt time.Time, endAt time.Time) (int64, error)
+}
+
+type NotificationRepository interface {
+	WithTx(tx *gorm.DB) NotificationRepository
+	Create(ctx context.Context, notification *model.Notification) error
+	ListByUserID(ctx context.Context, userID uint64, unreadOnly bool, limit int) ([]model.Notification, error)
+	CountUnreadByUserID(ctx context.Context, userID uint64) (int64, error)
+	MarkRead(ctx context.Context, userID, notificationID uint64) error
+	MarkAllRead(ctx context.Context, userID uint64) error
 }
 
 type GormConversationRepository struct {
@@ -399,3 +408,61 @@ func (r *GormAICallLogRepository) SumTotalTokensByConversationBetween(ctx contex
 	return total, err
 }
 
+type GormNotificationRepository struct {
+	db *gorm.DB
+}
+
+func NewNotificationRepository(db *gorm.DB) *GormNotificationRepository {
+	return &GormNotificationRepository{db: db}
+}
+
+func (r *GormNotificationRepository) WithTx(tx *gorm.DB) NotificationRepository {
+	return &GormNotificationRepository{db: tx}
+}
+
+func (r *GormNotificationRepository) Create(ctx context.Context, notification *model.Notification) error {
+	return r.db.WithContext(ctx).Create(notification).Error
+}
+
+func (r *GormNotificationRepository) ListByUserID(ctx context.Context, userID uint64, unreadOnly bool, limit int) ([]model.Notification, error) {
+	query := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	if unreadOnly {
+		query = query.Where("is_read = ?", false)
+	}
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+
+	var items []model.Notification
+	err := query.Order("id DESC").Find(&items).Error
+	return items, err
+}
+
+func (r *GormNotificationRepository) CountUnreadByUserID(ctx context.Context, userID uint64) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).
+		Model(&model.Notification{}).
+		Where("user_id = ? AND is_read = ?", userID, false).
+		Count(&total).Error
+	return total, err
+}
+
+func (r *GormNotificationRepository) MarkRead(ctx context.Context, userID, notificationID uint64) error {
+	return r.db.WithContext(ctx).
+		Model(&model.Notification{}).
+		Where("id = ? AND user_id = ?", notificationID, userID).
+		Updates(map[string]any{
+			"is_read":    true,
+			"updated_at": time.Now(),
+		}).Error
+}
+
+func (r *GormNotificationRepository) MarkAllRead(ctx context.Context, userID uint64) error {
+	return r.db.WithContext(ctx).
+		Model(&model.Notification{}).
+		Where("user_id = ? AND is_read = ?", userID, false).
+		Updates(map[string]any{
+			"is_read":    true,
+			"updated_at": time.Now(),
+		}).Error
+}

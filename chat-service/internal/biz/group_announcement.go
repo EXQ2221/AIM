@@ -64,6 +64,7 @@ func (s *ChatService) UpdateGroupAnnouncement(ctx context.Context, input UpdateG
 			conversationRepo,
 			memberRepo,
 			messageRepo,
+			s.notificationRepoWithTx(tx),
 			model.SystemEventAnnouncementUpdated,
 			input.OperatorID,
 			nil,

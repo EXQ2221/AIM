@@ -110,6 +110,26 @@ export type ConversationInfo = {
   updatedAt: number;
 };
 
+export type NotificationInfo = {
+  id: number;
+  type: string;
+  category?: "GROUP_SYSTEM" | "USER_CENTER" | "SYSTEM" | string;
+  title: string;
+  summary?: string;
+  content: string;
+  detail?: string;
+  conversationId: string;
+  relatedMessageId?: number | null;
+  isRead: boolean;
+  createdAt: number;
+  persistent?: boolean;
+};
+
+export type NotificationListResponse = {
+  notifications: NotificationInfo[];
+  unreadCount: number;
+};
+
 export type GroupInfo = {
   conversationId: string;
   type: string;
@@ -200,11 +220,28 @@ export type MessageInfo = {
   readCount?: number;
   pending?: boolean;
   clientMsgId?: string;
+  isBotGenerating?: boolean;
 };
 
 export type MessageRecalledEventInfo = {
   messageId: number;
   conversationId: string;
+};
+
+export type TypingEventData = {
+  conversationId: string;
+  isTyping: boolean;
+  userId: number;
+  at?: number;
+};
+
+export type BotReplyStreamData = {
+  conversationId: string;
+  senderId: number;
+  senderType: string;
+  messageType: MessageType;
+  content: string;
+  done: boolean;
 };
 
 export type OutgoingMessagePayload = {
@@ -234,6 +271,21 @@ export type WebSocketEvent =
   | {
       type: "MESSAGE_RECALLED";
       data: MessageRecalledEventInfo;
+    }
+  | {
+      type: "TYPING";
+      data: TypingEventData;
+    }
+  | {
+      type: "BOT_REPLY_STREAM";
+      data: BotReplyStreamData;
+    }
+  | {
+      type: "NOTIFICATION_CREATED";
+      data: {
+        notification: NotificationInfo;
+        unreadCount?: number;
+      };
     }
   | {
       type: "FRIEND_SYNC";

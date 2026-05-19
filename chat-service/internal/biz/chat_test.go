@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"example.com/aim/chat-service/internal/bot"
+	bot "example.com/aim/chat-service/bot-internal/biz"
 	"example.com/aim/chat-service/internal/dal/model"
 	"example.com/aim/chat-service/internal/repository"
 	"example.com/aim/chat-service/internal/rpc"

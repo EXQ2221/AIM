@@ -13,6 +13,7 @@ import type {
   KnowledgeBaseInfo,
   KnowledgeDocumentInfo,
   KnowledgeSearchChunkInfo,
+  NotificationListResponse,
   MemberInfo,
   MessageInfo,
   SessionInfo,
@@ -49,17 +50,26 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const controller = new AbortController();
   const timeoutId =
     typeof timeoutMs === "number" && timeoutMs > 0 ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
-  const response = await fetch(path, {
-    credentials: "include",
-    headers: body instanceof FormData ? headers : { ...JSON_HEADERS, ...headers },
-    body,
-    signal: controller.signal,
-    ...rest
-  }).finally(() => {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      credentials: "include",
+      headers: body instanceof FormData ? headers : { ...JSON_HEADERS, ...headers },
+      body,
+      signal: controller.signal,
+      ...rest
+    });
+  } catch (error) {
+    const aborted = error instanceof DOMException && error.name === "AbortError";
+    if (aborted) {
+      throw new APIError("请求超时，请稍后重试或减小文件大小", 408, 408);
+    }
+    throw error;
+  } finally {
     if (timeoutId !== null) {
       window.clearTimeout(timeoutId);
     }
-  });
+  }
 
   if (response.status === 401 && retryOnUnauthorized && path !== "/api/v1/auth/refresh") {
     const refreshed = await refreshSession();
@@ -206,6 +216,26 @@ export const api = {
   },
   conversations() {
     return request<ConversationInfo[]>("/api/v1/conversations");
+  },
+  notifications(options: { unreadOnly?: boolean; limit?: number } = {}) {
+    const params = new URLSearchParams();
+    if (options.unreadOnly) {
+      params.set("unreadOnly", "true");
+    }
+    if (options.limit && options.limit > 0) {
+      params.set("limit", String(options.limit));
+    }
+    return request<NotificationListResponse>(`/api/v1/notifications?${params.toString()}`);
+  },
+  markNotificationRead(notificationId: number) {
+    return request<void>(`/api/v1/notifications/${encodeURIComponent(String(notificationId))}/read`, {
+      method: "POST"
+    });
+  },
+  markAllNotificationsRead() {
+    return request<void>("/api/v1/notifications/read-all", {
+      method: "POST"
+    });
   },
   findSingleConversation(targetUserId: number) {
     return request<ConversationInfo | null>(`/api/v1/conversations/single?targetUserId=${targetUserId}`);
@@ -375,9 +405,32 @@ export const api = {
       }
     );
   },
+  addKnowledgeDocumentFile(knowledgeBaseId: number, input: { title?: string; file: File }) {
+    const body = new FormData();
+    body.append("file", input.file, input.file.name);
+    if (input.title?.trim()) {
+      body.append("title", input.title.trim());
+    }
+    return request<KnowledgeDocumentInfo>(
+      `/api/v1/knowledge-bases/${encodeURIComponent(String(knowledgeBaseId))}/documents/file`,
+      {
+        method: "POST",
+        body,
+        timeoutMs: 600000
+      }
+    );
+  },
   listKnowledgeDocuments(knowledgeBaseId: number) {
     return request<KnowledgeDocumentInfo[]>(
       `/api/v1/knowledge-bases/${encodeURIComponent(String(knowledgeBaseId))}/documents`
+    );
+  },
+  deleteKnowledgeDocument(knowledgeBaseId: number, documentId: number) {
+    return request<void>(
+      `/api/v1/knowledge-bases/${encodeURIComponent(String(knowledgeBaseId))}/documents/${encodeURIComponent(String(documentId))}`,
+      {
+        method: "DELETE"
+      }
     );
   },
   searchKnowledgeBase(knowledgeBaseId: number, input: { query: string; topK?: number }) {

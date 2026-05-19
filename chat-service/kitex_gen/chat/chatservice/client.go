@@ -37,6 +37,10 @@ type Client interface {
 	AddConversationBot(ctx context.Context, req *chat.AddConversationBotRequest, callOptions ...callopt.Option) (r *chat.AddConversationBotResponse, err error)
 	RemoveConversationBot(ctx context.Context, req *chat.RemoveConversationBotRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
 	ListAICallLogs(ctx context.Context, req *chat.ListAICallLogsRequest, callOptions ...callopt.Option) (r *chat.ListAICallLogsResponse, err error)
+	ListNotifications(ctx context.Context, req *chat.ListNotificationsRequest, callOptions ...callopt.Option) (r *chat.ListNotificationsResponse, err error)
+	MarkNotificationRead(ctx context.Context, req *chat.MarkNotificationReadRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
+	MarkAllNotificationsRead(ctx context.Context, req *chat.MarkAllNotificationsReadRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
+	CreateNotification(ctx context.Context, req *chat.CreateNotificationRequest, callOptions ...callopt.Option) (r *chat.CreateNotificationResponse, err error)
 	CreateKnowledgeBase(ctx context.Context, req *chat.CreateKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.CreateKnowledgeBaseResponse, err error)
 	ListKnowledgeBases(ctx context.Context, req *chat.ListKnowledgeBasesRequest, callOptions ...callopt.Option) (r *chat.ListKnowledgeBasesResponse, err error)
 	AddKnowledgeDocumentText(ctx context.Context, req *chat.AddKnowledgeDocumentTextRequest, callOptions ...callopt.Option) (r *chat.AddKnowledgeDocumentTextResponse, err error)
@@ -206,6 +210,26 @@ func (p *kChatServiceClient) RemoveConversationBot(ctx context.Context, req *cha
 func (p *kChatServiceClient) ListAICallLogs(ctx context.Context, req *chat.ListAICallLogsRequest, callOptions ...callopt.Option) (r *chat.ListAICallLogsResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.ListAICallLogs(ctx, req)
+}
+
+func (p *kChatServiceClient) ListNotifications(ctx context.Context, req *chat.ListNotificationsRequest, callOptions ...callopt.Option) (r *chat.ListNotificationsResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListNotifications(ctx, req)
+}
+
+func (p *kChatServiceClient) MarkNotificationRead(ctx context.Context, req *chat.MarkNotificationReadRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.MarkNotificationRead(ctx, req)
+}
+
+func (p *kChatServiceClient) MarkAllNotificationsRead(ctx context.Context, req *chat.MarkAllNotificationsReadRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.MarkAllNotificationsRead(ctx, req)
+}
+
+func (p *kChatServiceClient) CreateNotification(ctx context.Context, req *chat.CreateNotificationRequest, callOptions ...callopt.Option) (r *chat.CreateNotificationResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.CreateNotification(ctx, req)
 }
 
 func (p *kChatServiceClient) CreateKnowledgeBase(ctx context.Context, req *chat.CreateKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.CreateKnowledgeBaseResponse, err error) {

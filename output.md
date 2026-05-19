@@ -3882,3 +3882,259 @@ pm.cmd run build --prefix frontend 通过。
 
 - 说明
   - 这是与 embedding 同类的网络证书链问题。正式方案仍建议补齐系统/容器 CA 后改回 `false`。
+## [2026-05-17] 清理：chat-service 无用空目录
+- 清理目录
+  - `chat-service/internal/data`（空）
+  - `chat-service/internal/embedding`（空）
+  - `chat-service/internal/pkg`（空）
+  - `chat-service/internal/dal/kafka`（空）
+  - `chat-service/internal/dal/redis`（空）
+- 说明
+  - 仅删除空目录，未删除任何仍被引用的代码目录。
+- 验证
+  - `go build ./...`（chat-service）通过。
+
+## [2026-05-17] 补录：RAG 拆分与上传链路改造（近期汇总）
+- 变更范围
+  - `idl/rag.thrift`
+  - `rag-service/**`
+  - `parser-service/**`
+  - `gateway/internal/knowledgeimport/**`
+  - `gateway/internal/rpc/rag_client.go`
+  - `gateway/internal/handler/chat.go`
+  - `gateway/internal/observability/**`
+  - `gateway/cmd/server/main.go`
+  - `frontend/src/api.ts`
+  - `frontend/src/App.tsx`
+  - `frontend/src/app/views/detail-panel.tsx`
+  - `frontend/src/app/utils.ts`
+  - `deploy/observability/prometheus.yml`
+  - `docker-compose.yml`
+- 主要修改
+  - 引入独立 `rag-service`，gateway 知识库接口改为直连 rag-service。
+  - 引入独立 `parser-service`（FastAPI）处理 PDF/DOCX/PPTX 文档解析与视觉描述补充。
+  - gateway 导入链路增加结构化导入日志与可观测性指标；接入 Prometheus 抓取。
+  - 前端文件导入超时扩展、错误提示明确化；知识库导入类型改为自动识别，不再手动选择 TEXT/MARKDOWN。
+  - gateway/rag-service 关键链路统一为 zap 结构化日志。
+- 验证
+  - `go build ./...`（gateway、rag-service）通过。
+  - `go test ./...`（gateway、rag-service）通过。
+  - `npm.cmd run build --prefix frontend` 通过。
+
+## [2026-05-17] 补录：chat-service 去本地 RAG（迁移至 rag-service RPC）
+- 变更文件
+  - `chat-service/cmd/server/main.go`
+  - `chat-service/internal/handler/chat_service.go`
+  - `chat-service/internal/rpc/rag_client.go`（新增）
+  - `chat-service/bot-internal/biz/service.go`
+  - `chat-service/bot-internal/dal/rag_searcher.go`
+  - `chat-service/internal/dal/postgres/init.go`
+  - `chat-service/internal/dal/model/rag.go`（删除）
+  - `chat-service/internal/repository/rag.go`（删除）
+  - `chat-service/rag-internal/**`（删除）
+  - `chat-service/kitex_gen/rag/**`（新增，基于 `idl/rag.thrift`）
+  - `scripts/gen.sh`
+  - `docker-compose.yml`
+- 主要修改
+  - chat-service 启动时改为通过 `RAG_SERVICE_ADDR` 初始化 rag RPC client。
+  - chat-service handler 的知识库相关 RPC 方法改为转发调用 rag-service。
+  - bot 的 RAG 检索改为通过 rag-service API 获取会话绑定知识库并执行检索，再在 chat-service 侧做全局 TopK 合并。
+  - 移除 chat-service 本地 RAG 目录与本地 RAG repository/model，移除 chat-service 对 RAG 表结构的初始化逻辑。
+- 验证
+  - `go build ./...`（chat-service）通过。
+  - `go test ./...`（chat-service）有 1 个历史失败用例：
+    - `internal/biz TestRecallMessageMarksStatusAndReturnsRecipients`（recipients 顺序断言不稳定）。
+## [2026-05-17] 补录：通知中心方案 2（notifications 表 + 会话列表入口）
+- 新增 `notifications` 表并接入 chat-service `AutoMigrate`。
+- 新增 Chat RPC：`ListNotifications`、`MarkNotificationRead`、`MarkAllNotificationsRead`。
+- 群事件（邀请、移除、禁言、管理员变更、群主转移）在写 SYSTEM message 的同事务内写通知记录。
+- gateway 新增通知 API：
+  - `GET /api/v1/notifications`
+  - `POST /api/v1/notifications/:notificationId/read`
+  - `POST /api/v1/notifications/read-all`
+- 前端会话面板新增“通知中心”卡片，支持未读标记、单条已读、全部已读、点击跳转会话。
+- 验证：
+  - `go build ./...`（chat-service）通过
+  - `go build ./...`（gateway）通过
+  - `npm.cmd run build --prefix frontend` 通过
+## [2026-05-17] 通知中心改为 WebSocket 即时推送并区分群 SYSTEM
+- 明确边界：
+  - 群聊 `SYSTEM` message 只进入聊天流，用于提示“谁进群、谁被禁言、谁被设为管理员”等群内事件。
+  - 用户通知中心使用独立 `NOTIFICATION_CREATED` WebSocket 事件，不复用 `NEW_MESSAGE`。
+- gateway：
+  - 新增 WebSocket `NOTIFICATION_CREATED` 事件数据结构。
+  - 群事件广播 `NEW_MESSAGE` 后，会用 SYSTEM message 的 `relatedMessageId` 匹配刚落库的通知，再只推给实际收件人，避免全群收到通知中心事件。
+  - 知识库文件上传返回 PENDING 后，gateway 后台轮询 RAG 文档状态；处理到 `READY/FAILED` 时先通过 chat-service 写入持久通知，再推送 `KNOWLEDGE_IMPORT`，内容包含知识库名、文件名、成功/失败、耗时和失败原因。
+- chat-service：
+  - IDL 新增 `CreateNotification` RPC，并重新生成 chat-service/gateway 的 chat Kitex 代码。
+  - 优化通知中心文案，邀请类通知改为“你被谁邀请加入哪个群”，禁言/管理员/群主变更也改为面向收件人的文案。
+  - 群聊天流 SYSTEM 文案改为中文，只表达群内事件本身。
+- frontend：
+  - 支持 `NOTIFICATION_CREATED`，收到后即时合并进通知中心并增加未读数。
+  - 通知中心条目展示标题、详细内容和时间。
+  - 通知支持 `persistent` 标记；正常通知走后端已读 API，兜底临时通知走本地已读。
+- 验证：
+  - `gofmt` 已执行。
+  - `go build ./...`（gateway）通过。
+  - `go build ./...`（chat-service）通过。
+  - `go test ./...`（gateway）通过。
+  - `go test ./...`（chat-service）通过。
+  - `npm.cmd run build --prefix frontend` 通过。
+## [2026-05-17] 修复：知识库 PPT 导入改为真正异步并补齐通知闭环
+- 问题定位：
+  - 用户刚上传的 `从众效应.pptx` 在 gateway 日志中失败于 parser 调用超时：`context deadline exceeded (Client.Timeout exceeded while awaiting headers)`。
+  - 当次文件大小约 13 MB，gateway 等待 parser 约 90 秒后超时；parser-service 后续仍返回了 200，说明是 gateway 侧同步等待窗口太短，不是 PPT 必然解析失败。
+  - rag-service 日志中的 `only knowledge base owner can access` 属于其他请求鉴权失败，和本次 PPT 解析超时不是同一个错误。
+- 主要修改：
+  - parser HTTP client 超时时间从 90 秒提升到 10 分钟。
+  - 前端文件上传请求超时时间同步提升到 10 分钟，避免客户端提前断开。
+  - `AddKnowledgeDocumentFile` 改为异步任务：接口读取文件并提交任务后立即返回 `202 accepted`，不再阻塞等待解析和 RAG 入库完成。
+  - 任务发出时立即写入并推送通知：提示知识库名、文件名和“已提交，正在后台导入”。
+  - 后台解析成功后继续提交 RAG 文档，并轮询最终状态。
+  - 导入成功时写入并推送通知：包含知识库名、文件名和总用时。
+  - 导入失败时写入并推送通知：包含知识库名、文件名、总用时和失败原因。
+  - 处理超时也会落失败通知，避免用户只能看到任务一直 pending。
+- 验证：
+  - `gofmt` 已执行。
+  - `go build ./...`（gateway）通过。
+  - `go test ./...`（gateway）通过。
+  - `npm.cmd run build --prefix frontend` 通过。
+  - `docker compose up -d --build gateway` 已重建并启动。
+  - `docker compose ps gateway chat-service parser-service rag-service` 显示四个服务均为 healthy。
+## [2026-05-18] 修复：Bot 触发 RAG 时会话 ID 口径不一致
+- 问题定位：
+  - 12:58/12:59 的两次 `@ai` 实际已经触发 RAG 检索链路。
+  - chat-service 日志显示：`rag search failed: conversation=3 bot=100000 scope=CONVERSATION_AND_KB err=... conversation not found`。
+  - rag-service 日志显示它用 `conversation_id = '3'` 查询 `conversations`，但这里的 `3` 是内部数字主键，`conversation_id` 是 `c_xxx` 形式的公共会话 ID，所以查不到会话，导致后续绑定知识库列表和检索都没有执行。
+- 修复：
+  - rag-service 的 `GetByConversationID` 兼容两种输入：
+    - 公共会话 ID：继续按 `conversation_id` 查询。
+    - 内部数字 ID：按 `id` 查询，同时保留 `conversation_id` 兜底。
+  - 这样前端接口传 `c_xxx`、Bot 内部链路传数字 ID 都能解析到同一个会话。
+- 验证：
+  - 数据库确认：会话内部 ID `3` 已绑定知识库 `4` 且 `enabled=true`。
+  - 数据库确认：知识库 `4` 中 `话剧` 文档状态为 `READY`，已有 3 个 chunk。
+  - `gofmt` 已执行。
+  - `go test ./...`（rag-service）通过。
+  - `go build ./...`（rag-service）通过。
+  - `docker compose up -d --build rag-service` 已重建并启动。
+  - `docker compose ps rag-service chat-service` 显示服务 healthy。
+## [2026-05-18] 权限规则确认：知识库归属用户，群绑定/解绑仅群主或管理员
+- 规则落地现状（后端）：
+  - 任意登录用户可创建知识库，创建后 `owner_id = operator_id`。
+  - 绑定知识库到群聊需要群内角色为 `OWNER` 或 `ADMIN`，普通成员返回 `ErrAdminRequired`。
+  - 解绑知识库同样仅允许 `OWNER` 或 `ADMIN`，普通成员返回 `ErrAdminRequired`。
+- 本次补充：
+  - 新增 `rag-service/rag-internal/biz/entry_permissions_test.go`，覆盖上述权限规则，防止回归。
+- 验证：
+  - `gofmt -w rag-internal/biz/entry_permissions_test.go` 已执行。
+  - `go test ./rag-internal/biz` 通过。
+## [2026-05-19 21:40] P3 Bot Streaming + Qwen Latency/Search Tuning (Readable Appendix)
+
+### Scope
+- `chat-service/bot-internal/biz/service.go`
+- `chat-service/llm-internal/model/types.go`
+- `chat-service/llm-internal/conf/env.go`
+- `chat-service/llm-internal/dal/openai_compatible.go`
+- `chat-service/llm-internal/dal/openai_compatible_test.go`
+- `docker-compose.yml`
+- `.env.example`
+- `frontend/src/App.tsx`
+- `frontend/src/app/ui.tsx`
+- `frontend/src/types.ts`
+- `gateway/internal/websocket/bot_reply_stream_subscriber.go`
+
+### Goal
+- Remove frontend guessed placeholder bubble
+- Switch to backend-driven bot streaming
+- Improve user feedback for `@qwen` trigger success
+- Diagnose high latency (~20s) and search behavior
+
+### Changes
+1. Frontend message flow
+- Removed old guessed placeholder path
+- Bot bubble now appears/updates only on backend `BOT_REPLY_STREAM` events
+- Generating bubble renders incremental content + generating state
+
+2. Streaming chain
+- Added streaming parse in OpenAI-compatible client (SSE)
+- Bot service publishes stream chunks to Redis channel `aim:bot_reply_stream`
+- Gateway subscribes and forwards as WS `BOT_REPLY_STREAM`
+
+3. Immediate trigger confirmation (backend-confirmed)
+- After mention is resolved and LLM call starts, publish an initial stream event (empty content, `done=false`)
+- This gives instant “triggered” feedback without frontend guessing
+
+4. Qwen config knobs
+- Keep `enable_search` support
+- Added `enable_thinking` support via env -> request `extra_body.enable_thinking`
+- Default for secondary provider:
+  - `LLM2_ENABLE_SEARCH=true`
+  - `LLM2_ENABLE_THINKING=false`
+
+5. Observability
+- Added request start logs: model / stream / enable_search / enable_thinking
+- Added stream timing logs: `first_chunk_ms`, `llm_total_ms`, `chunks`
+
+### Data observed (DB)
+From `aim_chat.ai_call_logs` recent rows:
+- `qwen3.5-plus` SUCCESS `latency_ms=21954`
+- `qwen3.6-plus` SUCCESS `latency_ms=28278`
+- `qwen3.6-plus` SUCCESS `latency_ms=19923`
+
+Conclusion:
+- Calls were triggered successfully
+- Main issue was high model latency + first-chunk delay perception
+
+### Verification
+- `go test ./llm-internal/...` passed
+- `go test ./bot-internal/biz` passed
+- `go build ./...` (chat-service) passed
+- `go build ./...` (gateway) passed
+- `npm.cmd run build --prefix frontend` passed
+- `chat-service` and `gateway` rebuilt/restarted
+
+### Runtime check
+- `LLM2_ENABLE_SEARCH=true`
+- `LLM2_ENABLE_THINKING=false`
+
+### Next check items
+1. Re-test `@qwen 你好` and inspect `first_chunk_ms`
+2. Re-test a query requiring web search and verify request flags + behavior
+3. If still slow: separate fast-answer vs deep-thinking model routing
+## [2026-05-19 22:05] 中文补充说明（Bot 流式 + Qwen 调优）
+
+### 这次主要做了什么
+1. 取消前端“猜测式占位消息”
+- 不再在发送后立刻伪造 Bot 占位。
+- 只在收到后端 `BOT_REPLY_STREAM` 后显示 Bot 气泡，并持续增量更新。
+
+2. 增加“后端确认触发”的即时反馈
+- 在后端确认 `@bot` 命中并开始调用模型时，先推送一条空内容流事件（`done=false`）。
+- 这样用户能马上看到“已触发”，不需要等首个 token。
+
+3. 新增 Qwen 思考开关与搜索参数透传
+- 已支持 `extra_body.enable_search` 与 `extra_body.enable_thinking`。
+- 当前二路 Qwen 默认：
+  - `LLM2_ENABLE_SEARCH=true`
+  - `LLM2_ENABLE_THINKING=false`（降低简单问题首包延迟）
+
+4. 增加链路日志，便于定位慢点
+- 记录 `first_chunk_ms`（首 token 延迟）
+- 记录 `llm_total_ms`（模型总耗时）
+- 记录请求参数开关（model/stream/search/thinking）
+
+### 当前观察到的数据
+- 最近 `ai_call_logs` 中，`@qwen` 的成功调用耗时大约在 20~28 秒。
+- 结论：并非没触发，核心是模型侧响应偏慢 + 首包等待带来的体感问题。
+
+### 已完成验证
+- chat-service / gateway 构建通过
+- 关键单测通过（llm-internal、bot-internal）
+- 前端构建通过
+- 服务已重启并生效
+
+### 下一步建议
+1. 实测 `@qwen 你好`，重点看 `first_chunk_ms` 是否下降。
+2. 实测一个明确需要联网搜索的问题，结合日志确认 `enable_search` 已发送且生效。
+3. 若仍慢，按场景拆分“快答模型”和“深思模型”路由。

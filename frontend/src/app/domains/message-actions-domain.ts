@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { api } from "../../api";
 import type {
   ConversationInfo,
@@ -30,6 +30,7 @@ type UseMessageActionsDeps = {
   setMessages: Dispatch<SetStateAction<MessageInfo[]>>;
   setConversations: Dispatch<SetStateAction<ConversationInfo[]>>;
   setLoadingOlder: Dispatch<SetStateAction<boolean>>;
+  filterVisibleMessages?: (conversationID: string, nextMessages: MessageInfo[]) => MessageInfo[];
 };
 
 export function useMessageActions(deps: UseMessageActionsDeps) {
@@ -50,8 +51,10 @@ export function useMessageActions(deps: UseMessageActionsDeps) {
     setReplyingTo,
     setMessages,
     setConversations,
-    setLoadingOlder
+    setLoadingOlder,
+    filterVisibleMessages
   } = deps;
+  const localTempSeqRef = useRef(0);
 
   const handleRecallMessage = useCallback(
     async (message: MessageInfo) => {
@@ -77,15 +80,15 @@ export function useMessageActions(deps: UseMessageActionsDeps) {
   const handleSendMessage = useCallback(
     (payload?: OutgoingMessagePayload) => {
       const content = messageDraft.trim();
-      if (!selectedConversationId || !user) return;
+      if (!selectedConversationId || !user) return null;
       if (!canSendCurrentConversation) {
         showToast("You cannot continue sending messages in this conversation.", "error");
-        return;
+        return null;
       }
       const socket = socketRef.current;
       if (!socket || socket.readyState !== WebSocket.OPEN) {
         showToast("Realtime connection is not ready", "error");
-        return;
+        return null;
       }
 
       const outgoing =
@@ -97,11 +100,16 @@ export function useMessageActions(deps: UseMessageActionsDeps) {
             }
           : null);
       if (!outgoing) {
-        return;
+        return null;
       }
 
       const clientMsgId = `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      const tempId = -1 * (Date.now() + Math.floor(Math.random() * 1000));
+      const maxConversationMessageID = messages.reduce(
+        (max, item) => (item.conversationId === selectedConversationId ? Math.max(max, item.id) : max),
+        0
+      );
+      const tempId = Math.max(maxConversationMessageID + 1, localTempSeqRef.current + 1);
+      localTempSeqRef.current = tempId;
       const createdAt = Math.floor(Date.now() / 1000);
       const replyToId = replyingTo?.messageId && replyingTo.messageId > 0 ? replyingTo.messageId : undefined;
       const pendingMessage: MessageInfo = {
@@ -167,11 +175,15 @@ export function useMessageActions(deps: UseMessageActionsDeps) {
           })
         );
         showToast("Send failed", "error");
-        return;
+        return null;
       }
       if (outgoing.messageType === "TEXT") {
         setMessageDraft("");
       }
+      return {
+        tempId,
+        clientMsgId
+      };
     },
     [
       canSendCurrentConversation,
@@ -197,13 +209,14 @@ export function useMessageActions(deps: UseMessageActionsDeps) {
     try {
       const oldest = messages[0];
       const older = sortMessages(await api.messages(selectedConversationId, { beforeId: oldest.id, limit: 30 }));
-      setMessages((current) => mergeMessagesById(current, older));
+      const filtered = filterVisibleMessages ? filterVisibleMessages(selectedConversationId, older) : older;
+      setMessages((current) => mergeMessagesById(current, filtered));
     } catch (error) {
       showToast(errorMessage(error), "error");
     } finally {
       setLoadingOlder(false);
     }
-  }, [messages, selectedConversationId, setLoadingOlder, setMessages, showToast]);
+  }, [filterVisibleMessages, messages, selectedConversationId, setLoadingOlder, setMessages, showToast]);
 
   return {
     handleRecallMessage,

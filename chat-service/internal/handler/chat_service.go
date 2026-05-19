@@ -2,17 +2,24 @@ package handler
 
 import (
 	"context"
+	"errors"
 
 	"example.com/aim/chat-service/internal/biz"
 	chatpb "example.com/aim/chat-service/kitex_gen/chat"
+	ragpb "example.com/aim/chat-service/kitex_gen/rag"
+	"example.com/aim/chat-service/kitex_gen/rag/ragservice"
 )
 
 type ChatServiceImpl struct {
-	Service *biz.ChatService
+	Service   *biz.ChatService
+	RAGClient ragservice.Client
 }
 
-func NewChatServiceImpl(service *biz.ChatService) *ChatServiceImpl {
-	return &ChatServiceImpl{Service: service}
+func NewChatServiceImpl(service *biz.ChatService, ragClient ragservice.Client) *ChatServiceImpl {
+	return &ChatServiceImpl{
+		Service:   service,
+		RAGClient: ragClient,
+	}
 }
 
 func (h *ChatServiceImpl) Health(ctx context.Context, req *chatpb.HealthRequest) (*chatpb.HealthResponse, error) {
@@ -368,34 +375,121 @@ func (h *ChatServiceImpl) ListAICallLogs(ctx context.Context, req *chatpb.ListAI
 	}, nil
 }
 
+func (h *ChatServiceImpl) ListNotifications(ctx context.Context, req *chatpb.ListNotificationsRequest) (*chatpb.ListNotificationsResponse, error) {
+	limit := 50
+	if req.Limit != nil {
+		limit = int(*req.Limit)
+	}
+	unreadOnly := false
+	if req.UnreadOnly != nil {
+		unreadOnly = *req.UnreadOnly
+	}
+
+	result, err := h.Service.ListNotifications(ctx, uint64(req.OperatorId), unreadOnly, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]*chatpb.NotificationInfo, 0, len(result.Notifications))
+	for _, item := range result.Notifications {
+		items = append(items, toNotificationPB(item))
+	}
+	return &chatpb.ListNotificationsResponse{
+		Notifications: items,
+		UnreadCount:   result.UnreadCount,
+	}, nil
+}
+
+func (h *ChatServiceImpl) MarkNotificationRead(ctx context.Context, req *chatpb.MarkNotificationReadRequest) (*chatpb.CommonResponse, error) {
+	if err := h.Service.MarkNotificationRead(ctx, uint64(req.OperatorId), uint64(req.NotificationId)); err != nil {
+		return &chatpb.CommonResponse{Success: false, Message: err.Error()}, nil
+	}
+	return &chatpb.CommonResponse{Success: true, Message: "ok"}, nil
+}
+
+func (h *ChatServiceImpl) MarkAllNotificationsRead(ctx context.Context, req *chatpb.MarkAllNotificationsReadRequest) (*chatpb.CommonResponse, error) {
+	if err := h.Service.MarkAllNotificationsRead(ctx, uint64(req.OperatorId)); err != nil {
+		return &chatpb.CommonResponse{Success: false, Message: err.Error()}, nil
+	}
+	return &chatpb.CommonResponse{Success: true, Message: "ok"}, nil
+}
+
+func (h *ChatServiceImpl) CreateNotification(ctx context.Context, req *chatpb.CreateNotificationRequest) (*chatpb.CreateNotificationResponse, error) {
+	var conversationID string
+	if req.ConversationId != nil {
+		conversationID = *req.ConversationId
+	}
+	var relatedMessageID *uint64
+	if req.RelatedMessageId != nil {
+		value := uint64(*req.RelatedMessageId)
+		relatedMessageID = &value
+	}
+	notification, unreadCount, err := h.Service.CreateNotification(ctx, biz.CreateNotificationInput{
+		OperatorID:       uint64(req.OperatorId),
+		UserID:           uint64(req.UserId),
+		Type:             req.Type,
+		Title:            req.Title,
+		Content:          req.Content,
+		ConversationID:   conversationID,
+		RelatedMessageID: relatedMessageID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &chatpb.CreateNotificationResponse{
+		Notification: toNotificationPB(notification),
+		UnreadCount:  unreadCount,
+	}, nil
+}
+
+func (h *ChatServiceImpl) requireRAGClient() (ragservice.Client, error) {
+	if h == nil || h.RAGClient == nil {
+		return nil, errors.New("internal: rag service is unavailable")
+	}
+	return h.RAGClient, nil
+}
+
 func (h *ChatServiceImpl) CreateKnowledgeBase(ctx context.Context, req *chatpb.CreateKnowledgeBaseRequest) (*chatpb.CreateKnowledgeBaseResponse, error) {
-	item, err := h.Service.CreateKnowledgeBase(ctx, biz.CreateKnowledgeBaseInput{
-		OperatorID:  uint64(req.OperatorId),
+	ragClient, err := h.requireRAGClient()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := ragClient.CreateKnowledgeBase(ctx, &ragpb.CreateKnowledgeBaseRequest{
+		OperatorId:  req.OperatorId,
 		Name:        req.Name,
 		Description: req.Description,
 	})
 	if err != nil {
 		return nil, err
 	}
+	if resp.KnowledgeBase == nil {
+		return nil, errors.New("knowledge base creation failed")
+	}
 	return &chatpb.CreateKnowledgeBaseResponse{
 		KnowledgeBase: &chatpb.KnowledgeBaseInfo{
-			KnowledgeBaseId: int64(item.KnowledgeBaseID),
-			Name:            item.Name,
-			Description:     item.Description,
-			Status:          item.Status,
+			KnowledgeBaseId: resp.KnowledgeBase.KnowledgeBaseId,
+			Name:            resp.KnowledgeBase.Name,
+			Description:     resp.KnowledgeBase.Description,
+			Status:          resp.KnowledgeBase.Status,
 		},
 	}, nil
 }
 
 func (h *ChatServiceImpl) ListKnowledgeBases(ctx context.Context, req *chatpb.ListKnowledgeBasesRequest) (*chatpb.ListKnowledgeBasesResponse, error) {
-	items, err := h.Service.ListKnowledgeBases(ctx, uint64(req.OperatorId))
+	ragClient, err := h.requireRAGClient()
 	if err != nil {
 		return nil, err
 	}
-	result := make([]*chatpb.KnowledgeBaseInfo, 0, len(items))
-	for _, item := range items {
+	resp, err := ragClient.ListKnowledgeBases(ctx, &ragpb.ListKnowledgeBasesRequest{
+		OperatorId: req.OperatorId,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*chatpb.KnowledgeBaseInfo, 0, len(resp.KnowledgeBases))
+	for _, item := range resp.KnowledgeBases {
 		result = append(result, &chatpb.KnowledgeBaseInfo{
-			KnowledgeBaseId: int64(item.KnowledgeBaseID),
+			KnowledgeBaseId: item.KnowledgeBaseId,
 			Name:            item.Name,
 			Description:     item.Description,
 			Status:          item.Status,
@@ -405,9 +499,13 @@ func (h *ChatServiceImpl) ListKnowledgeBases(ctx context.Context, req *chatpb.Li
 }
 
 func (h *ChatServiceImpl) AddKnowledgeDocumentText(ctx context.Context, req *chatpb.AddKnowledgeDocumentTextRequest) (*chatpb.AddKnowledgeDocumentTextResponse, error) {
-	item, err := h.Service.AddKnowledgeDocumentText(ctx, biz.AddKnowledgeDocumentTextInput{
-		OperatorID:      uint64(req.OperatorId),
-		KnowledgeBaseID: uint64(req.KnowledgeBaseId),
+	ragClient, err := h.requireRAGClient()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := ragClient.AddKnowledgeDocumentText(ctx, &ragpb.AddKnowledgeDocumentTextRequest{
+		OperatorId:      req.OperatorId,
+		KnowledgeBaseId: req.KnowledgeBaseId,
 		Title:           req.Title,
 		SourceType:      req.SourceType,
 		Content:         req.Content,
@@ -415,32 +513,39 @@ func (h *ChatServiceImpl) AddKnowledgeDocumentText(ctx context.Context, req *cha
 	if err != nil {
 		return nil, err
 	}
+	if resp.Document == nil {
+		return nil, errors.New("document creation failed")
+	}
 	return &chatpb.AddKnowledgeDocumentTextResponse{
 		Document: &chatpb.KnowledgeDocumentInfo{
-			DocumentId:      int64(item.DocumentID),
-			KnowledgeBaseId: int64(item.KnowledgeBaseID),
-			Title:           item.Title,
-			SourceType:      item.SourceType,
-			Status:          item.Status,
-			ErrorMessage:    item.ErrorMessage,
-			CreatedAt:       item.CreatedAt,
+			DocumentId:      resp.Document.DocumentId,
+			KnowledgeBaseId: resp.Document.KnowledgeBaseId,
+			Title:           resp.Document.Title,
+			SourceType:      resp.Document.SourceType,
+			Status:          resp.Document.Status,
+			ErrorMessage:    resp.Document.ErrorMessage,
+			CreatedAt:       resp.Document.CreatedAt,
 		},
 	}, nil
 }
 
 func (h *ChatServiceImpl) ListKnowledgeDocuments(ctx context.Context, req *chatpb.ListKnowledgeDocumentsRequest) (*chatpb.ListKnowledgeDocumentsResponse, error) {
-	items, err := h.Service.ListKnowledgeDocuments(ctx, biz.ListKnowledgeDocumentsInput{
-		OperatorID:      uint64(req.OperatorId),
-		KnowledgeBaseID: uint64(req.KnowledgeBaseId),
+	ragClient, err := h.requireRAGClient()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := ragClient.ListKnowledgeDocuments(ctx, &ragpb.ListKnowledgeDocumentsRequest{
+		OperatorId:      req.OperatorId,
+		KnowledgeBaseId: req.KnowledgeBaseId,
 	})
 	if err != nil {
 		return nil, err
 	}
-	docs := make([]*chatpb.KnowledgeDocumentInfo, 0, len(items))
-	for _, item := range items {
+	docs := make([]*chatpb.KnowledgeDocumentInfo, 0, len(resp.Documents))
+	for _, item := range resp.Documents {
 		docs = append(docs, &chatpb.KnowledgeDocumentInfo{
-			DocumentId:      int64(item.DocumentID),
-			KnowledgeBaseId: int64(item.KnowledgeBaseID),
+			DocumentId:      item.DocumentId,
+			KnowledgeBaseId: item.KnowledgeBaseId,
 			Title:           item.Title,
 			SourceType:      item.SourceType,
 			Status:          item.Status,
@@ -452,20 +557,24 @@ func (h *ChatServiceImpl) ListKnowledgeDocuments(ctx context.Context, req *chatp
 }
 
 func (h *ChatServiceImpl) SearchKnowledgeBase(ctx context.Context, req *chatpb.SearchKnowledgeBaseRequest) (*chatpb.SearchKnowledgeBaseResponse, error) {
-	items, err := h.Service.SearchKnowledgeBase(ctx, biz.SearchKnowledgeBaseInput{
-		OperatorID:      uint64(req.OperatorId),
-		KnowledgeBaseID: uint64(req.KnowledgeBaseId),
+	ragClient, err := h.requireRAGClient()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := ragClient.SearchKnowledgeBase(ctx, &ragpb.SearchKnowledgeBaseRequest{
+		OperatorId:      req.OperatorId,
+		KnowledgeBaseId: req.KnowledgeBaseId,
 		Query:           req.Query,
 		TopK:            req.TopK,
 	})
 	if err != nil {
 		return nil, err
 	}
-	chunks := make([]*chatpb.KnowledgeSearchChunkInfo, 0, len(items))
-	for _, item := range items {
+	chunks := make([]*chatpb.KnowledgeSearchChunkInfo, 0, len(resp.Chunks))
+	for _, item := range resp.Chunks {
 		chunks = append(chunks, &chatpb.KnowledgeSearchChunkInfo{
-			ChunkId:    int64(item.ChunkID),
-			DocumentId: int64(item.DocumentID),
+			ChunkId:    item.ChunkId,
+			DocumentId: item.DocumentId,
 			Score:      item.Score,
 			Content:    item.Content,
 		})
@@ -474,27 +583,39 @@ func (h *ChatServiceImpl) SearchKnowledgeBase(ctx context.Context, req *chatpb.S
 }
 
 func (h *ChatServiceImpl) BindConversationKnowledgeBase(ctx context.Context, req *chatpb.BindConversationKnowledgeBaseRequest) (*chatpb.CommonResponse, error) {
-	if err := h.Service.BindConversationKnowledgeBase(ctx, biz.BindConversationKnowledgeBaseInput{
-		OperatorID:      uint64(req.OperatorId),
-		ConversationID:  req.ConversationId,
-		KnowledgeBaseID: uint64(req.KnowledgeBaseId),
-	}); err != nil {
-		return &chatpb.CommonResponse{Success: false, Message: err.Error()}, nil
-	}
-	return &chatpb.CommonResponse{Success: true, Message: "ok"}, nil
-}
-
-func (h *ChatServiceImpl) ListConversationKnowledgeBases(ctx context.Context, req *chatpb.ListConversationKnowledgeBasesRequest) (*chatpb.ListConversationKnowledgeBasesResponse, error) {
-	items, err := h.Service.ListConversationKnowledgeBases(ctx, uint64(req.OperatorId), req.ConversationId)
+	ragClient, err := h.requireRAGClient()
 	if err != nil {
 		return nil, err
 	}
-	result := make([]*chatpb.ConversationKnowledgeBaseInfo, 0, len(items))
-	for _, item := range items {
+	resp, err := ragClient.BindConversationKnowledgeBase(ctx, &ragpb.BindConversationKnowledgeBaseRequest{
+		OperatorId:      req.OperatorId,
+		ConversationId:  req.ConversationId,
+		KnowledgeBaseId: req.KnowledgeBaseId,
+	})
+	if err != nil {
+		return &chatpb.CommonResponse{Success: false, Message: err.Error()}, nil
+	}
+	return &chatpb.CommonResponse{Success: resp.Success, Message: resp.Message}, nil
+}
+
+func (h *ChatServiceImpl) ListConversationKnowledgeBases(ctx context.Context, req *chatpb.ListConversationKnowledgeBasesRequest) (*chatpb.ListConversationKnowledgeBasesResponse, error) {
+	ragClient, err := h.requireRAGClient()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := ragClient.ListConversationKnowledgeBases(ctx, &ragpb.ListConversationKnowledgeBasesRequest{
+		OperatorId:     req.OperatorId,
+		ConversationId: req.ConversationId,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*chatpb.ConversationKnowledgeBaseInfo, 0, len(resp.KnowledgeBases))
+	for _, item := range resp.KnowledgeBases {
 		result = append(result, &chatpb.ConversationKnowledgeBaseInfo{
-			Id:              int64(item.ID),
-			ConversationId:  item.ConversationID,
-			KnowledgeBaseId: int64(item.KnowledgeBaseID),
+			Id:              item.Id,
+			ConversationId:  item.ConversationId,
+			KnowledgeBaseId: item.KnowledgeBaseId,
 			Name:            item.Name,
 			Description:     item.Description,
 			Status:          item.Status,
@@ -505,14 +626,19 @@ func (h *ChatServiceImpl) ListConversationKnowledgeBases(ctx context.Context, re
 }
 
 func (h *ChatServiceImpl) UnbindConversationKnowledgeBase(ctx context.Context, req *chatpb.UnbindConversationKnowledgeBaseRequest) (*chatpb.CommonResponse, error) {
-	if err := h.Service.UnbindConversationKnowledgeBase(ctx, biz.UnbindConversationKnowledgeBaseInput{
-		OperatorID:      uint64(req.OperatorId),
-		ConversationID:  req.ConversationId,
-		KnowledgeBaseID: uint64(req.KnowledgeBaseId),
-	}); err != nil {
+	ragClient, err := h.requireRAGClient()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := ragClient.UnbindConversationKnowledgeBase(ctx, &ragpb.UnbindConversationKnowledgeBaseRequest{
+		OperatorId:      req.OperatorId,
+		ConversationId:  req.ConversationId,
+		KnowledgeBaseId: req.KnowledgeBaseId,
+	})
+	if err != nil {
 		return &chatpb.CommonResponse{Success: false, Message: err.Error()}, nil
 	}
-	return &chatpb.CommonResponse{Success: true, Message: "ok"}, nil
+	return &chatpb.CommonResponse{Success: resp.Success, Message: resp.Message}, nil
 }
 
 func (h *ChatServiceImpl) CreateMessage(ctx context.Context, req *chatpb.CreateMessageRequest) (*chatpb.CreateMessageResponse, error) {
@@ -595,6 +721,23 @@ func toAICallLogPB(item biz.AICallLogView) *chatpb.AICallLogInfo {
 	if item.ResponseMessageID != nil {
 		value := int64(*item.ResponseMessageID)
 		pb.ResponseMessageId = &value
+	}
+	return pb
+}
+
+func toNotificationPB(item biz.NotificationView) *chatpb.NotificationInfo {
+	pb := &chatpb.NotificationInfo{
+		Id:             int64(item.ID),
+		Type:           item.Type,
+		Title:          item.Title,
+		Content:        item.Content,
+		ConversationId: item.ConversationID,
+		IsRead:         item.IsRead,
+		CreatedAt:      item.CreatedAt,
+	}
+	if item.RelatedMessageID != nil {
+		value := int64(*item.RelatedMessageID)
+		pb.RelatedMessageId = &value
 	}
 	return pb
 }

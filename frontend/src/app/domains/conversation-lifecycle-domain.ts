@@ -21,6 +21,8 @@ type UseConversationLifecycleDeps = {
   setMembers: Dispatch<SetStateAction<MemberInfo[]>>;
   setSelectedGroupInfo: Dispatch<SetStateAction<GroupInfo | null>>;
   setLoadingMessages: Dispatch<SetStateAction<boolean>>;
+  filterVisibleMessages?: (conversationID: string, nextMessages: MessageInfo[]) => MessageInfo[];
+  shouldAutoScrollOnMessagesChange?: () => boolean;
 };
 
 export function useConversationLifecycle(deps: UseConversationLifecycleDeps) {
@@ -39,7 +41,9 @@ export function useConversationLifecycle(deps: UseConversationLifecycleDeps) {
     setMessages,
     setMembers,
     setSelectedGroupInfo,
-    setLoadingMessages
+    setLoadingMessages,
+    filterVisibleMessages,
+    shouldAutoScrollOnMessagesChange
   } = deps;
 
   useEffect(() => {
@@ -63,9 +67,12 @@ export function useConversationLifecycle(deps: UseConversationLifecycleDeps) {
       return;
     }
     if (lastMessage.pending || lastMessage.senderId === user.user_id) {
+      if (shouldAutoScrollOnMessagesChange && !shouldAutoScrollOnMessagesChange()) {
+        return;
+      }
       scrollMessagesToBottom(messageListRef);
     }
-  }, [messages, messageListRef, selectedConversationId, user]);
+  }, [messages, messageListRef, selectedConversationId, shouldAutoScrollOnMessagesChange, user]);
 
   useEffect(() => {
     if (!selectedConversationId) {
@@ -88,7 +95,8 @@ export function useConversationLifecycle(deps: UseConversationLifecycleDeps) {
     ])
       .then(([nextMessages, nextMembers, nextGroupInfo]) => {
         if (!active) return;
-        setMessages(mergeMessagesById([], nextMessages));
+        const filteredMessages = filterVisibleMessages ? filterVisibleMessages(selectedConversationId, nextMessages) : nextMessages;
+        setMessages(mergeMessagesById([], filteredMessages));
         setMembers(nextMembers);
         setSelectedGroupInfo(nextGroupInfo);
         window.setTimeout(() => scrollMessagesToBottom(messageListRef), 20);
@@ -117,6 +125,7 @@ export function useConversationLifecycle(deps: UseConversationLifecycleDeps) {
     setMembers,
     setMessages,
     setSelectedGroupInfo,
-    showToast
+    showToast,
+    filterVisibleMessages
   ]);
 }

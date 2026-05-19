@@ -3904,6 +3904,425 @@ var fieldIDToName_ListAICallLogsResponse = map[int16]string{
 	2: "quota",
 }
 
+type NotificationInfo struct {
+	Id               int64  `thrift:"id,1" frugal:"1,default,i64" json:"id"`
+	Type             string `thrift:"type,2" frugal:"2,default,string" json:"type"`
+	Title            string `thrift:"title,3" frugal:"3,default,string" json:"title"`
+	Content          string `thrift:"content,4" frugal:"4,default,string" json:"content"`
+	ConversationId   string `thrift:"conversation_id,5" frugal:"5,default,string" json:"conversation_id"`
+	RelatedMessageId *int64 `thrift:"related_message_id,6,optional" frugal:"6,optional,i64" json:"related_message_id,omitempty"`
+	IsRead           bool   `thrift:"is_read,7" frugal:"7,default,bool" json:"is_read"`
+	CreatedAt        int64  `thrift:"created_at,8" frugal:"8,default,i64" json:"created_at"`
+}
+
+func NewNotificationInfo() *NotificationInfo {
+	return &NotificationInfo{}
+}
+
+func (p *NotificationInfo) InitDefault() {
+}
+
+func (p *NotificationInfo) GetId() (v int64) {
+	return p.Id
+}
+
+func (p *NotificationInfo) GetType() (v string) {
+	return p.Type
+}
+
+func (p *NotificationInfo) GetTitle() (v string) {
+	return p.Title
+}
+
+func (p *NotificationInfo) GetContent() (v string) {
+	return p.Content
+}
+
+func (p *NotificationInfo) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+var NotificationInfo_RelatedMessageId_DEFAULT int64
+
+func (p *NotificationInfo) GetRelatedMessageId() (v int64) {
+	if !p.IsSetRelatedMessageId() {
+		return NotificationInfo_RelatedMessageId_DEFAULT
+	}
+	return *p.RelatedMessageId
+}
+
+func (p *NotificationInfo) GetIsRead() (v bool) {
+	return p.IsRead
+}
+
+func (p *NotificationInfo) GetCreatedAt() (v int64) {
+	return p.CreatedAt
+}
+func (p *NotificationInfo) SetId(val int64) {
+	p.Id = val
+}
+func (p *NotificationInfo) SetType(val string) {
+	p.Type = val
+}
+func (p *NotificationInfo) SetTitle(val string) {
+	p.Title = val
+}
+func (p *NotificationInfo) SetContent(val string) {
+	p.Content = val
+}
+func (p *NotificationInfo) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *NotificationInfo) SetRelatedMessageId(val *int64) {
+	p.RelatedMessageId = val
+}
+func (p *NotificationInfo) SetIsRead(val bool) {
+	p.IsRead = val
+}
+func (p *NotificationInfo) SetCreatedAt(val int64) {
+	p.CreatedAt = val
+}
+
+func (p *NotificationInfo) IsSetRelatedMessageId() bool {
+	return p.RelatedMessageId != nil
+}
+
+func (p *NotificationInfo) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("NotificationInfo(%+v)", *p)
+}
+
+var fieldIDToName_NotificationInfo = map[int16]string{
+	1: "id",
+	2: "type",
+	3: "title",
+	4: "content",
+	5: "conversation_id",
+	6: "related_message_id",
+	7: "is_read",
+	8: "created_at",
+}
+
+type ListNotificationsRequest struct {
+	OperatorId int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	UnreadOnly *bool  `thrift:"unread_only,2,optional" frugal:"2,optional,bool" json:"unread_only,omitempty"`
+	Limit      *int32 `thrift:"limit,3,optional" frugal:"3,optional,i32" json:"limit,omitempty"`
+}
+
+func NewListNotificationsRequest() *ListNotificationsRequest {
+	return &ListNotificationsRequest{}
+}
+
+func (p *ListNotificationsRequest) InitDefault() {
+}
+
+func (p *ListNotificationsRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+var ListNotificationsRequest_UnreadOnly_DEFAULT bool
+
+func (p *ListNotificationsRequest) GetUnreadOnly() (v bool) {
+	if !p.IsSetUnreadOnly() {
+		return ListNotificationsRequest_UnreadOnly_DEFAULT
+	}
+	return *p.UnreadOnly
+}
+
+var ListNotificationsRequest_Limit_DEFAULT int32
+
+func (p *ListNotificationsRequest) GetLimit() (v int32) {
+	if !p.IsSetLimit() {
+		return ListNotificationsRequest_Limit_DEFAULT
+	}
+	return *p.Limit
+}
+func (p *ListNotificationsRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *ListNotificationsRequest) SetUnreadOnly(val *bool) {
+	p.UnreadOnly = val
+}
+func (p *ListNotificationsRequest) SetLimit(val *int32) {
+	p.Limit = val
+}
+
+func (p *ListNotificationsRequest) IsSetUnreadOnly() bool {
+	return p.UnreadOnly != nil
+}
+
+func (p *ListNotificationsRequest) IsSetLimit() bool {
+	return p.Limit != nil
+}
+
+func (p *ListNotificationsRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListNotificationsRequest(%+v)", *p)
+}
+
+var fieldIDToName_ListNotificationsRequest = map[int16]string{
+	1: "operator_id",
+	2: "unread_only",
+	3: "limit",
+}
+
+type ListNotificationsResponse struct {
+	Notifications []*NotificationInfo `thrift:"notifications,1" frugal:"1,default,list<NotificationInfo>" json:"notifications"`
+	UnreadCount   int64               `thrift:"unread_count,2" frugal:"2,default,i64" json:"unread_count"`
+}
+
+func NewListNotificationsResponse() *ListNotificationsResponse {
+	return &ListNotificationsResponse{}
+}
+
+func (p *ListNotificationsResponse) InitDefault() {
+}
+
+func (p *ListNotificationsResponse) GetNotifications() (v []*NotificationInfo) {
+	return p.Notifications
+}
+
+func (p *ListNotificationsResponse) GetUnreadCount() (v int64) {
+	return p.UnreadCount
+}
+func (p *ListNotificationsResponse) SetNotifications(val []*NotificationInfo) {
+	p.Notifications = val
+}
+func (p *ListNotificationsResponse) SetUnreadCount(val int64) {
+	p.UnreadCount = val
+}
+
+func (p *ListNotificationsResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListNotificationsResponse(%+v)", *p)
+}
+
+var fieldIDToName_ListNotificationsResponse = map[int16]string{
+	1: "notifications",
+	2: "unread_count",
+}
+
+type MarkNotificationReadRequest struct {
+	OperatorId     int64 `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	NotificationId int64 `thrift:"notification_id,2" frugal:"2,default,i64" json:"notification_id"`
+}
+
+func NewMarkNotificationReadRequest() *MarkNotificationReadRequest {
+	return &MarkNotificationReadRequest{}
+}
+
+func (p *MarkNotificationReadRequest) InitDefault() {
+}
+
+func (p *MarkNotificationReadRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *MarkNotificationReadRequest) GetNotificationId() (v int64) {
+	return p.NotificationId
+}
+func (p *MarkNotificationReadRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *MarkNotificationReadRequest) SetNotificationId(val int64) {
+	p.NotificationId = val
+}
+
+func (p *MarkNotificationReadRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("MarkNotificationReadRequest(%+v)", *p)
+}
+
+var fieldIDToName_MarkNotificationReadRequest = map[int16]string{
+	1: "operator_id",
+	2: "notification_id",
+}
+
+type MarkAllNotificationsReadRequest struct {
+	OperatorId int64 `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+}
+
+func NewMarkAllNotificationsReadRequest() *MarkAllNotificationsReadRequest {
+	return &MarkAllNotificationsReadRequest{}
+}
+
+func (p *MarkAllNotificationsReadRequest) InitDefault() {
+}
+
+func (p *MarkAllNotificationsReadRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+func (p *MarkAllNotificationsReadRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+
+func (p *MarkAllNotificationsReadRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("MarkAllNotificationsReadRequest(%+v)", *p)
+}
+
+var fieldIDToName_MarkAllNotificationsReadRequest = map[int16]string{
+	1: "operator_id",
+}
+
+type CreateNotificationRequest struct {
+	OperatorId       int64   `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	UserId           int64   `thrift:"user_id,2" frugal:"2,default,i64" json:"user_id"`
+	Type             string  `thrift:"type,3" frugal:"3,default,string" json:"type"`
+	Title            string  `thrift:"title,4" frugal:"4,default,string" json:"title"`
+	Content          string  `thrift:"content,5" frugal:"5,default,string" json:"content"`
+	ConversationId   *string `thrift:"conversation_id,6,optional" frugal:"6,optional,string" json:"conversation_id,omitempty"`
+	RelatedMessageId *int64  `thrift:"related_message_id,7,optional" frugal:"7,optional,i64" json:"related_message_id,omitempty"`
+}
+
+func NewCreateNotificationRequest() *CreateNotificationRequest {
+	return &CreateNotificationRequest{}
+}
+
+func (p *CreateNotificationRequest) InitDefault() {
+}
+
+func (p *CreateNotificationRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *CreateNotificationRequest) GetUserId() (v int64) {
+	return p.UserId
+}
+
+func (p *CreateNotificationRequest) GetType() (v string) {
+	return p.Type
+}
+
+func (p *CreateNotificationRequest) GetTitle() (v string) {
+	return p.Title
+}
+
+func (p *CreateNotificationRequest) GetContent() (v string) {
+	return p.Content
+}
+
+var CreateNotificationRequest_ConversationId_DEFAULT string
+
+func (p *CreateNotificationRequest) GetConversationId() (v string) {
+	if !p.IsSetConversationId() {
+		return CreateNotificationRequest_ConversationId_DEFAULT
+	}
+	return *p.ConversationId
+}
+
+var CreateNotificationRequest_RelatedMessageId_DEFAULT int64
+
+func (p *CreateNotificationRequest) GetRelatedMessageId() (v int64) {
+	if !p.IsSetRelatedMessageId() {
+		return CreateNotificationRequest_RelatedMessageId_DEFAULT
+	}
+	return *p.RelatedMessageId
+}
+func (p *CreateNotificationRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *CreateNotificationRequest) SetUserId(val int64) {
+	p.UserId = val
+}
+func (p *CreateNotificationRequest) SetType(val string) {
+	p.Type = val
+}
+func (p *CreateNotificationRequest) SetTitle(val string) {
+	p.Title = val
+}
+func (p *CreateNotificationRequest) SetContent(val string) {
+	p.Content = val
+}
+func (p *CreateNotificationRequest) SetConversationId(val *string) {
+	p.ConversationId = val
+}
+func (p *CreateNotificationRequest) SetRelatedMessageId(val *int64) {
+	p.RelatedMessageId = val
+}
+
+func (p *CreateNotificationRequest) IsSetConversationId() bool {
+	return p.ConversationId != nil
+}
+
+func (p *CreateNotificationRequest) IsSetRelatedMessageId() bool {
+	return p.RelatedMessageId != nil
+}
+
+func (p *CreateNotificationRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("CreateNotificationRequest(%+v)", *p)
+}
+
+var fieldIDToName_CreateNotificationRequest = map[int16]string{
+	1: "operator_id",
+	2: "user_id",
+	3: "type",
+	4: "title",
+	5: "content",
+	6: "conversation_id",
+	7: "related_message_id",
+}
+
+type CreateNotificationResponse struct {
+	Notification *NotificationInfo `thrift:"notification,1" frugal:"1,default,NotificationInfo" json:"notification"`
+	UnreadCount  int64             `thrift:"unread_count,2" frugal:"2,default,i64" json:"unread_count"`
+}
+
+func NewCreateNotificationResponse() *CreateNotificationResponse {
+	return &CreateNotificationResponse{}
+}
+
+func (p *CreateNotificationResponse) InitDefault() {
+}
+
+var CreateNotificationResponse_Notification_DEFAULT *NotificationInfo
+
+func (p *CreateNotificationResponse) GetNotification() (v *NotificationInfo) {
+	if !p.IsSetNotification() {
+		return CreateNotificationResponse_Notification_DEFAULT
+	}
+	return p.Notification
+}
+
+func (p *CreateNotificationResponse) GetUnreadCount() (v int64) {
+	return p.UnreadCount
+}
+func (p *CreateNotificationResponse) SetNotification(val *NotificationInfo) {
+	p.Notification = val
+}
+func (p *CreateNotificationResponse) SetUnreadCount(val int64) {
+	p.UnreadCount = val
+}
+
+func (p *CreateNotificationResponse) IsSetNotification() bool {
+	return p.Notification != nil
+}
+
+func (p *CreateNotificationResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("CreateNotificationResponse(%+v)", *p)
+}
+
+var fieldIDToName_CreateNotificationResponse = map[int16]string{
+	1: "notification",
+	2: "unread_count",
+}
+
 type CreateMessageRequest struct {
 	OperatorId     int64   `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
 	ConversationId string  `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
@@ -4153,6 +4572,14 @@ type ChatService interface {
 	RemoveConversationBot(ctx context.Context, req *RemoveConversationBotRequest) (r *CommonResponse, err error)
 
 	ListAICallLogs(ctx context.Context, req *ListAICallLogsRequest) (r *ListAICallLogsResponse, err error)
+
+	ListNotifications(ctx context.Context, req *ListNotificationsRequest) (r *ListNotificationsResponse, err error)
+
+	MarkNotificationRead(ctx context.Context, req *MarkNotificationReadRequest) (r *CommonResponse, err error)
+
+	MarkAllNotificationsRead(ctx context.Context, req *MarkAllNotificationsReadRequest) (r *CommonResponse, err error)
+
+	CreateNotification(ctx context.Context, req *CreateNotificationRequest) (r *CreateNotificationResponse, err error)
 
 	CreateKnowledgeBase(ctx context.Context, req *CreateKnowledgeBaseRequest) (r *CreateKnowledgeBaseResponse, err error)
 
@@ -6148,6 +6575,310 @@ func (p *ChatServiceListAICallLogsResult) String() string {
 }
 
 var fieldIDToName_ChatServiceListAICallLogsResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceListNotificationsArgs struct {
+	Req *ListNotificationsRequest `thrift:"req,1" frugal:"1,default,ListNotificationsRequest" json:"req"`
+}
+
+func NewChatServiceListNotificationsArgs() *ChatServiceListNotificationsArgs {
+	return &ChatServiceListNotificationsArgs{}
+}
+
+func (p *ChatServiceListNotificationsArgs) InitDefault() {
+}
+
+var ChatServiceListNotificationsArgs_Req_DEFAULT *ListNotificationsRequest
+
+func (p *ChatServiceListNotificationsArgs) GetReq() (v *ListNotificationsRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceListNotificationsArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceListNotificationsArgs) SetReq(val *ListNotificationsRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceListNotificationsArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceListNotificationsArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListNotificationsArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListNotificationsArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceListNotificationsResult struct {
+	Success *ListNotificationsResponse `thrift:"success,0,optional" frugal:"0,optional,ListNotificationsResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceListNotificationsResult() *ChatServiceListNotificationsResult {
+	return &ChatServiceListNotificationsResult{}
+}
+
+func (p *ChatServiceListNotificationsResult) InitDefault() {
+}
+
+var ChatServiceListNotificationsResult_Success_DEFAULT *ListNotificationsResponse
+
+func (p *ChatServiceListNotificationsResult) GetSuccess() (v *ListNotificationsResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceListNotificationsResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceListNotificationsResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ListNotificationsResponse)
+}
+
+func (p *ChatServiceListNotificationsResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceListNotificationsResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListNotificationsResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListNotificationsResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceMarkNotificationReadArgs struct {
+	Req *MarkNotificationReadRequest `thrift:"req,1" frugal:"1,default,MarkNotificationReadRequest" json:"req"`
+}
+
+func NewChatServiceMarkNotificationReadArgs() *ChatServiceMarkNotificationReadArgs {
+	return &ChatServiceMarkNotificationReadArgs{}
+}
+
+func (p *ChatServiceMarkNotificationReadArgs) InitDefault() {
+}
+
+var ChatServiceMarkNotificationReadArgs_Req_DEFAULT *MarkNotificationReadRequest
+
+func (p *ChatServiceMarkNotificationReadArgs) GetReq() (v *MarkNotificationReadRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceMarkNotificationReadArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceMarkNotificationReadArgs) SetReq(val *MarkNotificationReadRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceMarkNotificationReadArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceMarkNotificationReadArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceMarkNotificationReadArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceMarkNotificationReadArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceMarkNotificationReadResult struct {
+	Success *CommonResponse `thrift:"success,0,optional" frugal:"0,optional,CommonResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceMarkNotificationReadResult() *ChatServiceMarkNotificationReadResult {
+	return &ChatServiceMarkNotificationReadResult{}
+}
+
+func (p *ChatServiceMarkNotificationReadResult) InitDefault() {
+}
+
+var ChatServiceMarkNotificationReadResult_Success_DEFAULT *CommonResponse
+
+func (p *ChatServiceMarkNotificationReadResult) GetSuccess() (v *CommonResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceMarkNotificationReadResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceMarkNotificationReadResult) SetSuccess(x interface{}) {
+	p.Success = x.(*CommonResponse)
+}
+
+func (p *ChatServiceMarkNotificationReadResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceMarkNotificationReadResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceMarkNotificationReadResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceMarkNotificationReadResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceMarkAllNotificationsReadArgs struct {
+	Req *MarkAllNotificationsReadRequest `thrift:"req,1" frugal:"1,default,MarkAllNotificationsReadRequest" json:"req"`
+}
+
+func NewChatServiceMarkAllNotificationsReadArgs() *ChatServiceMarkAllNotificationsReadArgs {
+	return &ChatServiceMarkAllNotificationsReadArgs{}
+}
+
+func (p *ChatServiceMarkAllNotificationsReadArgs) InitDefault() {
+}
+
+var ChatServiceMarkAllNotificationsReadArgs_Req_DEFAULT *MarkAllNotificationsReadRequest
+
+func (p *ChatServiceMarkAllNotificationsReadArgs) GetReq() (v *MarkAllNotificationsReadRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceMarkAllNotificationsReadArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceMarkAllNotificationsReadArgs) SetReq(val *MarkAllNotificationsReadRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceMarkAllNotificationsReadArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceMarkAllNotificationsReadArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceMarkAllNotificationsReadArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceMarkAllNotificationsReadArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceMarkAllNotificationsReadResult struct {
+	Success *CommonResponse `thrift:"success,0,optional" frugal:"0,optional,CommonResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceMarkAllNotificationsReadResult() *ChatServiceMarkAllNotificationsReadResult {
+	return &ChatServiceMarkAllNotificationsReadResult{}
+}
+
+func (p *ChatServiceMarkAllNotificationsReadResult) InitDefault() {
+}
+
+var ChatServiceMarkAllNotificationsReadResult_Success_DEFAULT *CommonResponse
+
+func (p *ChatServiceMarkAllNotificationsReadResult) GetSuccess() (v *CommonResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceMarkAllNotificationsReadResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceMarkAllNotificationsReadResult) SetSuccess(x interface{}) {
+	p.Success = x.(*CommonResponse)
+}
+
+func (p *ChatServiceMarkAllNotificationsReadResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceMarkAllNotificationsReadResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceMarkAllNotificationsReadResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceMarkAllNotificationsReadResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceCreateNotificationArgs struct {
+	Req *CreateNotificationRequest `thrift:"req,1" frugal:"1,default,CreateNotificationRequest" json:"req"`
+}
+
+func NewChatServiceCreateNotificationArgs() *ChatServiceCreateNotificationArgs {
+	return &ChatServiceCreateNotificationArgs{}
+}
+
+func (p *ChatServiceCreateNotificationArgs) InitDefault() {
+}
+
+var ChatServiceCreateNotificationArgs_Req_DEFAULT *CreateNotificationRequest
+
+func (p *ChatServiceCreateNotificationArgs) GetReq() (v *CreateNotificationRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceCreateNotificationArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceCreateNotificationArgs) SetReq(val *CreateNotificationRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceCreateNotificationArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceCreateNotificationArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceCreateNotificationArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceCreateNotificationArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceCreateNotificationResult struct {
+	Success *CreateNotificationResponse `thrift:"success,0,optional" frugal:"0,optional,CreateNotificationResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceCreateNotificationResult() *ChatServiceCreateNotificationResult {
+	return &ChatServiceCreateNotificationResult{}
+}
+
+func (p *ChatServiceCreateNotificationResult) InitDefault() {
+}
+
+var ChatServiceCreateNotificationResult_Success_DEFAULT *CreateNotificationResponse
+
+func (p *ChatServiceCreateNotificationResult) GetSuccess() (v *CreateNotificationResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceCreateNotificationResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceCreateNotificationResult) SetSuccess(x interface{}) {
+	p.Success = x.(*CreateNotificationResponse)
+}
+
+func (p *ChatServiceCreateNotificationResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceCreateNotificationResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceCreateNotificationResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceCreateNotificationResult = map[int16]string{
 	0: "success",
 }
 

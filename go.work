@@ -4,6 +4,7 @@ use (
 	./auth-service
 	./chat-service
 	./gateway
+	./rag-service
 	./shared
 	./user-service
 )

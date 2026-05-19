@@ -4,15 +4,19 @@ import (
 	"encoding/json"
 	"strings"
 
+	notificationx "example.com/aim/gateway/internal/notification"
 	chatpb "example.com/aim/gateway/kitex_gen/chat"
 )
 
 const (
-	EventConnected       = "CONNECTED"
-	EventSendMessage     = "SEND_MESSAGE"
-	EventMessageAck      = "MESSAGE_ACK"
-	EventNewMessage      = "NEW_MESSAGE"
-	EventMessageRecalled = "MESSAGE_RECALLED"
+	EventConnected           = "CONNECTED"
+	EventSendMessage         = "SEND_MESSAGE"
+	EventTyping              = "TYPING"
+	EventMessageAck          = "MESSAGE_ACK"
+	EventNewMessage          = "NEW_MESSAGE"
+	EventBotReplyStream      = "BOT_REPLY_STREAM"
+	EventMessageRecalled     = "MESSAGE_RECALLED"
+	EventNotificationCreated = "NOTIFICATION_CREATED"
 )
 
 type IncomingEvent struct {
@@ -32,11 +36,18 @@ type ConnectedData struct {
 }
 
 type SendMessageData struct {
-	ConversationID string `json:"conversationId"`
-	MessageType    string `json:"messageType,omitempty"`
+	ConversationID string          `json:"conversationId"`
+	MessageType    string          `json:"messageType,omitempty"`
 	Content        string          `json:"content,omitempty"`
 	ContentPayload json.RawMessage `json:"contentPayload,omitempty"`
-	ReplyToID      *int64 `json:"replyToId,omitempty"`
+	ReplyToID      *int64          `json:"replyToId,omitempty"`
+}
+
+type TypingData struct {
+	ConversationID string `json:"conversationId"`
+	IsTyping       bool   `json:"isTyping"`
+	UserID         int64  `json:"userId,omitempty"`
+	At             int64  `json:"at,omitempty"`
 }
 
 type MessageAckData struct {
@@ -74,6 +85,35 @@ type MessageRecalledInfo struct {
 	ConversationID string `json:"conversationId"`
 }
 
+type BotReplyStreamData struct {
+	ConversationID string `json:"conversationId"`
+	SenderID       int64  `json:"senderId"`
+	SenderType     string `json:"senderType"`
+	MessageType    string `json:"messageType"`
+	Content        string `json:"content"`
+	Done           bool   `json:"done"`
+}
+
+type NotificationInfo struct {
+	ID               int64  `json:"id"`
+	Type             string `json:"type"`
+	Category         string `json:"category"`
+	Title            string `json:"title"`
+	Summary          string `json:"summary"`
+	Content          string `json:"content"`
+	Detail           string `json:"detail"`
+	ConversationID   string `json:"conversationId"`
+	RelatedMessageID *int64 `json:"relatedMessageId,omitempty"`
+	IsRead           bool   `json:"isRead"`
+	CreatedAt        int64  `json:"createdAt"`
+	Persistent       bool   `json:"persistent"`
+}
+
+type NotificationCreatedData struct {
+	Notification NotificationInfo `json:"notification"`
+	UnreadCount  *int64           `json:"unreadCount,omitempty"`
+}
+
 func ToMessageInfo(message *chatpb.MessageInfo) MessageInfo {
 	if message == nil {
 		return MessageInfo{}
@@ -101,6 +141,27 @@ func ToMessageInfo(message *chatpb.MessageInfo) MessageInfo {
 		CreatedAt:      message.CreatedAt,
 		ReadByPeer:     message.ReadByPeer,
 		ReadCount:      message.ReadCount,
+	}
+}
+
+func ToNotificationInfo(item *chatpb.NotificationInfo) NotificationInfo {
+	if item == nil {
+		return NotificationInfo{}
+	}
+	category, summary, detail := notificationx.Normalize(item.Type, item.Title, item.Content)
+	return NotificationInfo{
+		ID:               item.Id,
+		Type:             item.Type,
+		Category:         category,
+		Title:            item.Title,
+		Summary:          summary,
+		Content:          item.Content,
+		Detail:           detail,
+		ConversationID:   item.ConversationId,
+		RelatedMessageID: item.RelatedMessageId,
+		IsRead:           item.IsRead,
+		CreatedAt:        item.CreatedAt,
+		Persistent:       true,
 	}
 }
 

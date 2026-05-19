@@ -1,4 +1,4 @@
-﻿package biz
+package biz
 
 type CreateGroupInput struct {
 	OperatorID   uint64
@@ -102,7 +102,7 @@ type ConversationView struct {
 	LastMessageSenderID   *uint64
 	LastMessageSenderType string
 	LastMessageSenderName string
-	LastMessageContent        string
+	LastMessageContent    string
 	MuteAll               *bool
 	Role                  string
 	IsPinned              bool
@@ -239,3 +239,28 @@ type AICallLogListView struct {
 	Quota AICallLogQuotaView
 }
 
+type NotificationView struct {
+	ID               uint64
+	Type             string
+	Title            string
+	Content          string
+	ConversationID   string
+	RelatedMessageID *uint64
+	IsRead           bool
+	CreatedAt        int64
+}
+
+type NotificationListView struct {
+	Notifications []NotificationView
+	UnreadCount   int64
+}
+
+type CreateNotificationInput struct {
+	OperatorID       uint64
+	UserID           uint64
+	Type             string
+	Title            string
+	Content          string
+	ConversationID   string
+	RelatedMessageID *uint64
+}

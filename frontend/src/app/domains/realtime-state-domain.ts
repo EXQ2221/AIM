@@ -14,6 +14,7 @@ type UseRealtimeStateDeps = {
   showToast: (message: string, tone?: ToastTone) => void;
   setMessages: Dispatch<SetStateAction<MessageInfo[]>>;
   setUnreadCounts: Dispatch<SetStateAction<Record<string, number>>>;
+  filterVisibleMessages?: (conversationID: string, nextMessages: MessageInfo[]) => MessageInfo[];
 };
 
 export function useRealtimeState(deps: UseRealtimeStateDeps) {
@@ -25,7 +26,8 @@ export function useRealtimeState(deps: UseRealtimeStateDeps) {
     refreshConversations,
     showToast,
     setMessages,
-    setUnreadCounts
+    setUnreadCounts,
+    filterVisibleMessages
   } = deps;
 
   const markConversationRead = useCallback(async (conversationID: string, lastReadMessageId: number) => {
@@ -52,15 +54,16 @@ export function useRealtimeState(deps: UseRealtimeStateDeps) {
 
     const nextMessages = await api.messages(conversationID, { limit: 50 });
     if (selectedConversationIdRef.current !== conversationID) return;
+    const filteredMessages = filterVisibleMessages ? filterVisibleMessages(conversationID, nextMessages) : nextMessages;
 
-    setMessages((current) => mergeMessagesById(current, nextMessages));
+    setMessages((current) => mergeMessagesById(current, filteredMessages));
     setUnreadCounts((current) => ({ ...current, [conversationID]: 0 }));
     window.setTimeout(() => scrollMessagesToBottom(messageListRef), 20);
     const lastReadMessageId = latestMessageId(nextMessages);
     if (lastReadMessageId > 0) {
       void markConversationRead(conversationID, lastReadMessageId);
     }
-  }, [markConversationRead, messageListRef, selectedConversationIdRef, setMessages, setUnreadCounts]);
+  }, [filterVisibleMessages, markConversationRead, messageListRef, selectedConversationIdRef, setMessages, setUnreadCounts]);
 
   const recoverRealtimeState = useCallback(async () => {
     if (realtimeRecoveringRef.current) return;
