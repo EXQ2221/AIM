@@ -1,9 +1,9 @@
-package raghandler
+﻿package handler
 
 import (
 	"strings"
 
-	ragmodel "example.com/aim/rag-service/rag-internal/model"
+	ragmodel "example.com/aim/rag-service/internal/dal/model"
 )
 
 func NormalizeProvider(value ragmodel.Provider) ragmodel.Provider {

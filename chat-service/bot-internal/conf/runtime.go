@@ -16,7 +16,7 @@ func BotMaxConversationConcurrencyFromEnv() int {
 }
 
 func BotTaskTimeoutFromEnv() time.Duration {
-	seconds := intFromEnv("BOT_TASK_TIMEOUT_SECONDS", 30)
+	seconds := intFromEnv("BOT_TASK_TIMEOUT_SECONDS", 120)
 	if seconds <= 0 {
 		seconds = 30
 	}

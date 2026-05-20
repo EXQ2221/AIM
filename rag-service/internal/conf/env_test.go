@@ -39,3 +39,17 @@ func TestLoadConfigFromEnvRetryOptionsInvalid(t *testing.T) {
 		t.Fatal("expected EMBEDDING_MAX_RETRIES validation error")
 	}
 }
+
+func TestLoadConfigFromEnvTextEmbeddingV4DefaultDimension(t *testing.T) {
+	t.Setenv("EMBEDDING_BASE_URL", "https://example.com/v1")
+	t.Setenv("EMBEDDING_API_KEY", "k")
+	t.Setenv("EMBEDDING_MODEL", "text-embedding-v4")
+
+	cfg, err := LoadConfigFromEnv()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Dimension != 1024 {
+		t.Fatalf("expected Dimension=1024, got %d", cfg.Dimension)
+	}
+}

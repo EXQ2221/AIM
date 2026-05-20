@@ -62,3 +62,31 @@ func TestBuildPromptFormatsSenders(t *testing.T) {
 		t.Fatalf("missing current user display name: %q", prompt)
 	}
 }
+
+func TestBuildPromptWithRAGUsesLocalKnowledgeBaseSection(t *testing.T) {
+	prompt := BuildPromptWithRAG(
+		nil,
+		"@ai \u8bdd\u5267\u7684\u5185\u5bb9\u662f\u4ec0\u4e48",
+		20,
+		map[uint64]string{10001: "Alice"},
+		10001,
+		model.BotScopeKnowledgeBaseOnly,
+		[]RAGChunk{
+			{Index: 1, Content: "\u8fd9\u662f\u8bdd\u5267\u7247\u6bb51", Score: 0.9},
+			{Index: 2, Content: "\u8fd9\u662f\u8bdd\u5267\u7247\u6bb52", Score: 0.8},
+		},
+	)
+
+	if !strings.Contains(prompt, "\u4ee5\u4e0b\u662f\u7528\u6237\u672c\u5730\u77e5\u8bc6\u5e93\u4e2d\u7684\u76f8\u5173\u5185\u5bb9") {
+		t.Fatalf("missing local knowledge source disclaimer: %q", prompt)
+	}
+	if !strings.Contains(prompt, "\u3010\u672c\u5730\u77e5\u8bc6\u5e93\u3011") {
+		t.Fatalf("missing local knowledge section title: %q", prompt)
+	}
+	if !strings.Contains(prompt, "[1] \u8fd9\u662f\u8bdd\u5267\u7247\u6bb51") || !strings.Contains(prompt, "[2] \u8fd9\u662f\u8bdd\u5267\u7247\u6bb52") {
+		t.Fatalf("missing rag chunk lines: %q", prompt)
+	}
+	if !strings.Contains(prompt, "\u6839\u636e\u60a8\u4e0a\u4f20\u7684\u6587\u6863") {
+		t.Fatalf("missing citation wording requirement: %q", prompt)
+	}
+}

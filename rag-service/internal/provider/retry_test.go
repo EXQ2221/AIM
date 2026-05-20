@@ -5,8 +5,6 @@ import (
 	"errors"
 	"testing"
 	"time"
-
-	ragdal "example.com/aim/rag-service/rag-internal/dal"
 )
 
 type fakeClient struct {
@@ -69,7 +67,7 @@ func TestRetryClientRetriesOnHTTP429(t *testing.T) {
 	base := &fakeClient{
 		fn: func(call int) (*EmbedResponse, error) {
 			if call == 1 {
-				return nil, &ragdal.HTTPStatusError{StatusCode: 429, StatusText: "Too Many Requests", Body: "rate limit"}
+				return nil, &HTTPStatusError{StatusCode: 429, StatusText: "Too Many Requests", Body: "rate limit"}
 			}
 			return &EmbedResponse{Embeddings: [][]float32{{1}}}, nil
 		},

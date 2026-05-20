@@ -3,8 +3,8 @@ package handler
 import (
 	"context"
 
+	ragbiz "example.com/aim/rag-service/internal/biz"
 	ragpb "example.com/aim/rag-service/kitex_gen/rag"
-	ragbiz "example.com/aim/rag-service/rag-internal/biz"
 )
 
 type RAGServiceImpl struct {

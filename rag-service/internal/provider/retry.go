@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	ragdal "example.com/aim/rag-service/rag-internal/dal"
 )
 
 type retryClient struct {
@@ -75,7 +73,7 @@ func isRetryableEmbeddingError(err error) bool {
 	if errors.As(err, &timeoutErr) && timeoutErr.Timeout() {
 		return true
 	}
-	var statusErr *ragdal.HTTPStatusError
+	var statusErr *HTTPStatusError
 	if errors.As(err, &statusErr) {
 		return statusErr.StatusCode == http.StatusTooManyRequests || statusErr.StatusCode >= http.StatusInternalServerError
 	}

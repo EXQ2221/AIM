@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"example.com/aim/rag-service/internal/dal/model"
+	embedding "example.com/aim/rag-service/internal/provider"
 	"example.com/aim/rag-service/internal/repository"
-	embedding "example.com/aim/rag-service/rag-internal/client"
 	"gorm.io/gorm"
 )
 
@@ -81,7 +81,10 @@ func (f *fakeRAGRepo) UpdateKnowledgeDocumentStatus(ctx context.Context, documen
 func (f *fakeRAGRepo) ReplaceKnowledgeChunksForDocument(ctx context.Context, documentID uint64, records []repository.KnowledgeChunkRecord) error {
 	return errors.New("not implemented")
 }
-func (f *fakeRAGRepo) SearchKnowledgeChunksByKB(ctx context.Context, kbID uint64, queryEmbedding []float32, topK int) ([]repository.KnowledgeSearchChunk, error) {
+func (f *fakeRAGRepo) SearchKnowledgeChunkCandidatesByKB(ctx context.Context, kbID uint64, query string, queryEmbedding []float32, topK int) ([]repository.KnowledgeChunkCandidate, error) {
+	return nil, errors.New("not implemented")
+}
+func (f *fakeRAGRepo) SearchKnowledgeChunksByKB(ctx context.Context, kbID uint64, query string, queryEmbedding []float32, topK int) ([]repository.KnowledgeSearchChunk, error) {
 	return nil, errors.New("not implemented")
 }
 func (f *fakeRAGRepo) IsKnowledgeBaseAccessibleByUser(ctx context.Context, kbID uint64, userID uint64) (bool, error) {
@@ -353,7 +356,7 @@ func TestSearchKnowledgeBase_AllowsBoundConversationMember(t *testing.T) {
 	_, err := service.SearchKnowledgeBase(context.Background(), SearchKnowledgeBaseInput{
 		OperatorID:      2002,
 		KnowledgeBaseID: 4,
-		Query:           "话剧",
+		Query:           "璇濆墽",
 	})
 	if err == nil {
 		t.Fatalf("expected repository not implemented error, got nil")
@@ -378,7 +381,7 @@ func TestSearchKnowledgeBase_RejectsUnboundNonOwner(t *testing.T) {
 	_, err := service.SearchKnowledgeBase(context.Background(), SearchKnowledgeBaseInput{
 		OperatorID:      2002,
 		KnowledgeBaseID: 4,
-		Query:           "话剧",
+		Query:           "璇濆墽",
 	})
 	if err != ErrKnowledgeBaseForbidden {
 		t.Fatalf("expected ErrKnowledgeBaseForbidden, got %v", err)

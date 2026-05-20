@@ -4138,3 +4138,196 @@ Conclusion:
 1. 实测 `@qwen 你好`，重点看 `first_chunk_ms` 是否下降。
 2. 实测一个明确需要联网搜索的问题，结合日志确认 `enable_search` 已发送且生效。
 3. 若仍慢，按场景拆分“快答模型”和“深思模型”路由。
+## [2026-05-20 13:30] RAG 导入超时与失败通知补丁
+- 变更文件
+  - `rag-service/rag-internal/biz/entry.go`
+  - `rag-service/rag-internal/biz/wiring.go`
+  - `rag-service/cmd/server/main.go`
+  - `rag-service/internal/repository/chat.go`
+  - `rag-service/internal/dal/model/notification.go`
+  - `rag-service/internal/dal/postgres/init.go`
+  - `docker-compose.yml`
+  - `.env.example`
+- 主要修改
+  - 文档处理总超时默认从 5 分钟提升到 15 分钟（`defaultDocumentProcessTimeout=15m`）。
+  - 新增环境变量 `RAG_DOCUMENT_PROCESS_TIMEOUT_SECONDS`，可独立配置文档处理超时。
+  - `processDocumentAsync` 在失败时判断是否超时（`timed_out`）并输出日志。
+  - 新增失败通知写入：当导入处理失败或超时时，向文档创建者写入 `notifications`（`SYSTEM` 类型）提醒失败原因。
+  - `rag-service` 注入并使用 `NotificationRepository`，并将 `notifications` 表加入 RAG 侧 AutoMigrate。
+  - `docker-compose.yml` 新增 `rag-service` 环境变量 `RAG_DOCUMENT_PROCESS_TIMEOUT_SECONDS`（默认 `900` 秒）。
+- 验证
+  - `go test ./...`（`rag-service`）通过。
+  - `docker compose up -d --build rag-service` 成功，容器 `healthy`。
+  - 启动日志确认：`document_process_timeout_ms=900000` 已生效。
+## [2026-05-20 17:20] RAG 文本 embedding 优先策略（text-embedding-v4）
+- 变更文件
+  - `rag-service/rag-internal/dal/openai_text_embedding.go`（新增）
+  - `rag-service/rag-internal/dal/openai_compatible.go`
+  - `rag-service/rag-internal/client/client.go`
+  - `rag-service/rag-internal/client/hybrid.go`
+  - `rag-service/rag-internal/client/client_test.go`（新增）
+  - `rag-service/rag-internal/client/hybrid_test.go`（新增）
+  - `rag-service/rag-internal/conf/env.go`
+  - `rag-service/rag-internal/conf/env_test.go`
+- 主要修改
+  - 新增 `OpenAITextEmbeddingClient`，用于 `text-embedding-v4`/`text-embedding-v3` 文本向量调用，支持 `dimensions` 参数。
+  - 客户端工厂改为“文本优先”：模型为 `text-embedding-*` 时默认走文本 embedding；仅在输入包含 `image/video` 时回退到多模态。
+  - provider 判定改为“模型优先”：文本模型强制 `openai_compatible`，多模态模型强制 `dashscope_multimodal`，其余模型才读取 `EMBEDDING_PROVIDER`。
+  - 默认维度补充：`text-embedding-v4=1024`，`text-embedding-v3=1024`。
+  - OpenAI 兼容 base_url 自动归一化：`https://dashscope.aliyuncs.com` 自动补到 `/compatible-mode/v1`。
+- 验证
+  - 本机默认 `go-build` 目录权限不足会触发 `Access is denied`。
+  - 使用工作区缓存验证通过：
+    - `GOCACHE=D:\\AIM\\.gocache go test ./rag-service/rag-internal/conf ./rag-service/rag-internal/client ./rag-service/rag-internal/dal`
+    - `GOCACHE=D:\\AIM\\.gocache go build ./rag-service/rag-internal/...`
+## [2026-05-20 18:30] RAG 中文检索重排支持修复（不改 PowerShell 写法）
+- 变更文件
+  - `rag-service/rag-internal/biz/entry.go`
+- 主要修改
+  - `rerankCandidates` 改为调用中文友好版本：
+    - `extractCoreKeywordsV2`
+    - `calcSectionScoreV2`
+  - 增强命中加权：
+    - 若仓储召回标记 `TitleMatched=true`，则 `titleScore` 下限提升到 `0.95`
+    - 若 `SectionMatched=true`，则 `sectionScore` 下限提升到 `0.7`
+  - 新增中文关键词与题号识别工具：
+    - `stopwordPatternV2`（正常 UTF-8 中文停用词）
+    - `keywordTokenPatternV2`（支持中文连续词 + 英文/数字 token）
+    - `reQuestionNoV2`（匹配“第354题/354题”）
+    - `extractQuestionNoV2`
+- 验证
+  - `gofmt -w rag-service/rag-internal/biz/entry.go`
+  - `GOCACHE=D:\\AIM\\.gocache go test ./rag-service/rag-internal/biz` 通过
+## [2026-05-20 18:50] RAG 标题召回中文支持补丁（话剧/题库冲突场景）
+- 变更文件
+  - `rag-service/internal/repository/rag.go`
+  - `rag-service/rag-internal/biz/entry.go`
+- 主要修改
+  - `normalizeSearchQuery` 改为中文友好：
+    - 统一小写
+    - 中文停用词清洗（UTF-8 正常正则）
+    - 中文/英文关键词提取：`searchKeywordPatternV2`
+    - 题号识别：`reQuestionNumberV2`（支持“第354题/354题”）
+  - `rerankCandidates` 改为调用中文友好函数：
+    - `extractCoreKeywordsV2`
+    - `calcSectionScoreV2`
+  - 命中加权兜底：
+    - `TitleMatched=true` 时 titleScore 下限 0.95
+    - `SectionMatched=true` 时 sectionScore 下限 0.7
+- 验证
+  - `gofmt -w rag-service/internal/repository/rag.go rag-service/rag-internal/biz/entry.go`
+  - `GOCACHE=D:\\AIM\\.gocache go test ./rag-service/rag-internal/biz ./rag-service/internal/repository` 通过
+## [2026-05-20 20:10] rag-internal 并入 rag internal 结构整理
+- 变更范围
+  - `rag-service/internal/rag/**`（新增并承接原 `rag-internal` 代码）
+  - `rag-service/cmd/server/main.go`
+  - `rag-service/internal/handler/rag_service.go`
+  - `rag-service/internal/rag/biz/entry.go`
+  - `rag-service/internal/rag/biz/splitter.go`
+  - `rag-service/internal/rag/biz/service.go`
+  - `rag-service/rag-internal/**`（原代码文件已迁移删除，当前仅保留 `README.md`）
+
+- 本次操作
+  - 将原 `rag-service/rag-internal/{biz,client,conf,dal,handler,model,repository}` 合并到 `rag-service/internal/rag/`。
+  - 统一更新导入路径：`example.com/aim/rag-service/rag-internal/...` → `example.com/aim/rag-service/internal/rag/...`。
+  - 修复迁移后暴露的编码污染与语法错误（仅做可编译修复，不改业务链路）：
+    - 题库/剧本识别正则恢复为正常 UTF-8 规则；
+    - 题库 chunk 标题与拼接模板恢复为中文正常文本；
+    - `calcSectionScore` 中损坏字符串判断改为稳定题号提取判断；
+    - 文档处理失败通知文案恢复为正常中文；
+    - `service.go` 中损坏的 `fmt.Sprintf` 模板修复。
+
+- 验证
+  - `GOCACHE=D:\\AIM\\.gocache go test ./rag-service/internal/rag/... ./rag-service/internal/handler ./rag-service/cmd/server` 通过。
+  - `cd rag-service && GOCACHE=D:\\AIM\\.gocache go test ./...` 通过。
+
+- 结果
+  - `rag-service` 已切换为以 `internal/rag` 为唯一内部实现目录。
+  - 当前无 `rag-internal` 代码引用残留（仅 `rag-internal/README.md` 作为迁移占位）。
+
+## [2026-05-20 21:05] rag-service 按 user-service 职责分层重排（dal/client）
+- 背景
+  - 调整为与 `user-service/internal` 一致的职责划分，不做“整包硬搬”。
+  - 目标：`biz/repository/handler/conf/dal/client` 同级清晰分层。
+
+- 本次调整
+  - 新的职责归位：
+    - `internal/client`：统一承载 embedding 外部调用逻辑（OpenAI-compatible、DashScope、多模态/文本路由、重试）。
+    - `internal/dal`：仅保留数据库相关（`dal/model`、`dal/postgres`）。
+  - 移除旧实现路径依赖：
+    - `internal/biz/*` 中对 `internal/rag/client`、`internal/rag/dal` 的引用全部改为 `internal/client`。
+  - 删除重复/冲突代码：
+    - 删除 `internal/biz/client_factory.go`（功能由 `internal/client.NewClient` 统一负责）。
+  - 统一包结构：
+    - `internal/client` 下全部统一为 `package embedding`，消除同目录多 package 问题。
+  - 解除循环依赖：
+    - `internal/client` 不再依赖 `internal/handler.NormalizeProvider`，改为在 client 内部本地规范化 provider，打断 `biz -> client -> handler -> biz` 循环。
+  - 清理过渡目录：
+    - 删除 `internal/rag/client`、`internal/rag/dal`。
+
+- 验证
+  - `cd rag-service && GOCACHE=D:\\AIM\\.gocache go test ./...` 通过。
+
+- 当前状态
+  - `rag-service` 已完成 dal/client 的职责重排并可编译、可测试。
+  - `internal/rag` 目录仅剩 `handler/model/repository` 空壳过渡目录（可在下一步继续并入或删除）。
+
+## [2026-05-20 21:35] rag-service 拆分 internal/rpc 与 external provider 职责
+- 目标
+  - 明确拆分“服务间 RPC 调用”和“外部 API 调用”两类职责，避免同层混用。
+
+- 本次改动
+  - 新增目录：
+    - `rag-service/internal/provider`：承载外部模型接口调用（embedding）。
+    - `rag-service/internal/rpc`：预留给服务间 RPC client（当前为空目录）。
+  - 目录迁移：
+    - 原 `rag-service/internal/client/*` 全部迁移到 `rag-service/internal/provider/*`。
+  - 引用更新：
+    - `rag-service/internal/biz/{wiring.go,service.go,entry.go,entry_permissions_test.go}` 中 embedding 依赖由
+      `internal/client` 改为 `internal/provider`。
+  - 测试确认：
+    - `cd rag-service && GOCACHE=D:\\AIM\\.gocache go test ./...` 通过。
+
+- 结果
+  - `internal/provider` 专注外部接口适配。
+  - `internal/rpc` 专注服务间调用（后续新增 chat/user 的 RPC client 放这里）。
+  - `biz` 层依赖关系更清晰，职责边界符合预期。
+
+## [2026-05-20 22:05] RAG 检索改为纯混合检索融合（移除关键词列举权重）
+- 目标
+  - 使用 pgvector + fulltext 的混合候选作为主线，去掉手工关键词提取/关键词打分那套重排逻辑。
+
+- 本次调整
+  - 文件：`rag-service/internal/biz/entry.go`
+  - `rerankCandidates` 改为仅基于以下信号融合打分：
+    - `vectorScore`（向量相似度归一化）
+    - `fullTextScore`（全文 rank 归一化）
+    - `titleScore`（标题命中）
+    - `sectionScore`（章节/题号命中）
+  - 删除项：
+    - 关键词提取链路（`extractCoreKeywords*`）
+    - `keywordScore` 及其权重
+    - 相关停用词/关键词正则在 biz 层的参与
+  - 保留项：
+    - 去重降权（同题号/同文档过量 chunk）
+    - `TitleMatched` / `SectionMatched` 的命中下限增强
+    - metadata 解析（用于 section/questionNo 判定）
+
+- 当前结果
+  - 语义检索链路更聚焦：候选召回由 repository 侧 hybrid 负责，biz 侧只做轻量融合与去重。
+  - `cd rag-service && GOCACHE=D:\\AIM\\.gocache go test ./...` 通过。
+
+## [2026-05-20 22:20] PostgreSQL 全文检索改为原生权重索引评分
+- 变更文件
+  - `rag-service/internal/repository/rag.go`
+
+- 主要修改
+  - `SearchKnowledgeChunkCandidatesByKB` 中 fulltext SQL 改为 `setweight + ts_rank_cd`：
+    - `A` 权重：`knowledge_documents.title`
+    - `B` 权重：`knowledge_chunks.metadata.sectionTitle`、`metadata.questionText`
+    - `C` 权重：`knowledge_chunks.content`
+  - `@@ plainto_tsquery(...)` 匹配也同步使用同一套加权 `tsvector` 组合，保证筛选和排序一致。
+
+- 结果
+  - 标题/章节/题干在全文检索中的影响显著提升，符合“标题优先、结构字段次之、正文兜底”的检索预期。
+  - `cd rag-service && GOCACHE=D:\\AIM\\.gocache go test ./...` 通过。

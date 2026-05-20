@@ -1,4 +1,4 @@
-package ragdal
+package embedding
 
 import "errors"
 

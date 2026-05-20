@@ -2,8 +2,10 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -26,14 +28,30 @@ import (
 
 const (
 	maxKnowledgeDocumentUploadBytes int64 = 20 << 20
-
-	knowledgeImportParseTimeout      = 158762 * time.Millisecond
-	knowledgeImportRAGAddTimeout     = 90 * time.Second
-	knowledgeImportWatchTimeout      = 5 * time.Minute
-	knowledgeImportPollInterval      = 2 * time.Second
-	knowledgeImportPollRPCDeadline   = 5 * time.Second
-	knowledgeImportNotifyRPCDeadline = 5 * time.Second
 )
+
+var (
+	knowledgeImportParseTimeout      = getenvDuration("KNOWLEDGE_IMPORT_PARSE_TIMEOUT", 5*time.Minute)
+	knowledgeImportRAGAddTimeout     = getenvDuration("KNOWLEDGE_IMPORT_RAG_ADD_TIMEOUT", 90*time.Second)
+	knowledgeImportWatchTimeout      = getenvDuration("KNOWLEDGE_IMPORT_WATCH_TIMEOUT", 5*time.Minute)
+	knowledgeImportPollInterval      = getenvDuration("KNOWLEDGE_IMPORT_POLL_INTERVAL", 2*time.Second)
+	knowledgeImportPollRPCDeadline   = getenvDuration("KNOWLEDGE_IMPORT_POLL_RPC_TIMEOUT", 5*time.Second)
+	knowledgeImportNotifyRPCDeadline = getenvDuration("KNOWLEDGE_IMPORT_NOTIFY_RPC_TIMEOUT", 5*time.Second)
+)
+
+func getenvDuration(key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	if seconds, err := strconv.Atoi(value); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	if d, err := time.ParseDuration(value); err == nil && d > 0 {
+		return d
+	}
+	return fallback
+}
 
 func CreateGroup(ctx *gin.Context) {
 	authCtx, ok := middleware.GetAuthContext(ctx)
@@ -1587,7 +1605,7 @@ func runKnowledgeDocumentFileImport(task knowledgeDocumentFileImportTask) {
 		KnowledgeBaseId: task.KnowledgeBaseID,
 		Title:           title,
 		SourceType:      parsed.SourceType,
-		Content:         parsed.Content,
+		Content:         marshalDocumentImportPayload(parsed),
 	})
 	cancelRAG()
 	if err != nil {
@@ -1620,6 +1638,48 @@ func runKnowledgeDocumentFileImport(task knowledgeDocumentFileImportTask) {
 		zap.Int64("total_ms", time.Since(task.StartedAt).Milliseconds()),
 	)
 	watchKnowledgeDocumentImport(task.UserID, task.KnowledgeBaseID, task.KnowledgeBaseName, resp.Document.DocumentId, resp.Document.Title, task.StartedAt)
+}
+
+func marshalDocumentImportPayload(parsed *knowledgeimport.ParsedDocument) string {
+	if parsed == nil {
+		return ""
+	}
+	type payloadChunk struct {
+		Index        int    `json:"index"`
+		ChunkType    string `json:"chunkType,omitempty"`
+		SectionTitle string `json:"sectionTitle,omitempty"`
+		Content      string `json:"content"`
+	}
+	type payload struct {
+		Version int            `json:"version"`
+		Content string         `json:"content"`
+		Chunks  []payloadChunk `json:"chunks,omitempty"`
+	}
+
+	body := payload{
+		Version: 1,
+		Content: parsed.Content,
+	}
+	if len(parsed.Chunks) > 0 {
+		body.Chunks = make([]payloadChunk, 0, len(parsed.Chunks))
+		for _, item := range parsed.Chunks {
+			content := strings.TrimSpace(item.Content)
+			if content == "" {
+				continue
+			}
+			body.Chunks = append(body.Chunks, payloadChunk{
+				Index:        item.Index,
+				ChunkType:    strings.TrimSpace(item.ChunkType),
+				SectionTitle: strings.TrimSpace(item.SectionTitle),
+				Content:      content,
+			})
+		}
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return parsed.Content
+	}
+	return string(data)
 }
 
 func ListKnowledgeDocuments(ctx *gin.Context) {

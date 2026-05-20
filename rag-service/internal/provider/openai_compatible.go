@@ -1,4 +1,4 @@
-package ragdal
+package embedding
 
 import (
 	"bytes"
@@ -10,7 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	ragmodel "example.com/aim/rag-service/rag-internal/model"
+	ragmodel "example.com/aim/rag-service/internal/dal/model"
+	"example.com/aim/rag-service/internal/errx"
 )
 
 type HTTPStatusError struct {
@@ -35,15 +36,15 @@ type OpenAICompatibleClient struct {
 }
 
 func NewOpenAICompatibleClient(cfg ragmodel.Config) (*OpenAICompatibleClient, error) {
-	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
+	baseURL := normalizeOpenAICompatibleBaseURL(strings.TrimSpace(cfg.BaseURL))
 	if baseURL == "" {
-		return nil, errors.New("EMBEDDING_BASE_URL is required")
+		return nil, errx.Required("EMBEDDING_BASE_URL")
 	}
 	if strings.TrimSpace(cfg.APIKey) == "" {
-		return nil, errors.New("EMBEDDING_API_KEY is required")
+		return nil, errx.Required("EMBEDDING_API_KEY")
 	}
 	if strings.TrimSpace(cfg.Model) == "" {
-		return nil, errors.New("EMBEDDING_MODEL is required")
+		return nil, errx.Required("EMBEDDING_MODEL")
 	}
 	timeout := cfg.Timeout
 	if timeout <= 0 {
@@ -77,17 +78,17 @@ type openAIEmbeddingResponse struct {
 
 func (c *OpenAICompatibleClient) Embed(ctx context.Context, req ragmodel.EmbedRequest) (*ragmodel.EmbedResponse, error) {
 	if c == nil {
-		return nil, errors.New("embedding client is nil")
+		return nil, errx.NilDependency("embedding client")
 	}
 	modelName := strings.TrimSpace(req.Model)
 	if modelName == "" {
 		modelName = c.model
 	}
 	if modelName == "" {
-		return nil, errors.New("embedding model is required")
+		return nil, errx.Required("embedding model")
 	}
 	if len(req.Input) == 0 {
-		return nil, errors.New("embedding input is required")
+		return nil, errx.Required("embedding input")
 	}
 
 	inputs := make([]string, 0, len(req.Input))
@@ -97,7 +98,7 @@ func (c *OpenAICompatibleClient) Embed(ctx context.Context, req ragmodel.EmbedRe
 		}
 		text := strings.TrimSpace(part.Text)
 		if text == "" {
-			return nil, errors.New("embedding input text is empty")
+			return nil, errx.EmptyInput("embedding input text")
 		}
 		inputs = append(inputs, text)
 	}
@@ -156,6 +157,21 @@ func (c *OpenAICompatibleClient) Embed(ctx context.Context, req ragmodel.EmbedRe
 		result.Embeddings = append(result.Embeddings, item.Embedding)
 	}
 	return result, nil
+}
+
+func normalizeOpenAICompatibleBaseURL(baseURL string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if baseURL == "" {
+		return ""
+	}
+	lower := strings.ToLower(baseURL)
+	if strings.Contains(lower, "/compatible-mode/v1") || strings.HasSuffix(lower, "/v1") {
+		return baseURL
+	}
+	if strings.Contains(lower, "dashscope.aliyuncs.com") {
+		return baseURL + "/compatible-mode/v1"
+	}
+	return baseURL
 }
 
 func safeBodyExcerpt(body []byte) string {

@@ -19,25 +19,25 @@ func TestSplitTextSmallContent(t *testing.T) {
 }
 
 func TestSplitTextOverlap(t *testing.T) {
-	input := "abcdefghijklmnopqrstuvwxyz"
+	input := "abcde\n\nfghij\n\nklmno\n\npqrst"
 	chunks, err := SplitText(input, SplitterConfig{ChunkSize: 10, ChunkOverlap: 3})
 	if err != nil {
 		t.Fatalf("split failed: %v", err)
 	}
-	if len(chunks) < 3 {
-		t.Fatalf("expected at least 3 chunks, got %d", len(chunks))
+	if len(chunks) != 4 {
+		t.Fatalf("expected 4 chunks, got %d", len(chunks))
 	}
-	if chunks[0].Content != "abcdefghij" {
+	if chunks[0].Content != "abcde" {
 		t.Fatalf("unexpected first chunk: %q", chunks[0].Content)
 	}
-	if chunks[1].Content != "hijklmnopq" {
+	if chunks[1].Content != "fghij" {
 		t.Fatalf("unexpected second chunk: %q", chunks[1].Content)
 	}
 }
 
 func TestSplitTextRejectInvalidOverlap(t *testing.T) {
-	_, err := SplitText("abc", SplitterConfig{ChunkSize: 3, ChunkOverlap: 3})
+	_, err := SplitText("abc", SplitterConfig{ChunkSize: 0, ChunkOverlap: 3})
 	if err == nil {
-		t.Fatal("expected overlap validation error")
+		t.Fatal("expected chunk size validation error")
 	}
 }

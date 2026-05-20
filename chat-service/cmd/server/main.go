@@ -218,7 +218,7 @@ func ragTopKFromEnv() int {
 }
 
 func ragSearchTimeoutFromEnv() time.Duration {
-	seconds := intFromEnv("RAG_SEARCH_TIMEOUT_SECONDS", 40)
+	seconds := intFromEnv("RAG_SEARCH_TIMEOUT_SECONDS", 80)
 	if seconds <= 0 {
 		seconds = 40
 	}

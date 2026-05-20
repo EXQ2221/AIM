@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"os"
 
+	ragbiz "example.com/aim/rag-service/internal/biz"
 	pgstore "example.com/aim/rag-service/internal/dal/postgres"
 	"example.com/aim/rag-service/internal/handler"
 	"example.com/aim/rag-service/internal/observability"
 	"example.com/aim/rag-service/internal/repository"
 	"example.com/aim/rag-service/kitex_gen/rag/ragservice"
-	ragbiz "example.com/aim/rag-service/rag-internal/biz"
 	"github.com/cloudwego/kitex/server"
 	"go.uber.org/zap"
 )
@@ -34,8 +34,9 @@ func main() {
 	ragRepo := repository.NewRAGRepository(db)
 	conversationRepo := repository.NewConversationRepository(db)
 	memberRepo := repository.NewMemberRepository(db)
+	notificationRepo := repository.NewNotificationRepository(db)
 
-	ragService := ragbiz.NewServiceFromEnv(ragRepo, conversationRepo, memberRepo)
+	ragService := ragbiz.NewServiceFromEnv(ragRepo, conversationRepo, memberRepo, notificationRepo)
 	if ragService == nil {
 		logger.Fatal("rag service disabled: embedding config is invalid")
 	}

@@ -1,9 +1,9 @@
-package ragrepo
+﻿package repository
 
 import (
 	"strings"
 
-	ragmodel "example.com/aim/rag-service/rag-internal/model"
+	ragmodel "example.com/aim/rag-service/internal/dal/model"
 )
 
 type ProviderRepository interface {

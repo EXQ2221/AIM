@@ -7,6 +7,13 @@ class HealthResponse(BaseModel):
     ok: bool
 
 
+class ParseChunk(BaseModel):
+    index: int
+    chunkType: str
+    sectionTitle: str
+    content: str
+
+
 class ParseResponse(BaseModel):
     title: str
     sourceType: str
@@ -14,3 +21,4 @@ class ParseResponse(BaseModel):
     fileType: str
     imageCount: int
     usedVisionDescription: bool
+    chunks: list[ParseChunk]

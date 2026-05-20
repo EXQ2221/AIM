@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"example.com/aim/rag-service/internal/observability"
+	embedding "example.com/aim/rag-service/internal/provider"
 	"example.com/aim/rag-service/internal/repository"
-	embedding "example.com/aim/rag-service/rag-internal/client"
 	"go.uber.org/zap"
 )
 
@@ -15,6 +15,7 @@ func NewServiceFromEnv(
 	ragRepo repository.RAGRepository,
 	conversationRepo repository.ConversationRepository,
 	memberRepo repository.MemberRepository,
+	notificationRepo repository.NotificationRepository,
 ) *RAGService {
 	logger := observability.L()
 
@@ -34,9 +35,10 @@ func NewServiceFromEnv(
 		return nil
 	}
 	processor := NewDocumentProcessor(embedClient, ragRepo, splitterCfg)
-	service := NewRAGService(ragRepo, conversationRepo, memberRepo, embedClient, processor)
+	service := NewRAGService(ragRepo, conversationRepo, memberRepo, notificationRepo, embedClient, processor)
 	service.DefaultTopK = ragTopKFromEnv()
 	service.SearchTimeout = ragSearchTimeoutFromEnv()
+	service.ProcessTimeout = ragProcessTimeoutFromEnv()
 	logger.Info(
 		"rag service enabled",
 		zap.String("provider", string(cfg.Provider)),
@@ -47,6 +49,7 @@ func NewServiceFromEnv(
 		zap.Int("chunk_size", splitterCfg.ChunkSize),
 		zap.Int("chunk_overlap", splitterCfg.ChunkOverlap),
 		zap.Int("top_k", service.DefaultTopK),
+		zap.Int64("document_process_timeout_ms", service.ProcessTimeout.Milliseconds()),
 	)
 	return service
 }
@@ -63,9 +66,17 @@ func ragTopKFromEnv() int {
 }
 
 func ragSearchTimeoutFromEnv() time.Duration {
-	seconds := intFromEnv("RAG_SEARCH_TIMEOUT_SECONDS", 40)
+	seconds := intFromEnv("RAG_SEARCH_TIMEOUT_SECONDS", 80)
 	if seconds <= 0 {
 		seconds = 40
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func ragProcessTimeoutFromEnv() time.Duration {
+	seconds := intFromEnv("RAG_DOCUMENT_PROCESS_TIMEOUT_SECONDS", 900)
+	if seconds <= 0 {
+		seconds = int(defaultDocumentProcessTimeout.Seconds())
 	}
 	return time.Duration(seconds) * time.Second
 }

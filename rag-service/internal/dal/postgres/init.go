@@ -35,6 +35,7 @@ func Init(dsn string) (*gorm.DB, error) {
 	if err := db.AutoMigrate(
 		&model.Conversation{},
 		&model.ConversationMember{},
+		&model.Notification{},
 		&model.KnowledgeBase{},
 		&model.KnowledgeDocument{},
 		&model.ConversationKnowledgeBase{},
@@ -68,6 +69,9 @@ func embeddingDimensionFromEnv() (int, error) {
 }
 
 func ensureKnowledgeChunksSchema(db *gorm.DB, embeddingDim int) error {
+	if err := db.Exec(`CREATE EXTENSION IF NOT EXISTS pg_trgm;`).Error; err != nil {
+		return fmt.Errorf("enable pg_trgm extension failed: %w", err)
+	}
 	createTableSQL := fmt.Sprintf(`
 CREATE TABLE IF NOT EXISTS knowledge_chunks (
     id BIGSERIAL PRIMARY KEY,
@@ -75,6 +79,7 @@ CREATE TABLE IF NOT EXISTS knowledge_chunks (
     document_id BIGINT NOT NULL,
     chunk_index INT NOT NULL,
     content TEXT NOT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     token_count INT NOT NULL DEFAULT 0,
     embedding vector(%d) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -82,6 +87,9 @@ CREATE TABLE IF NOT EXISTS knowledge_chunks (
 );`, embeddingDim)
 	if err := db.Exec(createTableSQL).Error; err != nil {
 		return fmt.Errorf("create knowledge_chunks table failed: %w", err)
+	}
+	if err := ensureKnowledgeChunksMetadataColumn(db); err != nil {
+		return err
 	}
 	if err := db.Exec(`
 CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_kb_id
@@ -98,7 +106,39 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_chunks_document_index
 ON knowledge_chunks (document_id, chunk_index);`).Error; err != nil {
 		return fmt.Errorf("create idx_knowledge_chunks_document_index failed: %w", err)
 	}
+	if err := db.Exec(`
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_content_fts_simple
+ON knowledge_chunks USING GIN (to_tsvector('simple', content));`).Error; err != nil {
+		return fmt.Errorf("create idx_knowledge_chunks_content_fts_simple failed: %w", err)
+	}
+	if err := db.Exec(`
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_content_trgm
+ON knowledge_chunks USING GIN (content gin_trgm_ops);`).Error; err != nil {
+		return fmt.Errorf("create idx_knowledge_chunks_content_trgm failed: %w", err)
+	}
+	if err := db.Exec(`
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_metadata_section_title
+ON knowledge_chunks USING GIN ((metadata->>'sectionTitle') gin_trgm_ops);`).Error; err != nil {
+		return fmt.Errorf("create idx_knowledge_chunks_metadata_section_title failed: %w", err)
+	}
+	if err := db.Exec(`
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_metadata_question_no
+ON knowledge_chunks ((metadata->>'questionNo'));`).Error; err != nil {
+		return fmt.Errorf("create idx_knowledge_chunks_metadata_question_no failed: %w", err)
+	}
 	return assertKnowledgeChunksEmbeddingDimension(db, embeddingDim)
+}
+
+func ensureKnowledgeChunksMetadataColumn(db *gorm.DB) error {
+	if db.Migrator().HasColumn("knowledge_chunks", "metadata") {
+		return nil
+	}
+	if err := db.Exec(`
+ALTER TABLE knowledge_chunks
+ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;`).Error; err != nil {
+		return fmt.Errorf("add knowledge_chunks.metadata failed: %w", err)
+	}
+	return nil
 }
 
 func assertKnowledgeChunksEmbeddingDimension(db *gorm.DB, expected int) error {

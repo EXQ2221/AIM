@@ -19,6 +19,11 @@ type MemberRepository interface {
 	GetUserMember(ctx context.Context, conversationID, userID uint64) (*model.ConversationMember, error)
 }
 
+type NotificationRepository interface {
+	WithTx(tx *gorm.DB) NotificationRepository
+	Create(ctx context.Context, notification *model.Notification) error
+}
+
 type GormConversationRepository struct {
 	db *gorm.DB
 }
@@ -67,4 +72,20 @@ func (r *GormMemberRepository) GetUserMember(ctx context.Context, conversationID
 		return nil, err
 	}
 	return &member, nil
+}
+
+type GormNotificationRepository struct {
+	db *gorm.DB
+}
+
+func NewNotificationRepository(db *gorm.DB) *GormNotificationRepository {
+	return &GormNotificationRepository{db: db}
+}
+
+func (r *GormNotificationRepository) WithTx(tx *gorm.DB) NotificationRepository {
+	return &GormNotificationRepository{db: tx}
+}
+
+func (r *GormNotificationRepository) Create(ctx context.Context, notification *model.Notification) error {
+	return r.db.WithContext(ctx).Create(notification).Error
 }

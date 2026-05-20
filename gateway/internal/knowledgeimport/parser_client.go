@@ -21,6 +21,12 @@ type parserServiceResponse struct {
 	FileType              string `json:"fileType"`
 	ImageCount            int    `json:"imageCount"`
 	UsedVisionDescription bool   `json:"usedVisionDescription"`
+	Chunks                []struct {
+		Index        int    `json:"index"`
+		ChunkType    string `json:"chunkType"`
+		SectionTitle string `json:"sectionTitle"`
+		Content      string `json:"content"`
+	} `json:"chunks"`
 }
 
 func ParseViaService(ctx context.Context, filename string, contentType string, data []byte, title string) (*ParsedDocument, error) {
@@ -104,5 +110,35 @@ func ParseViaService(ctx context.Context, filename string, contentType string, d
 		FileType:   strings.TrimSpace(parsed.FileType),
 		ImageCount: parsed.ImageCount,
 		UsedVision: parsed.UsedVisionDescription,
+		Chunks:     normalizeParsedChunks(parsed.Chunks),
 	}, nil
+}
+
+func normalizeParsedChunks(raw []struct {
+	Index        int    `json:"index"`
+	ChunkType    string `json:"chunkType"`
+	SectionTitle string `json:"sectionTitle"`
+	Content      string `json:"content"`
+}) []ParsedChunk {
+	if len(raw) == 0 {
+		return nil
+	}
+	result := make([]ParsedChunk, 0, len(raw))
+	for idx, item := range raw {
+		content := strings.TrimSpace(item.Content)
+		if content == "" {
+			continue
+		}
+		sectionTitle := strings.TrimSpace(item.SectionTitle)
+		if sectionTitle == "" {
+			sectionTitle = fmt.Sprintf("Chunk %d", idx+1)
+		}
+		result = append(result, ParsedChunk{
+			Index:        item.Index,
+			ChunkType:    strings.ToUpper(strings.TrimSpace(item.ChunkType)),
+			SectionTitle: sectionTitle,
+			Content:      content,
+		})
+	}
+	return result
 }

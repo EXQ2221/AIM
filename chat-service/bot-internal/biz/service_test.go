@@ -914,7 +914,7 @@ func TestServiceHandleMentionKnowledgeBaseOnlyUsesRAG(t *testing.T) {
 	if strings.Contains(prompt, "\u3010\u7fa4\u804a\u4e0a\u4e0b\u6587\u3011") {
 		t.Fatalf("knowledge-base-only prompt should not include conversation context: %q", prompt)
 	}
-	if !strings.Contains(prompt, "\u3010\u77e5\u8bc6\u5e93\u8d44\u6599\u3011") || !strings.Contains(prompt, "kb-1") {
+	if !strings.Contains(prompt, "\u3010\u672c\u5730\u77e5\u8bc6\u5e93\u3011") || !strings.Contains(prompt, "kb-1") {
 		t.Fatalf("knowledge-base-only prompt should include rag chunks: %q", prompt)
 	}
 }

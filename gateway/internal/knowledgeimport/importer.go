@@ -27,6 +27,14 @@ type ParsedDocument struct {
 	FileType   string
 	ImageCount int
 	UsedVision bool
+	Chunks     []ParsedChunk
+}
+
+type ParsedChunk struct {
+	Index        int
+	ChunkType    string
+	SectionTitle string
+	Content      string
 }
 
 func Parse(filename string, contentType string, data []byte) (*ParsedDocument, error) {

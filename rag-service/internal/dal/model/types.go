@@ -1,4 +1,4 @@
-package ragmodel
+package model
 
 import (
 	"context"
@@ -65,7 +65,25 @@ type SplitterConfig struct {
 	ChunkOverlap int
 }
 
+type DocumentType string
+
+const (
+	DocumentTypePlainText    DocumentType = "PLAIN_TEXT"
+	DocumentTypeMarkdown     DocumentType = "MARKDOWN"
+	DocumentTypeScript       DocumentType = "SCRIPT"
+	DocumentTypeQuestionBank DocumentType = "QUESTION_BANK"
+)
+
+type ChunkMetadata struct {
+	DocumentType DocumentType `json:"documentType"`
+	SectionTitle string       `json:"sectionTitle,omitempty"`
+	HeadingPath  []string     `json:"headingPath,omitempty"`
+	QuestionNo   int          `json:"questionNo,omitempty"`
+	QuestionText string       `json:"questionText,omitempty"`
+}
+
 type Chunk struct {
-	Index   int
-	Content string
+	Index    int
+	Content  string
+	Metadata ChunkMetadata
 }
