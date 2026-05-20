@@ -15,6 +15,7 @@ import (
 
 	llmconf "example.com/aim/chat-service/llm-internal/conf"
 	llmmodel "example.com/aim/chat-service/llm-internal/model"
+	"example.com/aim/shared/errno"
 )
 
 type HTTPStatusError struct {
@@ -46,13 +47,13 @@ func NewOpenAICompatibleClient(cfg llmmodel.Config) (*OpenAICompatibleClient, er
 	apiKey := strings.TrimSpace(cfg.APIKey)
 	model := strings.TrimSpace(cfg.Model)
 	if baseURL == "" {
-		return nil, errors.New("LLM_BASE_URL is required")
+		return nil, errno.Required("LLM_BASE_URL")
 	}
 	if apiKey == "" {
-		return nil, errors.New("LLM_API_KEY is required")
+		return nil, errno.Required("LLM_API_KEY")
 	}
 	if model == "" {
-		return nil, errors.New("LLM_MODEL is required")
+		return nil, errno.Required("LLM_MODEL")
 	}
 	timeout := cfg.Timeout
 	if timeout <= 0 {
@@ -85,17 +86,17 @@ func NewOpenAICompatibleClientFromEnv() (*OpenAICompatibleClient, error) {
 
 func (c *OpenAICompatibleClient) Generate(ctx context.Context, req llmmodel.GenerateRequest) (*llmmodel.GenerateResponse, error) {
 	if c == nil {
-		return nil, errors.New("llm client is nil")
+		return nil, errno.Internal("llm client is nil")
 	}
 	model := strings.TrimSpace(req.Model)
 	if model == "" {
 		model = c.model
 	}
 	if model == "" {
-		return nil, errors.New("model is required")
+		return nil, errno.Required("model")
 	}
 	if len(req.Messages) == 0 {
-		return nil, errors.New("messages are required")
+		return nil, errno.Required("messages")
 	}
 
 	payload := chatCompletionRequest{
@@ -107,7 +108,7 @@ func (c *OpenAICompatibleClient) Generate(ctx context.Context, req llmmodel.Gene
 	for _, message := range req.Messages {
 		role := strings.TrimSpace(message.Role)
 		if role == "" {
-			return nil, errors.New("message role is required")
+			return nil, errno.Required("message role")
 		}
 		trimmedContent := strings.TrimSpace(message.Content)
 		if len(message.Parts) == 0 {
@@ -197,7 +198,7 @@ func (c *OpenAICompatibleClient) Generate(ctx context.Context, req llmmodel.Gene
 		return nil, fmt.Errorf("parse llm response failed: %w", err)
 	}
 	if len(parsed.Choices) == 0 {
-		return nil, errors.New("llm response choices is empty")
+		return nil, errno.Internal("llm response choices is empty")
 	}
 	content := parsed.Choices[0].Message.Content
 	return &llmmodel.GenerateResponse{
@@ -210,17 +211,17 @@ func (c *OpenAICompatibleClient) Generate(ctx context.Context, req llmmodel.Gene
 
 func (c *OpenAICompatibleClient) GenerateStream(ctx context.Context, req llmmodel.GenerateRequest, onChunk func(llmmodel.StreamChunk) error) (*llmmodel.GenerateResponse, error) {
 	if c == nil {
-		return nil, errors.New("llm client is nil")
+		return nil, errno.Internal("llm client is nil")
 	}
 	model := strings.TrimSpace(req.Model)
 	if model == "" {
 		model = c.model
 	}
 	if model == "" {
-		return nil, errors.New("model is required")
+		return nil, errno.Required("model")
 	}
 	if len(req.Messages) == 0 {
-		return nil, errors.New("messages are required")
+		return nil, errno.Required("messages")
 	}
 
 	payload := chatCompletionRequest{
@@ -235,7 +236,7 @@ func (c *OpenAICompatibleClient) GenerateStream(ctx context.Context, req llmmode
 	for _, message := range req.Messages {
 		role := strings.TrimSpace(message.Role)
 		if role == "" {
-			return nil, errors.New("message role is required")
+			return nil, errno.Required("message role")
 		}
 		trimmedContent := strings.TrimSpace(message.Content)
 		if len(message.Parts) == 0 {

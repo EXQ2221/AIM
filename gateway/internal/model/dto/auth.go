@@ -1,4 +1,4 @@
-package model
+package dto
 
 type RegisterRequest struct {
 	AimID    string `json:"aim_id"`

@@ -1,9 +1,8 @@
 package rpc
 
 import (
-	"errors"
-
 	"example.com/aim/gateway/kitex_gen/user/userservice"
+	"example.com/aim/shared/errno"
 	"github.com/cloudwego/kitex/client"
 )
 
@@ -20,7 +19,7 @@ func InitUserClient(endpoint string) error {
 
 func UserClient() (userservice.Client, error) {
 	if userRPCClient == nil {
-		return nil, errors.New("user rpc client not initialized")
+		return nil, errno.Internal("user rpc client not initialized")
 	}
 	return userRPCClient, nil
 }

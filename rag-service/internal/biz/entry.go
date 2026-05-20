@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"example.com/aim/shared/errno"
 	"example.com/aim/rag-service/internal/dal/model"
 	"example.com/aim/rag-service/internal/observability"
 	embedding "example.com/aim/rag-service/internal/provider"
@@ -20,22 +21,22 @@ import (
 )
 
 var (
-	ErrBadRequest                = errors.New("bad_request: invalid request")
-	ErrConversationNotFound      = errors.New("not_found: conversation not found")
-	ErrNotMember                 = errors.New("forbidden: user is not a member of this conversation")
-	ErrAdminRequired             = errors.New("forbidden: owner/admin is required")
-	ErrKnowledgeBaseNotFound     = errors.New("not_found: knowledge base not found")
-	ErrKnowledgeDocumentNotFound = errors.New("not_found: knowledge document not found")
-	ErrKnowledgeBaseForbidden    = errors.New("forbidden: only knowledge base owner can access")
-	ErrKnowledgeBaseNameInvalid  = errors.New("bad_request: knowledge base name is required")
-	ErrKnowledgeDocTitleInvalid  = errors.New("bad_request: document title is required")
-	ErrKnowledgeDocTypeInvalid   = errors.New("bad_request: sourceType must be TEXT or MARKDOWN")
-	ErrKnowledgeDocContentEmpty  = errors.New("bad_request: content is required")
-	ErrKnowledgeDocContentLarge  = errors.New("bad_request: content exceeds 200000 characters")
-	ErrKnowledgeSearchQuery      = errors.New("bad_request: query is required")
-	ErrKnowledgeSearchTopK       = errors.New("bad_request: topK must be between 1 and 10")
-	ErrRAGUnavailable            = errors.New("internal: rag service is unavailable")
-	ErrConversationOnlyGroup     = errors.New("bad_request: conversation must be group")
+	ErrBadRequest                = errno.BadRequest("invalid request")
+	ErrConversationNotFound      = errno.NotFound("conversation not found")
+	ErrNotMember                 = errno.Forbidden("user is not a member of this conversation")
+	ErrAdminRequired             = errno.Forbidden("owner/admin is required")
+	ErrKnowledgeBaseNotFound     = errno.NotFound("knowledge base not found")
+	ErrKnowledgeDocumentNotFound = errno.NotFound("knowledge document not found")
+	ErrKnowledgeBaseForbidden    = errno.Forbidden("only knowledge base owner can access")
+	ErrKnowledgeBaseNameInvalid  = errno.Required("knowledge base name")
+	ErrKnowledgeDocTitleInvalid  = errno.Required("document title")
+	ErrKnowledgeDocTypeInvalid   = errno.BadRequest("sourceType must be TEXT or MARKDOWN")
+	ErrKnowledgeDocContentEmpty  = errno.Required("content")
+	ErrKnowledgeDocContentLarge  = errno.BadRequest("content exceeds 200000 characters")
+	ErrKnowledgeSearchQuery      = errno.Required("query")
+	ErrKnowledgeSearchTopK       = errno.BadRequest("topK must be between 1 and 10")
+	ErrRAGUnavailable            = errno.Internal("rag service is unavailable")
+	ErrConversationOnlyGroup     = errno.BadRequest("conversation must be group")
 )
 
 const maxKnowledgeDocumentContentRunes = 200000
@@ -234,7 +235,7 @@ func (s *RAGService) AddKnowledgeDocumentText(ctx context.Context, input AddKnow
 		}
 	}
 	if kb.Status != model.KnowledgeBaseStatusActive {
-		return nil, errors.New("forbidden: knowledge base is disabled")
+		return nil, errno.Forbidden("knowledge base is disabled")
 	}
 
 	title := strings.TrimSpace(input.Title)
@@ -483,7 +484,7 @@ func (s *RAGService) SearchKnowledgeBase(ctx context.Context, input SearchKnowle
 		}
 	}
 	if kb.Status != model.KnowledgeBaseStatusActive {
-		return nil, errors.New("forbidden: knowledge base is disabled")
+		return nil, errno.Forbidden("knowledge base is disabled")
 	}
 
 	topK := s.DefaultTopK
@@ -517,7 +518,7 @@ func (s *RAGService) SearchKnowledgeBase(ctx context.Context, input SearchKnowle
 		return nil, fmt.Errorf("knowledge search embedding failed: %w", err)
 	}
 	if len(embedResp.Embeddings) != 1 {
-		return nil, errors.New("knowledge search embedding result is invalid")
+		return nil, errno.Internal("knowledge search embedding result is invalid")
 	}
 
 	items, err := s.Repo.SearchKnowledgeChunkCandidatesByKB(searchCtx, input.KnowledgeBaseID, query, embedResp.Embeddings[0], topK)
@@ -764,7 +765,7 @@ func (s *RAGService) BindConversationKnowledgeBase(ctx context.Context, input Bi
 		return err
 	}
 	if kb.Status != model.KnowledgeBaseStatusActive {
-		return errors.New("forbidden: knowledge base is disabled")
+		return errno.Forbidden("knowledge base is disabled")
 	}
 	return s.Repo.UpsertConversationKnowledgeBase(ctx, conversation.ID, input.KnowledgeBaseID, input.OperatorID, true)
 }

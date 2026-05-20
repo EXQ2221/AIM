@@ -5,12 +5,12 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"example.com/aim/shared/errno"
 	ragmodel "example.com/aim/rag-service/internal/dal/model"
 	"example.com/aim/rag-service/internal/errx"
 )
@@ -118,7 +118,7 @@ func (c *DashScopeMultimodalClient) Embed(ctx context.Context, req ragmodel.Embe
 			}
 			contents = append(contents, map[string]string{"video": videoURL})
 		default:
-			return nil, errors.New("unsupported dashscope embedding input type")
+			return nil, errno.BadRequest("unsupported dashscope embedding input type")
 		}
 	}
 	if len(contents) == 0 {
@@ -213,7 +213,7 @@ func (c *DashScopeMultimodalClient) embedBatch(
 	}
 	for _, item := range parsed.Output.Embeddings {
 		if len(item.Embedding) == 0 {
-			return nil, errors.New("dashscope embedding result is empty")
+			return nil, errno.Internal("dashscope embedding result is empty")
 		}
 		if c.dimension > 0 && len(item.Embedding) != c.dimension {
 			return nil, fmt.Errorf("embedding dimension mismatch: expected=%d got=%d", c.dimension, len(item.Embedding))

@@ -1,13 +1,14 @@
 package bot
 
 import (
-	"errors"
 	"sync"
+
+	"example.com/aim/shared/errno"
 )
 
 var (
-	ErrGlobalConcurrencyLimitReached       = errors.New("global concurrency limit reached")
-	ErrConversationConcurrencyLimitReached = errors.New("conversation concurrency limit reached")
+	ErrGlobalConcurrencyLimitReached       = errno.Forbidden("global concurrency limit reached")
+	ErrConversationConcurrencyLimitReached = errno.Forbidden("conversation concurrency limit reached")
 )
 
 type Limiter struct {

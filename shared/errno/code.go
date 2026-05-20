@@ -4,7 +4,9 @@ const (
 	Success          = 0
 	ErrBadRequest    = 40000
 	ErrUnauthorized  = 40100
+	ErrNotFound      = 40400
 	ErrForbidden     = 40300
+	ErrConflict      = 40900
 	ErrInternalError = 50000
 
 	ErrUserNotFound     = 40101

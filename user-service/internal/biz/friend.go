@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"example.com/aim/shared/errno"
 	"example.com/aim/user-service/internal/dal/model"
 	"example.com/aim/user-service/internal/realtime"
 	"example.com/aim/user-service/internal/repository"
@@ -14,20 +15,20 @@ import (
 )
 
 var (
-	ErrFriendBadRequest       = errors.New("bad_request: invalid friend request")
-	ErrFriendGroupNameEmpty   = errors.New("bad_request: friend group name is required")
-	ErrFriendGroupNotFound    = errors.New("not_found: friend group not found")
-	ErrFriendTargetNotFound   = errors.New("not_found: target user not found")
-	ErrFriendTargetBlocked    = errors.New("forbidden: target user is not available")
-	ErrFriendSelfAdd          = errors.New("bad_request: cannot add yourself as a friend")
-	ErrFriendAlreadyExists    = errors.New("bad_request: friend relation already exists")
-	ErrFriendNotFound         = errors.New("not_found: friend relation not found")
-	ErrFriendRequestPending   = errors.New("bad_request: friend request is already pending")
-	ErrFriendRequestExists    = errors.New("bad_request: the other user has already sent you a request")
-	ErrFriendRequestNotFound  = errors.New("not_found: friend request not found")
-	ErrFriendRequestHandled   = errors.New("bad_request: friend request has already been handled")
-	ErrFriendRequestForbidden = errors.New("forbidden: cannot handle this friend request")
-	ErrFriendRequestAction    = errors.New("bad_request: invalid friend request action")
+	ErrFriendBadRequest       = errno.BadRequest("invalid friend request")
+	ErrFriendGroupNameEmpty   = errno.Required("friend group name")
+	ErrFriendGroupNotFound    = errno.NotFound("friend group not found")
+	ErrFriendTargetNotFound   = errno.NotFound("target user not found")
+	ErrFriendTargetBlocked    = errno.Forbidden("target user is not available")
+	ErrFriendSelfAdd          = errno.BadRequest("cannot add yourself as a friend")
+	ErrFriendAlreadyExists    = errno.BadRequest("friend relation already exists")
+	ErrFriendNotFound         = errno.NotFound("friend relation not found")
+	ErrFriendRequestPending   = errno.BadRequest("friend request is already pending")
+	ErrFriendRequestExists    = errno.BadRequest("the other user has already sent you a request")
+	ErrFriendRequestNotFound  = errno.NotFound("friend request not found")
+	ErrFriendRequestHandled   = errno.BadRequest("friend request has already been handled")
+	ErrFriendRequestForbidden = errno.Forbidden("cannot handle this friend request")
+	ErrFriendRequestAction    = errno.BadRequest("invalid friend request action")
 )
 
 type FriendGroupView struct {
@@ -70,7 +71,7 @@ func (s *UserService) CreateFriendGroup(ctx context.Context, userID uint64, name
 		return nil, ErrFriendGroupNameEmpty
 	}
 	if len([]rune(name)) > 64 {
-		return nil, errors.New("bad_request: friend group name is too long")
+		return nil, errno.BadRequest("friend group name is too long")
 	}
 
 	group := &model.FriendGroup{
@@ -115,7 +116,7 @@ func (s *UserService) AddFriend(ctx context.Context, userID uint64, targetAimID,
 		return nil, ErrFriendBadRequest
 	}
 	if len([]rune(remark)) > 128 {
-		return nil, errors.New("bad_request: friend remark is too long")
+		return nil, errno.BadRequest("friend remark is too long")
 	}
 	if err := s.validateGroupOwnership(ctx, userID, groupID); err != nil {
 		return nil, err
@@ -435,7 +436,7 @@ func (s *UserService) UpdateFriend(ctx context.Context, userID, friendUserID uin
 		return nil, ErrFriendBadRequest
 	}
 	if len([]rune(remark)) > 128 {
-		return nil, errors.New("bad_request: friend remark is too long")
+		return nil, errno.BadRequest("friend remark is too long")
 	}
 	if err := s.validateGroupOwnership(ctx, userID, groupID); err != nil {
 		return nil, err

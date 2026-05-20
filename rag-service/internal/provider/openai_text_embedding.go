@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"example.com/aim/shared/errno"
 	ragmodel "example.com/aim/rag-service/internal/dal/model"
 	"example.com/aim/rag-service/internal/errx"
 )
@@ -72,7 +72,7 @@ func (c *OpenAITextEmbeddingClient) Embed(ctx context.Context, req ragmodel.Embe
 	inputs := make([]string, 0, len(req.Input))
 	for _, part := range req.Input {
 		if part.Type != ragmodel.InputPartText {
-			return nil, errors.New("openai text embedding supports text input only")
+			return nil, errno.BadRequest("openai text embedding supports text input only")
 		}
 		text := strings.TrimSpace(part.Text)
 		if text == "" {
@@ -134,7 +134,7 @@ func (c *OpenAITextEmbeddingClient) Embed(ctx context.Context, req ragmodel.Embe
 	}
 	for _, item := range parsed.Data {
 		if len(item.Embedding) == 0 {
-			return nil, errors.New("embedding result is empty")
+			return nil, errno.Internal("embedding result is empty")
 		}
 		if c.dimension > 0 && len(item.Embedding) != c.dimension {
 			return nil, fmt.Errorf("embedding dimension mismatch: expected=%d got=%d", c.dimension, len(item.Embedding))

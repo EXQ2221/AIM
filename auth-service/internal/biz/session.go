@@ -1,6 +1,6 @@
 package biz
 
-import "errors"
+import "example.com/aim/shared/errno"
 
 const (
 	SessionStatusActive  = "active"
@@ -12,15 +12,15 @@ const (
 )
 
 var (
-	ErrInvalidCredentials  = errors.New("unauthorized: invalid email or password")
-	ErrInvalidAccessToken  = errors.New("unauthorized: invalid access token")
-	ErrInvalidRefreshToken = errors.New("unauthorized: invalid refresh token")
-	ErrUserNotAvailable    = errors.New("forbidden: user is not available")
-	ErrPasswordConfirm     = errors.New("unauthorized: password confirmation failed")
-	ErrSessionNotFound     = errors.New("not_found: session not found")
-	ErrSessionRevoked      = errors.New("unauthorized: session revoked")
-	ErrDeviceMismatch      = errors.New("unauthorized: refresh from a different device or browser")
-	ErrRefreshReuse        = errors.New("forbidden: refresh token reuse detected, all sessions revoked")
+	ErrInvalidCredentials  = errno.Unauthorized("invalid email or password")
+	ErrInvalidAccessToken  = errno.Unauthorized("invalid access token")
+	ErrInvalidRefreshToken = errno.Unauthorized("invalid refresh token")
+	ErrUserNotAvailable    = errno.Forbidden("user is not available")
+	ErrPasswordConfirm     = errno.Unauthorized("password confirmation failed")
+	ErrSessionNotFound     = errno.NotFound("session not found")
+	ErrSessionRevoked      = errno.Unauthorized("session revoked")
+	ErrDeviceMismatch      = errno.Unauthorized("refresh from a different device or browser")
+	ErrRefreshReuse        = errno.Forbidden("refresh token reuse detected, all sessions revoked")
 )
 
 type RegisterInput struct {

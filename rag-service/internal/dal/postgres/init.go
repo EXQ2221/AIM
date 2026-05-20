@@ -3,7 +3,6 @@ package postgres
 import (
 	"crypto/rand"
 	"encoding/base32"
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	"example.com/aim/rag-service/internal/dal/model"
+	"example.com/aim/shared/errno"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -63,7 +63,7 @@ func embeddingDimensionFromEnv() (int, error) {
 	}
 	dimension, err := strconv.Atoi(value)
 	if err != nil || dimension <= 0 {
-		return 0, errors.New("EMBEDDING_DIMENSION must be a positive integer")
+		return 0, errno.BadRequest("EMBEDDING_DIMENSION must be a positive integer")
 	}
 	return dimension, nil
 }
@@ -160,7 +160,7 @@ LIMIT 1;`).Scan(&rows).Error; err != nil {
 		return fmt.Errorf("query knowledge_chunks.embedding type failed: %w", err)
 	}
 	if len(rows) == 0 {
-		return errors.New("knowledge_chunks.embedding column not found")
+		return errno.Internal("knowledge_chunks.embedding column not found")
 	}
 	expectedType := fmt.Sprintf("vector(%d)", expected)
 	actualType := strings.TrimSpace(rows[0].EmbeddingType)
@@ -214,7 +214,7 @@ func assignConversationID(db *gorm.DB, id uint64) error {
 	if lastErr != nil {
 		return lastErr
 	}
-	return errors.New("failed to assign conversation_id")
+	return errno.Internal("failed to assign conversation_id")
 }
 
 func newConversationID() (string, error) {

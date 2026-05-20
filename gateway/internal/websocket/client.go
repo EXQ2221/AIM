@@ -3,11 +3,11 @@ package websocket
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"sync"
 	"time"
 
+	"example.com/aim/shared/errno"
 	chatpb "example.com/aim/gateway/kitex_gen/chat"
 	"example.com/aim/gateway/kitex_gen/chat/chatservice"
 	gwebsocket "github.com/gorilla/websocket"
@@ -169,23 +169,23 @@ func normalizeOutgoingContent(content string, payload json.RawMessage) (string, 
 	if len(payload) > 0 {
 		trimmed := strings.TrimSpace(string(payload))
 		if trimmed == "" || trimmed == "null" {
-			return "", errors.New("contentPayload cannot be null")
+			return "", errno.BadRequest("contentPayload cannot be null")
 		}
 		var obj map[string]any
 		if err := json.Unmarshal(payload, &obj); err != nil {
-			return "", errors.New("contentPayload must be a valid JSON object")
+			return "", errno.BadRequest("contentPayload must be a valid JSON object")
 		}
 		if obj == nil {
-			return "", errors.New("contentPayload must be a JSON object")
+			return "", errno.BadRequest("contentPayload must be a JSON object")
 		}
 		encoded, err := json.Marshal(obj)
 		if err != nil {
-			return "", errors.New("failed to serialize contentPayload")
+			return "", errno.Internal("failed to serialize contentPayload")
 		}
 		return string(encoded), nil
 	}
 	if strings.TrimSpace(content) == "" {
-		return "", errors.New("content or contentPayload is required")
+		return "", errno.Required("content or contentPayload")
 	}
 	return content, nil
 }

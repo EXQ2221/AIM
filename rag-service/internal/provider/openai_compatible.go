@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"example.com/aim/shared/errno"
 	ragmodel "example.com/aim/rag-service/internal/dal/model"
 	"example.com/aim/rag-service/internal/errx"
 )
@@ -94,7 +94,7 @@ func (c *OpenAICompatibleClient) Embed(ctx context.Context, req ragmodel.EmbedRe
 	inputs := make([]string, 0, len(req.Input))
 	for _, part := range req.Input {
 		if part.Type != ragmodel.InputPartText {
-			return nil, errors.New("openai_compatible embedding supports text input only")
+			return nil, errno.BadRequest("openai_compatible embedding supports text input only")
 		}
 		text := strings.TrimSpace(part.Text)
 		if text == "" {

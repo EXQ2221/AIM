@@ -3,13 +3,13 @@ package repository
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"example.com/aim/shared/errno"
 	"example.com/aim/rag-service/internal/dal/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -135,7 +135,7 @@ func (r *GormRAGRepository) GetKnowledgeDocumentByID(ctx context.Context, docume
 
 func (r *GormRAGRepository) DeleteKnowledgeDocument(ctx context.Context, documentID uint64) error {
 	if documentID == 0 {
-		return errors.New("document id is required")
+		return errno.Required("document id")
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec("DELETE FROM knowledge_chunks WHERE document_id = ?", documentID).Error; err != nil {
@@ -158,7 +158,7 @@ func (r *GormRAGRepository) UpdateKnowledgeDocumentStatus(ctx context.Context, d
 
 func (r *GormRAGRepository) ReplaceKnowledgeChunksForDocument(ctx context.Context, documentID uint64, records []KnowledgeChunkRecord) error {
 	if documentID == 0 {
-		return errors.New("document id is required")
+		return errno.Required("document id")
 	}
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec("DELETE FROM knowledge_chunks WHERE document_id = ?", documentID).Error; err != nil {
@@ -187,7 +187,7 @@ VALUES
 
 func (r *GormRAGRepository) SearchKnowledgeChunkCandidatesByKB(ctx context.Context, kbID uint64, query string, queryEmbedding []float32, topK int) ([]KnowledgeChunkCandidate, error) {
 	if kbID == 0 {
-		return nil, errors.New("knowledge base id is required")
+		return nil, errno.Required("knowledge base id")
 	}
 	if topK <= 0 {
 		topK = 5
@@ -438,7 +438,7 @@ func (r *GormRAGRepository) SearchKnowledgeChunksByKB(ctx context.Context, kbID 
 
 func (r *GormRAGRepository) IsKnowledgeBaseAccessibleByUser(ctx context.Context, kbID uint64, userID uint64) (bool, error) {
 	if kbID == 0 || userID == 0 {
-		return false, errors.New("knowledge base id and user id are required")
+		return false, errno.BadRequest("knowledge base id and user id are required")
 	}
 	var count int64
 	err := r.db.WithContext(ctx).
@@ -510,7 +510,7 @@ func (r *GormRAGRepository) UpdateConversationKnowledgeBaseEnabled(ctx context.C
 
 func float32SliceToVectorLiteral(vector []float32) (string, error) {
 	if len(vector) == 0 {
-		return "", errors.New("embedding vector is empty")
+		return "", errno.BadRequest("embedding vector is empty")
 	}
 	builder := strings.Builder{}
 	builder.Grow(len(vector) * 8)

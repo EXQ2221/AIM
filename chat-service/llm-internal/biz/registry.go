@@ -1,7 +1,6 @@
 package llmbiz
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,6 +9,7 @@ import (
 	llmhandler "example.com/aim/chat-service/llm-internal/handler"
 	llmmodel "example.com/aim/chat-service/llm-internal/model"
 	llmrepo "example.com/aim/chat-service/llm-internal/repository"
+	"example.com/aim/shared/errno"
 )
 
 type Registry struct {
@@ -20,7 +20,7 @@ type Registry struct {
 
 func NewRegistry(multiCfg llmmodel.MultiConfig) (*Registry, error) {
 	if len(multiCfg.Providers) == 0 {
-		return nil, errors.New("no llm providers configured")
+		return nil, errno.BadRequest("no llm providers configured")
 	}
 
 	providerRepo := llmrepo.NewMemoryProviderRepository(multiCfg.Providers)
@@ -30,7 +30,7 @@ func NewRegistry(multiCfg llmmodel.MultiConfig) (*Registry, error) {
 	for name, cfg := range providers {
 		normalized := strings.TrimSpace(name)
 		if normalized == "" {
-			return nil, errors.New("provider name cannot be empty")
+			return nil, errno.BadRequest("provider name cannot be empty")
 		}
 		client, err := llmdal.NewOpenAICompatibleClient(cfg)
 		if err != nil {
@@ -61,7 +61,7 @@ func (r *Registry) DefaultProvider() string {
 
 func (r *Registry) Client(provider string) (llmmodel.Client, llmmodel.Config, string, error) {
 	if r == nil {
-		return nil, llmmodel.Config{}, "", errors.New("llm registry is nil")
+		return nil, llmmodel.Config{}, "", errno.Internal("llm registry is nil")
 	}
 	name := llmhandler.NormalizeProviderName(provider, r.defaultProvider)
 	client, ok := r.clients[name]

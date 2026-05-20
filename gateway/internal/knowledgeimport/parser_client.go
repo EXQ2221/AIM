@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -12,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"example.com/aim/shared/errno"
 )
 
 type parserServiceResponse struct {
@@ -86,7 +87,10 @@ func ParseViaService(ctx context.Context, filename string, contentType string, d
 		if message == "" {
 			message = "parser service request failed"
 		}
-		return nil, errors.New(message)
+		if resp.StatusCode >= http.StatusInternalServerError {
+			return nil, errno.Internal(message)
+		}
+		return nil, errno.BadRequest(message)
 	}
 
 	var parsed parserServiceResponse
@@ -96,7 +100,7 @@ func ParseViaService(ctx context.Context, filename string, contentType string, d
 
 	content := strings.TrimSpace(parsed.Content)
 	if content == "" {
-		return nil, errors.New("document content is empty")
+		return nil, errno.BadRequest("document content is empty")
 	}
 	sourceType := strings.ToUpper(strings.TrimSpace(parsed.SourceType))
 	if sourceType != "TEXT" && sourceType != "MARKDOWN" {

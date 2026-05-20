@@ -2,8 +2,8 @@ package embedding
 
 import (
 	"context"
-	"errors"
 
+	"example.com/aim/shared/errno"
 	ragmodel "example.com/aim/rag-service/internal/dal/model"
 )
 
@@ -14,7 +14,7 @@ type hybridClient struct {
 
 func (c *hybridClient) Embed(ctx context.Context, req EmbedRequest) (*EmbedResponse, error) {
 	if c == nil || c.primary == nil {
-		return nil, errors.New("embedding client is nil")
+		return nil, errno.Internal("embedding client is nil")
 	}
 	if hasMultimodalInput(req) && c.fallback != nil {
 		return c.fallback.Embed(ctx, req)

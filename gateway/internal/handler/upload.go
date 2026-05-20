@@ -12,9 +12,10 @@ import (
 	"strings"
 
 	"example.com/aim/gateway/internal/middleware"
-	"example.com/aim/gateway/internal/model"
+	"example.com/aim/gateway/internal/model/dto"
 	"example.com/aim/gateway/internal/rpc"
 	"example.com/aim/gateway/internal/upload"
+	"example.com/aim/shared/errno"
 	userpb "example.com/aim/gateway/kitex_gen/user"
 	"github.com/gin-gonic/gin"
 )
@@ -125,18 +126,18 @@ func UploadAvatar(ctx *gin.Context) {
 		return
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
-		Data: model.UploadAvatarResponse{
+		Data: dto.UploadAvatarResponse{
 			Avatar: saved.publicPath,
-			File: model.UploadedFileInfo{
+			File: dto.UploadedFileInfo{
 				URL:         saved.publicPath,
 				Filename:    path.Base(saved.publicPath),
 				ContentType: saved.contentType,
 				Size:        saved.size,
 			},
-			User: model.UserInfo{
+			User: dto.UserInfo{
 				UserID:       userResp.User.UserId,
 				AimID:        userResp.User.AimId,
 				Email:        userResp.User.Email,
@@ -176,11 +177,11 @@ func UploadImage(ctx *gin.Context) {
 		return
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
-		Data: model.UploadMediaResponse{
-			File: model.UploadedFileInfo{
+		Data: dto.UploadMediaResponse{
+			File: dto.UploadedFileInfo{
 				URL:         saved.publicPath,
 				Filename:    path.Base(saved.publicPath),
 				ContentType: saved.contentType,
@@ -214,11 +215,11 @@ func UploadFile(ctx *gin.Context) {
 		return
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
-		Data: model.UploadMediaResponse{
-			File: model.UploadedFileInfo{
+		Data: dto.UploadMediaResponse{
+			File: dto.UploadedFileInfo{
 				URL:         saved.publicPath,
 				Filename:    path.Base(saved.publicPath),
 				ContentType: saved.contentType,
@@ -252,11 +253,11 @@ func UploadVoice(ctx *gin.Context) {
 		return
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
-		Data: model.UploadMediaResponse{
-			File: model.UploadedFileInfo{
+		Data: dto.UploadMediaResponse{
+			File: dto.UploadedFileInfo{
 				URL:         saved.publicPath,
 				Filename:    path.Base(saved.publicPath),
 				ContentType: saved.contentType,
@@ -278,7 +279,7 @@ type uploadRequestError struct {
 	message string
 }
 
-var errFileTooLarge = errors.New("file is too large")
+var errFileTooLarge = errno.BadRequest("file is too large")
 
 func formFile(ctx *gin.Context, names ...string) (*multipart.FileHeader, error) {
 	var firstErr error
@@ -321,13 +322,13 @@ func saveAvatarFile(src io.Reader, userID int64, maxBytes int64) (savedAvatar, e
 		return savedAvatar{}, err
 	}
 	if n == 0 {
-		return savedAvatar{}, errors.New("file is empty")
+		return savedAvatar{}, errno.BadRequest("file is empty")
 	}
 
 	contentType := http.DetectContentType(header[:n])
 	ext, ok := avatarExtByContentType[contentType]
 	if !ok {
-		return savedAvatar{}, errors.New("unsupported avatar file type")
+		return savedAvatar{}, errno.BadRequest("unsupported avatar file type")
 	}
 
 	userIDText := strconv.FormatInt(userID, 10)
@@ -383,7 +384,7 @@ func saveAvatarFile(src io.Reader, userID int64, maxBytes int64) (savedAvatar, e
 	if len(publicPath) > 512 {
 		closeDst()
 		removeSavedFile(diskPath)
-		return savedAvatar{}, errors.New("avatar path is too long")
+		return savedAvatar{}, errno.BadRequest("avatar path is too long")
 	}
 
 	return savedAvatar{
@@ -408,7 +409,7 @@ func saveMediaFile(
 		return savedAvatar{}, err
 	}
 	if n == 0 {
-		return savedAvatar{}, errors.New("file is empty")
+		return savedAvatar{}, errno.BadRequest("file is empty")
 	}
 
 	contentType := http.DetectContentType(header[:n])
@@ -420,7 +421,7 @@ func saveMediaFile(
 		nextExt, ok := extByContentType[contentType]
 		if !ok {
 			if _, extOK := allowedExts[ext]; !extOK {
-				return savedAvatar{}, errors.New("unsupported file type")
+				return savedAvatar{}, errno.BadRequest("unsupported file type")
 			}
 		} else {
 			ext = nextExt
@@ -478,7 +479,7 @@ func saveMediaFile(
 	if len(publicPath) > 512 {
 		closeDst()
 		removeSavedFile(diskPath)
-		return savedAvatar{}, errors.New("file path is too long")
+		return savedAvatar{}, errno.BadRequest("file path is too long")
 	}
 
 	return savedAvatar{

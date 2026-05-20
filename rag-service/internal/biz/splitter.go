@@ -1,9 +1,9 @@
 package rag
 
 import (
-	"errors"
 	"strings"
 
+	"example.com/aim/shared/errno"
 	ragconf "example.com/aim/rag-service/internal/conf"
 	ragmodel "example.com/aim/rag-service/internal/dal/model"
 )
@@ -27,10 +27,10 @@ func LoadSplitterConfigFromEnv() (SplitterConfig, error) {
 func SplitText(content string, cfg SplitterConfig) ([]Chunk, error) {
 	text := strings.TrimSpace(content)
 	if text == "" {
-		return nil, errors.New("document content is empty")
+		return nil, errno.BadRequest("document content is empty")
 	}
 	if cfg.ChunkSize <= 0 {
-		return nil, errors.New("chunk size must be positive")
+		return nil, errno.BadRequest("chunk size must be positive")
 	}
 
 	paragraphs := splitParagraphs(text)
@@ -74,7 +74,7 @@ func SplitText(content string, cfg SplitterConfig) ([]Chunk, error) {
 	}
 
 	if len(result) == 0 {
-		return nil, errors.New("document content is empty")
+		return nil, errno.BadRequest("document content is empty")
 	}
 	return result, nil
 }

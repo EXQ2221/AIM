@@ -23,6 +23,7 @@ import (
 	"example.com/aim/chat-service/internal/repository"
 	"example.com/aim/chat-service/internal/rpc"
 	llm "example.com/aim/chat-service/llm-internal/client"
+	"example.com/aim/shared/errno"
 	"gorm.io/gorm"
 )
 
@@ -165,31 +166,31 @@ func (s *Service) SetRAGTopK(topK int) {
 
 func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) error {
 	if s == nil {
-		return errors.New("bot service is nil")
+		return errno.Internal("bot service is nil")
 	}
 	if s.LLM == nil {
-		return errors.New("llm client is required")
+		return errno.Required("llm client")
 	}
 	if s.MessageRepo == nil {
-		return errors.New("message repository is required")
+		return errno.Required("message repository")
 	}
 	if s.ConversationRepo == nil {
-		return errors.New("conversation repository is required")
+		return errno.Required("conversation repository")
 	}
 	if s.MemberRepo == nil {
-		return errors.New("member repository is required")
+		return errno.Required("member repository")
 	}
 	if s.BotRepo == nil {
-		return errors.New("bot repository is required")
+		return errno.Required("bot repository")
 	}
 	if s.ConversationBotRepo == nil {
-		return errors.New("conversation bot repository is required")
+		return errno.Required("conversation bot repository")
 	}
 	if s.AICallLogRepo == nil {
-		return errors.New("ai call log repository is required")
+		return errno.Required("ai call log repository")
 	}
 	if req.ConversationID == 0 {
-		return errors.New("conversation id is required")
+		return errno.Required("conversation id")
 	}
 
 	resolved, err := s.resolveTargetBot(ctx, req.ConversationID, req.Content)
@@ -209,7 +210,7 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	modelName := EffectiveModelName(resolved.Bot, resolved.ConversationBot, s.DefaultModel)
 	if modelName == "" {
 		start := time.Now()
-		err := errors.New("model is required")
+		err := errno.Required("model")
 		latencyMS := time.Since(start).Milliseconds()
 		if logErr := s.createFailedLog(ctx, req, resolved.Bot, modelName, err, latencyMS); logErr != nil {
 			return fmt.Errorf("record failed ai call log: %w; bot error: %v", logErr, err)
@@ -387,7 +388,7 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 		return err
 	}
 	if resp == nil {
-		err := errors.New("llm response is nil")
+		err := errno.Internal("llm response is nil")
 		if logErr := s.createFailedLog(ctx, req, resolved.Bot, modelName, err, latencyMS); logErr != nil {
 			return fmt.Errorf("record failed ai call log: %w; bot error: %v", logErr, err)
 		}
@@ -740,7 +741,7 @@ func (s *Service) checkDailyTokenLimit(ctx context.Context, req HandleMentionReq
 		return err
 	}
 	if total >= s.DailyTokenLimit {
-		return errors.New("forbidden: daily ai token limit reached")
+		return errno.Forbidden("daily ai token limit reached")
 	}
 	return nil
 }
@@ -844,22 +845,22 @@ func filterBotVisibleMessages(messages []model.Message) []model.Message {
 func normalizeImageURLForLLM(ctx context.Context, raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" {
-		return "", errors.New("image URL is empty")
+		return "", errno.Required("image URL")
 	}
 	lower := strings.ToLower(value)
 	if strings.HasPrefix(lower, "data:") {
 		if strings.Contains(lower, ";base64,") {
 			return value, nil
 		}
-		return "", errors.New("invalid base64 image format, expected data:*;base64, prefix")
+		return "", errno.BadRequest("invalid base64 image format, expected data:*;base64, prefix")
 	}
 	if strings.HasPrefix(lower, "file://") {
-		return "", errors.New("file:// is not supported in OpenAI-compatible mode")
+		return "", errno.BadRequest("file:// is not supported in OpenAI-compatible mode")
 	}
 
 	parsed, err := url.Parse(value)
 	if err != nil {
-		return "", errors.New("invalid image URL format, expected http(s) URL or data:base64")
+		return "", errno.BadRequest("invalid image URL format, expected http(s) URL or data:base64")
 	}
 	if parsed.Scheme == "" && strings.HasPrefix(value, "/") {
 		baseURL := strings.TrimSpace(os.Getenv("BOT_MEDIA_BASE_URL"))
@@ -870,11 +871,11 @@ func normalizeImageURLForLLM(ctx context.Context, raw string) (string, error) {
 		return fetchAndEncodeImageToDataURL(ctx, target)
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return "", errors.New("unsupported image URL scheme, expected http(s) URL or data:base64")
+		return "", errno.BadRequest("unsupported image URL scheme, expected http(s) URL or data:base64")
 	}
 	host := strings.TrimSpace(parsed.Hostname())
 	if host == "" {
-		return "", errors.New("image URL missing hostname")
+		return "", errno.BadRequest("image URL missing hostname")
 	}
 	if isPrivateHost(host) {
 		return fetchAndEncodeImageToDataURL(ctx, value)
@@ -913,10 +914,10 @@ func fetchAndEncodeImageToDataURL(ctx context.Context, sourceURL string) (string
 		return "", fmt.Errorf("failed to read image body: %w", err)
 	}
 	if len(body) == 0 {
-		return "", errors.New("image body is empty")
+		return "", errno.BadRequest("image body is empty")
 	}
 	if len(body) > maxImageBytes {
-		return "", errors.New("image too large (over 8MB)")
+		return "", errno.BadRequest("image too large (over 8MB)")
 	}
 
 	contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))

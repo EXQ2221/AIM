@@ -1,9 +1,8 @@
 package rpc
 
 import (
-	"errors"
-
 	"example.com/aim/gateway/kitex_gen/rag/ragservice"
+	"example.com/aim/shared/errno"
 	"github.com/cloudwego/kitex/client"
 )
 
@@ -20,7 +19,7 @@ func InitRAGClient(endpoint string) error {
 
 func RAGClient() (ragservice.Client, error) {
 	if ragRPCClient == nil {
-		return nil, errors.New("rag rpc client not initialized")
+		return nil, errno.Internal("rag rpc client not initialized")
 	}
 	return ragRPCClient, nil
 }

@@ -1,9 +1,8 @@
 package rpc
 
 import (
-	"errors"
-
 	"example.com/aim/gateway/kitex_gen/auth/authservice"
+	"example.com/aim/shared/errno"
 	"github.com/cloudwego/kitex/client"
 )
 
@@ -20,7 +19,7 @@ func InitAuthClient(endpoint string) error {
 
 func AuthClient() (authservice.Client, error) {
 	if authRPCClient == nil {
-		return nil, errors.New("auth rpc client not initialized")
+		return nil, errno.Internal("auth rpc client not initialized")
 	}
 	return authRPCClient, nil
 }

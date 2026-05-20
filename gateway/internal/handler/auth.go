@@ -7,14 +7,14 @@ import (
 
 	"example.com/aim/gateway/internal/authcookie"
 	"example.com/aim/gateway/internal/middleware"
-	"example.com/aim/gateway/internal/model"
+	"example.com/aim/gateway/internal/model/dto"
 	"example.com/aim/gateway/internal/rpc"
 	authpb "example.com/aim/gateway/kitex_gen/auth"
 	"github.com/gin-gonic/gin"
 )
 
 func Register(ctx *gin.Context) {
-	var req model.RegisterRequest
+	var req dto.RegisterRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		writeError(ctx, 400, "invalid request body")
 		return
@@ -45,10 +45,10 @@ func Register(ctx *gin.Context) {
 		return
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
-		Data: model.UserInfo{
+		Data: dto.UserInfo{
 			UserID:       resp.User.UserId,
 			AimID:        resp.User.AimId,
 			Role:         resp.User.Role,
@@ -58,7 +58,7 @@ func Register(ctx *gin.Context) {
 }
 
 func Login(ctx *gin.Context) {
-	var req model.LoginRequest
+	var req dto.LoginRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		writeError(ctx, 400, "invalid request body")
 		return
@@ -100,10 +100,10 @@ func Login(ctx *gin.Context) {
 		deviceID,
 	)
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
-		Data: model.AuthSessionResponse{
+		Data: dto.AuthSessionResponse{
 			SessionID:        resp.SessionId,
 			DeviceID:         deviceID,
 			AccessExpiresAt:  resp.AccessExpiresAt,
@@ -113,7 +113,7 @@ func Login(ctx *gin.Context) {
 }
 
 func Refresh(ctx *gin.Context) {
-	var req model.RefreshRequest
+	var req dto.RefreshRequest
 	if err := bindOptionalJSON(ctx, &req); err != nil {
 		writeError(ctx, 400, "invalid request body")
 		return
@@ -158,10 +158,10 @@ func Refresh(ctx *gin.Context) {
 		deviceID,
 	)
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
-		Data: model.AuthSessionResponse{
+		Data: dto.AuthSessionResponse{
 			SessionID:        resp.SessionId,
 			DeviceID:         deviceID,
 			AccessExpiresAt:  resp.AccessExpiresAt,
@@ -196,7 +196,7 @@ func Logout(ctx *gin.Context) {
 	}
 
 	authcookie.ClearSessionCookies(ctx)
-	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+	writeJSON(ctx, 200, dto.APIResponse{Code: 0, Message: "success"})
 }
 
 func LogoutAll(ctx *gin.Context) {
@@ -206,7 +206,7 @@ func LogoutAll(ctx *gin.Context) {
 		return
 	}
 
-	var req model.PasswordRequest
+	var req dto.PasswordRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		writeError(ctx, 400, "invalid request body")
 		return
@@ -232,7 +232,7 @@ func LogoutAll(ctx *gin.Context) {
 	}
 
 	authcookie.ClearSessionCookies(ctx)
-	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+	writeJSON(ctx, 200, dto.APIResponse{Code: 0, Message: "success"})
 }
 
 func ListSessions(ctx *gin.Context) {
@@ -257,9 +257,9 @@ func ListSessions(ctx *gin.Context) {
 		return
 	}
 
-	sessions := make([]model.SessionInfo, 0, len(resp.Sessions))
+	sessions := make([]dto.SessionInfo, 0, len(resp.Sessions))
 	for _, session := range resp.Sessions {
-		sessions = append(sessions, model.SessionInfo{
+		sessions = append(sessions, dto.SessionInfo{
 			SessionID:  session.SessionId,
 			DeviceID:   session.DeviceId,
 			DeviceName: session.DeviceName,
@@ -273,7 +273,7 @@ func ListSessions(ctx *gin.Context) {
 		})
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
 		Data:    sessions,
@@ -287,7 +287,7 @@ func RevokeSession(ctx *gin.Context) {
 		return
 	}
 
-	var req model.RevokeSessionRequest
+	var req dto.RevokeSessionRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		writeError(ctx, 400, "invalid request body")
 		return
@@ -316,7 +316,7 @@ func RevokeSession(ctx *gin.Context) {
 	if req.SessionID == authCtx.SessionID {
 		authcookie.ClearSessionCookies(ctx)
 	}
-	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+	writeJSON(ctx, 200, dto.APIResponse{Code: 0, Message: "success"})
 }
 
 func bindOptionalJSON(ctx *gin.Context, target any) error {

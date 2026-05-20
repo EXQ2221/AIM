@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"example.com/aim/gateway/internal/middleware"
-	"example.com/aim/gateway/internal/model"
+	"example.com/aim/gateway/internal/model/dto"
 	"example.com/aim/gateway/internal/rpc"
 	userpb "example.com/aim/gateway/kitex_gen/user"
 	"github.com/gin-gonic/gin"
@@ -32,10 +32,10 @@ func Me(ctx *gin.Context) {
 		return
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
-		Data: model.UserInfo{
+		Data: dto.UserInfo{
 			UserID:       userResp.User.UserId,
 			AimID:        userResp.User.AimId,
 			Email:        userResp.User.Email,
@@ -57,7 +57,7 @@ func CreateFriendGroup(ctx *gin.Context) {
 		return
 	}
 
-	var req model.CreateFriendGroupRequest
+	var req dto.CreateFriendGroupRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		writeError(ctx, 400, "invalid request body")
 		return
@@ -82,7 +82,7 @@ func CreateFriendGroup(ctx *gin.Context) {
 		return
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
 		Data:    toFriendGroupModel(resp.Group),
@@ -110,12 +110,12 @@ func ListFriendGroups(ctx *gin.Context) {
 		return
 	}
 
-	groups := make([]model.FriendGroupInfo, 0, len(resp.Groups))
+	groups := make([]dto.FriendGroupInfo, 0, len(resp.Groups))
 	for _, group := range resp.Groups {
 		groups = append(groups, toFriendGroupModel(group))
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
 		Data:    groups,
@@ -129,7 +129,7 @@ func AddFriend(ctx *gin.Context) {
 		return
 	}
 
-	var req model.AddFriendRequest
+	var req dto.AddFriendRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		writeError(ctx, 400, "invalid request body")
 		return
@@ -160,7 +160,7 @@ func AddFriend(ctx *gin.Context) {
 		return
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
 		Data:    toFriendRequestModel(resp.Request),
@@ -188,12 +188,12 @@ func ListFriends(ctx *gin.Context) {
 		return
 	}
 
-	friends := make([]model.FriendInfo, 0, len(resp.Friends))
+	friends := make([]dto.FriendInfo, 0, len(resp.Friends))
 	for _, friend := range resp.Friends {
 		friends = append(friends, toFriendModel(friend))
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
 		Data:    friends,
@@ -212,7 +212,7 @@ func UpdateFriend(ctx *gin.Context) {
 		return
 	}
 
-	var req model.UpdateFriendRequest
+	var req dto.UpdateFriendRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		writeError(ctx, 400, "invalid request body")
 		return
@@ -235,7 +235,7 @@ func UpdateFriend(ctx *gin.Context) {
 		return
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
 		Data:    toFriendModel(resp.Friend),
@@ -273,7 +273,7 @@ func DeleteFriend(ctx *gin.Context) {
 		return
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{Code: 0, Message: "success"})
+	writeJSON(ctx, 200, dto.APIResponse{Code: 0, Message: "success"})
 }
 
 func ListFriendRequests(ctx *gin.Context) {
@@ -297,12 +297,12 @@ func ListFriendRequests(ctx *gin.Context) {
 		return
 	}
 
-	requests := make([]model.FriendRequestInfo, 0, len(resp.Requests))
+	requests := make([]dto.FriendRequestInfo, 0, len(resp.Requests))
 	for _, request := range resp.Requests {
 		requests = append(requests, toFriendRequestModel(request))
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
 		Data:    requests,
@@ -321,7 +321,7 @@ func RespondFriendRequest(ctx *gin.Context) {
 		return
 	}
 
-	var req model.RespondFriendRequest
+	var req dto.RespondFriendRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		writeError(ctx, 400, "invalid request body")
 		return
@@ -352,7 +352,7 @@ func RespondFriendRequest(ctx *gin.Context) {
 		return
 	}
 
-	writeJSON(ctx, 200, model.APIResponse{
+	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
 		Message: "success",
 		Data: map[string]any{
@@ -390,11 +390,11 @@ func requestIDParam(ctx *gin.Context) (int64, bool) {
 	return parsed, true
 }
 
-func toFriendGroupModel(group *userpb.FriendGroupInfo) model.FriendGroupInfo {
+func toFriendGroupModel(group *userpb.FriendGroupInfo) dto.FriendGroupInfo {
 	if group == nil {
-		return model.FriendGroupInfo{}
+		return dto.FriendGroupInfo{}
 	}
-	return model.FriendGroupInfo{
+	return dto.FriendGroupInfo{
 		ID:        group.Id,
 		Name:      group.Name,
 		SortOrder: group.SortOrder,
@@ -403,11 +403,11 @@ func toFriendGroupModel(group *userpb.FriendGroupInfo) model.FriendGroupInfo {
 	}
 }
 
-func toFriendModel(friend *userpb.FriendInfo) model.FriendInfo {
+func toFriendModel(friend *userpb.FriendInfo) dto.FriendInfo {
 	if friend == nil {
-		return model.FriendInfo{}
+		return dto.FriendInfo{}
 	}
-	return model.FriendInfo{
+	return dto.FriendInfo{
 		UserID:    friend.UserId,
 		AimID:     friend.AimId,
 		Nickname:  friend.Nickname,
@@ -420,11 +420,11 @@ func toFriendModel(friend *userpb.FriendInfo) model.FriendInfo {
 	}
 }
 
-func toFriendRequestModel(request *userpb.FriendRequestInfo) model.FriendRequestInfo {
+func toFriendRequestModel(request *userpb.FriendRequestInfo) dto.FriendRequestInfo {
 	if request == nil {
-		return model.FriendRequestInfo{}
+		return dto.FriendRequestInfo{}
 	}
-	return model.FriendRequestInfo{
+	return dto.FriendRequestInfo{
 		ID:        request.Id,
 		UserID:    request.UserId,
 		AimID:     request.AimId,

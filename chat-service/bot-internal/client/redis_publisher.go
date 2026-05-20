@@ -3,9 +3,9 @@ package botclient
 import (
 	"context"
 	"encoding/json"
-	"errors"
 
 	botmodel "example.com/aim/chat-service/bot-internal/model"
+	"example.com/aim/shared/errno"
 	redisv9 "github.com/redis/go-redis/v9"
 )
 
@@ -31,7 +31,7 @@ func NewRedisReplyPublisher(client *redisv9.Client) *RedisReplyPublisher {
 
 func (p *RedisReplyPublisher) PublishBotReplyCreated(ctx context.Context, event botmodel.BotReplyCreatedEvent) error {
 	if p == nil || p.client == nil {
-		return errors.New("redis reply publisher is nil")
+		return errno.Internal("redis reply publisher is nil")
 	}
 	payload, err := json.Marshal(event)
 	if err != nil {
@@ -42,7 +42,7 @@ func (p *RedisReplyPublisher) PublishBotReplyCreated(ctx context.Context, event 
 
 func (p *RedisReplyPublisher) PublishBotReplyStream(ctx context.Context, event botmodel.BotReplyStreamEvent) error {
 	if p == nil || p.client == nil {
-		return errors.New("redis reply publisher is nil")
+		return errno.Internal("redis reply publisher is nil")
 	}
 	payload, err := json.Marshal(event)
 	if err != nil {

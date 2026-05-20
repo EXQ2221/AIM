@@ -1,9 +1,8 @@
 package rpc
 
 import (
-	"errors"
-
 	"example.com/aim/gateway/kitex_gen/chat/chatservice"
+	"example.com/aim/shared/errno"
 	"github.com/cloudwego/kitex/client"
 )
 
@@ -20,7 +19,7 @@ func InitChatClient(endpoint string) error {
 
 func ChatClient() (chatservice.Client, error) {
 	if chatRPCClient == nil {
-		return nil, errors.New("chat rpc client not initialized")
+		return nil, errno.Internal("chat rpc client not initialized")
 	}
 	return chatRPCClient, nil
 }

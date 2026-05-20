@@ -2,13 +2,13 @@ package botdal
 
 import (
 	"context"
-	"errors"
 	"strconv"
 	"strings"
 
 	bot "example.com/aim/chat-service/bot-internal/biz"
 	ragpb "example.com/aim/chat-service/kitex_gen/rag"
 	"example.com/aim/chat-service/kitex_gen/rag/ragservice"
+	"example.com/aim/shared/errno"
 )
 
 type ConversationRAGSearcher struct {
@@ -23,13 +23,13 @@ func NewConversationRAGSearcher(ragClient ragservice.Client) *ConversationRAGSea
 
 func (s *ConversationRAGSearcher) SearchForConversation(ctx context.Context, req bot.RAGSearchRequest) ([]bot.RAGChunk, error) {
 	if s == nil || s.RAGClient == nil {
-		return nil, errors.New("rag searcher dependencies are not complete")
+		return nil, errno.Internal("rag searcher dependencies are not complete")
 	}
 	if req.UserID == 0 {
-		return nil, errors.New("user id is required")
+		return nil, errno.Required("user id")
 	}
 	if req.ConversationID == 0 {
-		return nil, errors.New("conversation id is required")
+		return nil, errno.Required("conversation id")
 	}
 	question := strings.TrimSpace(req.Question)
 	if question == "" {

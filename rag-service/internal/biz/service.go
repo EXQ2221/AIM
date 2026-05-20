@@ -3,11 +3,11 @@ package rag
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"example.com/aim/shared/errno"
 	"example.com/aim/rag-service/internal/dal/model"
 	embedding "example.com/aim/rag-service/internal/provider"
 	"example.com/aim/rag-service/internal/repository"
@@ -40,13 +40,13 @@ type ProcessDocumentInput struct {
 
 func (p *DocumentProcessor) ProcessDocument(ctx context.Context, input ProcessDocumentInput) error {
 	if p == nil || p.EmbeddingClient == nil || p.RAGRepo == nil {
-		return errors.New("rag document processor is not initialized")
+		return errno.Internal("rag document processor is not initialized")
 	}
 	if input.DocumentID == 0 {
-		return errors.New("document id is required")
+		return errno.Required("document id")
 	}
 	if strings.TrimSpace(input.Content) == "" {
-		return errors.New("document content is empty")
+		return errno.BadRequest("document content is empty")
 	}
 
 	document, err := p.RAGRepo.GetKnowledgeDocumentByID(ctx, input.DocumentID)
@@ -189,7 +189,7 @@ func (p *DocumentProcessor) fromProvidedChunks(items []IngestChunkInput) ([]Chun
 		})
 	}
 	if len(chunks) == 0 {
-		return nil, errors.New("document content is empty")
+		return nil, errno.BadRequest("document content is empty")
 	}
 	return chunks, nil
 }

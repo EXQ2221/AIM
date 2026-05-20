@@ -3,15 +3,19 @@ ARG RUNTIME_IMAGE=m.daocloud.io/docker.io/library/alpine:3.20
 
 FROM ${GO_IMAGE} AS builder
 
-WORKDIR /src/rag-service
+WORKDIR /src
 
 ENV GOPROXY=https://goproxy.cn,direct
 ENV GOSUMDB=off
 
-COPY rag-service/go.mod rag-service/go.sum ./
+COPY shared ./shared
+COPY rag-service/go.mod rag-service/go.sum ./rag-service/
+WORKDIR /src/rag-service
 RUN go mod download
 
-COPY rag-service/ ./
+WORKDIR /src
+COPY rag-service/ ./rag-service/
+WORKDIR /src/rag-service
 RUN mkdir -p /out
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
 

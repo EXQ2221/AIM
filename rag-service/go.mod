@@ -3,6 +3,7 @@ module example.com/aim/rag-service
 go 1.25.2
 
 require (
+	example.com/aim/shared v0.0.0
 	github.com/cloudwego/gopkg v0.1.8
 	github.com/cloudwego/kitex v0.16.1
 	go.uber.org/zap v1.28.0
@@ -62,3 +63,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/driver/mysql v1.5.6 // indirect
 )
+
+replace example.com/aim/shared => ../shared

@@ -1,7 +1,6 @@
 ﻿package ragconf
 
 import (
-	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -104,7 +103,7 @@ func LoadSplitterConfigFromEnv() (ragmodel.SplitterConfig, error) {
 		cfg.ChunkOverlap = parsed
 	}
 	if cfg.ChunkOverlap >= cfg.ChunkSize {
-		return ragmodel.SplitterConfig{}, errors.New("RAG_CHUNK_OVERLAP must be smaller than RAG_CHUNK_SIZE")
+		return ragmodel.SplitterConfig{}, errx.MustBeSmaller("RAG_CHUNK_OVERLAP", "RAG_CHUNK_SIZE")
 	}
 	return cfg, nil
 }

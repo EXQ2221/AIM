@@ -19,6 +19,10 @@ func MustBeBool(name string) error {
 	return errno.New(errno.ErrBadRequest, fmt.Sprintf("bad_request: %s must be true or false", name))
 }
 
+func MustBeSmaller(name string, than string) error {
+	return errno.New(errno.ErrBadRequest, fmt.Sprintf("bad_request: %s must be smaller than %s", name, than))
+}
+
 func NilDependency(name string) error {
 	return errno.New(errno.ErrInternalError, fmt.Sprintf("internal: %s is nil", name))
 }

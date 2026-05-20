@@ -1,5 +1,5 @@
 package embedding
 
-import "errors"
+import "example.com/aim/shared/errno"
 
-var ErrUnsupportedProvider = errors.New("unsupported EMBEDDING_PROVIDER")
+var ErrUnsupportedProvider = errno.BadRequest("unsupported EMBEDDING_PROVIDER")

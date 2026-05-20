@@ -7,16 +7,17 @@ import (
 
 	"example.com/aim/chat-service/internal/dal/model"
 	"example.com/aim/chat-service/internal/repository"
+	"example.com/aim/shared/errno"
 	"gorm.io/gorm"
 )
 
 var (
-	ErrConversationIDRequired       = errors.New("conversation id is required")
-	ErrBotIDRequired                = errors.New("bot id is required")
-	ErrConversationNotFound         = errors.New("conversation not found")
-	ErrConversationTypeNotSupported = errors.New("bot membership only supports group conversations")
-	ErrBotNotFound                  = errors.New("bot not found")
-	ErrBotNotInConversation         = errors.New("bot is not attached to conversation")
+	ErrConversationIDRequired       = errno.Required("conversation id")
+	ErrBotIDRequired                = errno.Required("bot id")
+	ErrConversationNotFound         = errno.NotFound("conversation not found")
+	ErrConversationTypeNotSupported = errno.BadRequest("bot membership only supports group conversations")
+	ErrBotNotFound                  = errno.NotFound("bot not found")
+	ErrBotNotInConversation         = errno.NotFound("bot is not attached to conversation")
 )
 
 type ConversationBotConfig struct {
@@ -65,7 +66,7 @@ func (s *MembershipService) AddBotToConversation(ctx context.Context, conversati
 
 func (s *MembershipService) AddBotToConversationWithConfig(ctx context.Context, conversationID, botID uint64, cfg ConversationBotConfig) error {
 	if s == nil {
-		return errors.New("membership service is nil")
+		return errno.Internal("membership service is nil")
 	}
 	if conversationID == 0 {
 		return ErrConversationIDRequired
@@ -74,7 +75,7 @@ func (s *MembershipService) AddBotToConversationWithConfig(ctx context.Context, 
 		return ErrBotIDRequired
 	}
 	if s.TxManager == nil || s.ConversationRepo == nil || s.MemberRepo == nil || s.BotRepo == nil || s.ConversationBotRepo == nil {
-		return errors.New("membership service dependencies are not complete")
+		return errno.Internal("membership service dependencies are not complete")
 	}
 
 	conversation, err := s.ConversationRepo.GetByID(ctx, conversationID)
@@ -156,7 +157,7 @@ func (s *MembershipService) AddBotToConversationWithConfig(ctx context.Context, 
 
 func (s *MembershipService) RemoveBotFromConversation(ctx context.Context, conversationID, botID uint64) error {
 	if s == nil {
-		return errors.New("membership service is nil")
+		return errno.Internal("membership service is nil")
 	}
 	if conversationID == 0 {
 		return ErrConversationIDRequired
@@ -165,7 +166,7 @@ func (s *MembershipService) RemoveBotFromConversation(ctx context.Context, conve
 		return ErrBotIDRequired
 	}
 	if s.TxManager == nil || s.MemberRepo == nil || s.ConversationBotRepo == nil {
-		return errors.New("membership service dependencies are not complete")
+		return errno.Internal("membership service dependencies are not complete")
 	}
 
 	return s.TxManager.WithinTransaction(ctx, func(tx *gorm.DB) error {

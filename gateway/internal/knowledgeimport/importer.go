@@ -15,6 +15,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"example.com/aim/shared/errno"
 	"rsc.io/pdf"
 )
 
@@ -39,7 +40,7 @@ type ParsedChunk struct {
 
 func Parse(filename string, contentType string, data []byte) (*ParsedDocument, error) {
 	if len(data) == 0 {
-		return nil, errors.New("file is empty")
+		return nil, errno.BadRequest("file is empty")
 	}
 
 	title := strings.TrimSpace(strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename)))
@@ -94,9 +95,9 @@ func Parse(filename string, contentType string, data []byte) (*ParsedDocument, e
 			FileType:   fileType,
 		}, nil
 	case "doc":
-		return nil, errors.New("legacy .doc is not supported yet, please convert it to .docx")
+		return nil, errno.BadRequest("legacy .doc is not supported yet, please convert it to .docx")
 	default:
-		return nil, errors.New("unsupported document type, only txt/md/pdf/docx are supported")
+		return nil, errno.BadRequest("unsupported document type, only txt/md/pdf/docx are supported")
 	}
 }
 
@@ -143,11 +144,11 @@ func detectFileType(filename string, contentType string, data []byte) string {
 func parseText(data []byte) (string, error) {
 	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
 	if !utf8.Valid(data) {
-		return "", errors.New("text document is not valid UTF-8")
+		return "", errno.BadRequest("text document is not valid UTF-8")
 	}
 	content := normalizeExtractedText(string(data))
 	if content == "" {
-		return "", errors.New("document content is empty")
+		return "", errno.BadRequest("document content is empty")
 	}
 	return content, nil
 }
@@ -181,12 +182,12 @@ func parseDOCX(data []byte) (string, error) {
 		}
 	}
 	if !found {
-		return "", errors.New("docx document.xml not found")
+		return "", errno.BadRequest("docx document.xml not found")
 	}
 
 	content := normalizeExtractedText(strings.Join(sections, "\n\n"))
 	if content == "" {
-		return "", errors.New("no extractable text found in docx")
+		return "", errno.BadRequest("no extractable text found in docx")
 	}
 	return content, nil
 }
@@ -298,7 +299,7 @@ func parsePDF(data []byte) (string, error) {
 
 	content := normalizeExtractedText(strings.Join(pages, "\n\n"))
 	if content == "" {
-		return "", errors.New("no extractable text found in pdf")
+		return "", errno.BadRequest("no extractable text found in pdf")
 	}
 	return content, nil
 }
