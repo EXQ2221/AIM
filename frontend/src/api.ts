@@ -16,6 +16,7 @@ import type {
   NotificationListResponse,
   MemberInfo,
   MessageInfo,
+  HistorySearchMessageItem,
   SessionInfo,
   UploadAvatarResponse,
   UploadMediaResponse,
@@ -329,6 +330,18 @@ export const api = {
     if (options.beforeId) params.set("beforeId", String(options.beforeId));
     params.set("limit", String(options.limit ?? 30));
     return request<MessageInfo[]>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/messages?${params}`);
+  },
+  searchHistoryMessages(options: { conversationId?: string; startAt: number; endAt: number; keyword?: string }) {
+    const params = new URLSearchParams();
+    if (options.conversationId && options.conversationId.trim()) {
+      params.set("conversationId", options.conversationId.trim());
+    }
+    params.set("startAt", String(options.startAt));
+    params.set("endAt", String(options.endAt));
+    if (options.keyword && options.keyword.trim()) {
+      params.set("keyword", options.keyword.trim());
+    }
+    return request<HistorySearchMessageItem[]>(`/api/v1/conversations/history/search?${params.toString()}`);
   },
   markConversationRead(conversationId: string, lastReadMessageId: number) {
     return request<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/read`, {

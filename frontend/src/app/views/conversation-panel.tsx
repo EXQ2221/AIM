@@ -1,4 +1,4 @@
-import { Bell, CheckCircle2, ChevronDown, Loader2, MessageSquarePlus, RefreshCw, Search, UserPlus, UsersRound } from "lucide-react";
+import { Bell, CheckCircle2, ChevronDown, Loader2, MessageSquarePlus, Moon, RefreshCw, Search, Sun, UserPlus, UsersRound } from "lucide-react";
 import { FormEvent, useState } from "react";
 import type { ConversationInfo, NotificationInfo, UserInfo } from "../../types";
 import { Avatar, IconButton } from "../ui";
@@ -16,12 +16,14 @@ export function ConversationPanel({
   currentUser,
   selectedConversationId,
   search,
+  theme,
   onSearch,
   onCreateGroup,
   onJoinGroup,
   onRefresh,
   onMarkNotificationRead,
   onMarkAllNotificationsRead,
+  onToggleTheme,
   onSelect
 }: {
   active: boolean;
@@ -34,12 +36,14 @@ export function ConversationPanel({
   currentUser: UserInfo;
   selectedConversationId: string | null;
   search: string;
+  theme: "light" | "dark";
   onSearch: (value: string) => void;
   onCreateGroup: (input: { name: string; announcement: string; joinPolicy: string }) => Promise<void>;
   onJoinGroup: (conversationId: string) => Promise<void>;
   onRefresh: () => Promise<ConversationInfo[]>;
   onMarkNotificationRead: (notificationId: number) => Promise<void>;
   onMarkAllNotificationsRead: () => Promise<void>;
+  onToggleTheme: () => void;
   onSelect: (conversationId: string) => void;
 }) {
   const [createOpen, setCreateOpen] = useState(false);
@@ -69,7 +73,7 @@ export function ConversationPanel({
   };
 
   return (
-    <aside className={cx("pane conversation-pane", active && "mobile-active")}>
+    <aside aria-label="会话列表面板" className={cx("pane conversation-pane", active && "mobile-active")}>
       <div className="pane-header">
         <div className="brand-row compact">
           <div className="brand-mark small">A</div>
@@ -78,9 +82,14 @@ export function ConversationPanel({
             <span>加密即时通讯</span>
           </div>
         </div>
-        <IconButton label="刷新会话" onClick={() => void onRefresh()}>
-          <RefreshCw size={18} />
-        </IconButton>
+        <div className="pane-header-actions">
+          <IconButton label={theme === "light" ? "切换到深色主题" : "切换到浅色主题"} onClick={onToggleTheme}>
+            {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+          </IconButton>
+          <IconButton label="刷新会话" onClick={() => void onRefresh()}>
+            <RefreshCw size={18} />
+          </IconButton>
+        </div>
       </div>
 
       <div className="profile-strip">
@@ -132,7 +141,12 @@ export function ConversationPanel({
 
       <label className="search-box">
         <Search size={17} />
-        <input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Search conversations or IDs" />
+        <input
+          aria-label="搜索会话"
+          value={search}
+          onChange={(event) => onSearch(event.target.value)}
+          placeholder="Search conversations or IDs"
+        />
       </label>
 
       <div className="list-meta">
@@ -200,7 +214,7 @@ export function ConversationPanel({
         </div>
       </div>
 
-      <div className="conversation-list">
+      <div className="conversation-list" role="list" aria-label="会话">
         {conversations.map((conversation) => {
           const unread = unreadCounts[conversation.conversationId] ?? 0;
           const preview = conversationPreview(conversation);
@@ -210,6 +224,8 @@ export function ConversationPanel({
               key={conversation.conversationId}
               className={cx("conversation-item", selectedConversationId === conversation.conversationId && "active")}
               type="button"
+              role="listitem"
+              aria-current={selectedConversationId === conversation.conversationId ? "true" : undefined}
               onClick={() => onSelect(conversation.conversationId)}
             >
               <Avatar name={title} src={conversation.avatar} />

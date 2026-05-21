@@ -16,7 +16,8 @@ import {
   parseFileMessageContent,
   parseImageMessageContent,
   parseSystemMessageContent,
-  parseVoiceMessageContent
+  parseVoiceMessageContent,
+  roleLabel
 } from "./utils";
 
 type ContextMenuState = {
@@ -29,6 +30,8 @@ export function MessageBubble({
   mine,
   senderName,
   senderAvatar,
+  senderRole,
+  conversationType,
   highlighted,
   readReceiptLabel,
   mentionTarget,
@@ -44,6 +47,8 @@ export function MessageBubble({
   mine: boolean;
   senderName: string;
   senderAvatar?: string;
+  senderRole?: string;
+  conversationType?: string;
   highlighted?: boolean;
   readReceiptLabel?: string;
   mentionTarget?: string;
@@ -62,7 +67,17 @@ export function MessageBubble({
   const recalled = message.status === "RECALLED";
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const canDeleteLocally = Boolean(onDeleteLocal && !message.pending && !message.isBotGenerating);
+  const canRecall = Boolean(onRecall && mine && !message.pending && message.status === "NORMAL" && !message.isBotGenerating);
+  const canOpenContextMenu = canDeleteLocally || canRecall;
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const isIncoming = !mine;
+  const isGroupConversation = conversationType === "GROUP";
+  const normalizedRole = (senderRole || "").trim().toUpperCase();
+  const isOwnerRole = normalizedRole === "OWNER" || normalizedRole === "群主";
+  const isAdminRole = normalizedRole === "ADMIN" || normalizedRole === "管理员";
+  const roleBadgeText = isGroupConversation ? (isOwnerRole ? "群主" : isAdminRole ? "管理员" : "") : "";
+  const roleBadgeClass = isOwnerRole ? "owner" : isAdminRole ? "admin" : "";
+  const showNameRow = isGroupConversation || isIncoming;
 
   useEffect(() => {
     if (!contextMenu) {
@@ -94,7 +109,7 @@ export function MessageBubble({
   }, [contextMenu]);
 
   const handleContextMenu = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!canDeleteLocally) {
+    if (!canOpenContextMenu) {
       return;
     }
     event.preventDefault();
@@ -125,18 +140,19 @@ export function MessageBubble({
           onContextMenu={(event) => handleAvatarMention(event, mentionTarget || senderName, onMention)}
         />
       )}
-      <div className="message-bubble" onContextMenu={handleContextMenu}>
+      <div className={cx("message-main", mine && "mine")}>
+        {showNameRow && (
+          <div className="message-name-row">
+            {roleBadgeText && <i className={cx("message-role-badge", roleBadgeClass)}>{roleBadgeText}</i>}
+            <b className="message-sender-name">{senderName}</b>
+          </div>
+        )}
+        <div className="message-bubble" onContextMenu={handleContextMenu}>
         <div className="message-meta">
-          <span>{senderName}</span>
           <time>{formatClock(message.createdAt)}</time>
           {onReply && !message.pending && message.status === "NORMAL" && !message.isBotGenerating && (
             <button className="message-reply-button" type="button" onClick={onReply}>
               {"\u56de\u590d"}
-            </button>
-          )}
-          {onRecall && mine && !message.pending && message.status === "NORMAL" && !message.isBotGenerating && (
-            <button className="message-reply-button" type="button" onClick={onRecall}>
-              {"\u64a4\u56de"}
             </button>
           )}
           {!message.isBotGenerating && (message.pending || message.status === "FAILED") && (
@@ -209,6 +225,7 @@ export function MessageBubble({
         {mine && !message.pending && message.status !== "FAILED" && readReceiptLabel && (
           <div className="message-read-receipt">{readReceiptLabel}</div>
         )}
+        </div>
       </div>
       {mine && (
         <Avatar
@@ -217,8 +234,20 @@ export function MessageBubble({
           onContextMenu={(event) => handleAvatarMention(event, mentionTarget || senderName, onMention)}
         />
       )}
-      {contextMenu && canDeleteLocally && (
+      {contextMenu && canOpenContextMenu && (
         <div ref={contextMenuRef} className="message-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          {canRecall && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setContextMenu(null);
+                onRecall?.();
+              }}
+            >
+              {"\u64a4\u56de"}
+            </button>
+          )}
           <button
             type="button"
             onClick={(event) => {

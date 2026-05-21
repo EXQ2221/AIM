@@ -1,9 +1,11 @@
 ﻿import { ChevronLeft, DoorOpen, FileImage, Loader2, LockKeyhole, MessageCircle, Mic, PanelRightOpen, Paperclip, RefreshCw, SendHorizontal, UserPlus, X } from "lucide-react";
 import { ChangeEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import { api } from "../../api";
 import { Avatar, IconButton, MessageBubble, WsBadge } from "../ui";
 import { cx, roleLabel } from "../utils";
 import type { ConversationInfo, FriendInfo, MemberInfo, MessageInfo, OutgoingMessagePayload, ReplyPreviewInfo, UserInfo } from "../../types";
+import type { HistorySearchMessageItem } from "../../types";
 import type { WsStatus } from "../types";
 
 function readReceiptLabel(conversation: ConversationInfo | null, message: MessageInfo, mine: boolean) {
@@ -48,6 +50,49 @@ function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
+
+function toDateTimeLocal(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function parseDateTimeLocalToSeconds(value: string) {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return 0;
+  return Math.floor(timestamp / 1000);
+}
+
+function previewHistoryMessage(message: MessageInfo) {
+  const messageType = String(message.messageType || "").toUpperCase();
+  const trimmedContent = (message.content || "").trim();
+  if (message.status === "RECALLED") return "消息已撤回";
+
+  if (messageType === "TEXT" || messageType === "BOT_REPLY" || messageType === "SYSTEM") {
+    try {
+      const parsed = JSON.parse(trimmedContent) as { text?: string };
+      if (parsed && typeof parsed.text === "string" && parsed.text.trim()) {
+        return parsed.text.trim();
+      }
+    } catch {
+      // noop
+    }
+    return trimmedContent;
+  }
+  if (messageType === "IMAGE") return "[图片]";
+  if (messageType === "FILE") return "[文件]";
+  if (messageType === "VOICE") return "[语音]";
+  return trimmedContent;
+}
+
+function formatHistoryTime(unixSeconds: number) {
+  if (!unixSeconds || unixSeconds <= 0) return "-";
+  return new Date(unixSeconds * 1000).toLocaleString("zh-CN", { hour12: false });
+}
+
 export function ChatPanel({
   active,
   conversation,
@@ -107,6 +152,21 @@ export function ChatPanel({
   onCancelReply: () => void;
   onSend: (payload?: OutgoingMessagePayload) => void;
 }) {
+  const [historySearchOpen, setHistorySearchOpen] = useState(false);
+  const [historySearchKeyword, setHistorySearchKeyword] = useState("");
+  const [historySearchStartAt, setHistorySearchStartAt] = useState(() => {
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    return toDateTimeLocal(weekAgo);
+  });
+  const [historySearchEndAt, setHistorySearchEndAt] = useState(() => toDateTimeLocal(new Date()));
+  const [historySearchCurrentConversationOnly, setHistorySearchCurrentConversationOnly] = useState(true);
+  const [historySearchLoading, setHistorySearchLoading] = useState(false);
+  const [historySearchResults, setHistorySearchResults] = useState<HistorySearchMessageItem[]>([]);
+  const [historySearchError, setHistorySearchError] = useState("");
+  const [historySearchSearched, setHistorySearchSearched] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
+
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteFriends, setInviteFriends] = useState<FriendInfo[]>([]);
   const [inviteLoading, setInviteLoading] = useState(false);
@@ -126,6 +186,7 @@ export function ChatPanel({
   const voiceStartedAtRef = useRef(0);
   const voiceTimerRef = useRef<number | null>(null);
   const discardVoiceUploadRef = useRef(false);
+  const messagesRef = useRef<MessageInfo[]>([]);
 
   const isGroupChat = conversation?.type === "GROUP";
   const memberUserIds = useMemo(() => new Set(members.filter((m) => m.memberType !== "BOT").map((m) => m.userId)), [members]);
@@ -509,8 +570,128 @@ export function ChatPanel({
     stopVoiceStream();
   }, [clearFileDrafts, clearImageDrafts, conversation?.conversationId, stopVoiceRecording, stopVoiceStream, stopVoiceTimer]);
 
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
+    if (!highlightedMessageId) return;
+    const timer = window.setTimeout(() => {
+      setHighlightedMessageId(null);
+    }, 2800);
+    return () => window.clearTimeout(timer);
+  }, [highlightedMessageId]);
+
+  const openHistorySearch = useCallback(() => {
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    setHistorySearchStartAt(toDateTimeLocal(weekAgo));
+    setHistorySearchEndAt(toDateTimeLocal(now));
+    setHistorySearchKeyword("");
+    setHistorySearchCurrentConversationOnly(true);
+    setHistorySearchError("");
+    setHistorySearchResults([]);
+    setHistorySearchSearched(false);
+    setHistorySearchOpen(true);
+  }, []);
+
+  const closeHistorySearch = useCallback(() => {
+    setHistorySearchOpen(false);
+    setHistorySearchLoading(false);
+  }, []);
+
+  const submitHistorySearch = useCallback(async () => {
+    if (!historySearchStartAt || !historySearchEndAt) {
+      setHistorySearchError("请先选择开始和结束时间");
+      return;
+    }
+    const startAt = parseDateTimeLocalToSeconds(historySearchStartAt);
+    const endAt = parseDateTimeLocalToSeconds(historySearchEndAt);
+    if (startAt <= 0 || endAt <= 0) {
+      setHistorySearchError("时间格式无效");
+      return;
+    }
+    if (endAt < startAt) {
+      setHistorySearchError("结束时间不能早于开始时间");
+      return;
+    }
+    if (historySearchCurrentConversationOnly && !conversation?.conversationId) {
+      setHistorySearchError("当前没有可用会话");
+      return;
+    }
+
+    setHistorySearchLoading(true);
+    setHistorySearchError("");
+    try {
+      const items = await api.searchHistoryMessages({
+        conversationId: historySearchCurrentConversationOnly ? conversation?.conversationId : undefined,
+        startAt,
+        endAt,
+        keyword: historySearchKeyword.trim() || undefined
+      });
+      setHistorySearchResults(items);
+      setHistorySearchSearched(true);
+    } catch (error) {
+      setHistorySearchError(error instanceof Error ? error.message : "历史搜索失败");
+      setHistorySearchResults([]);
+      setHistorySearchSearched(true);
+    } finally {
+      setHistorySearchLoading(false);
+    }
+  }, [conversation?.conversationId, historySearchCurrentConversationOnly, historySearchEndAt, historySearchKeyword, historySearchStartAt]);
+
+  const resolveHistorySenderName = useCallback(
+    (message: MessageInfo) => {
+      if (message.senderType === "SYSTEM") return "系统";
+      if (message.senderId === currentUser.user_id) return `${currentUser.nickname || currentUser.aim_id}（我）`;
+      const member = memberMap.get(message.senderId);
+      if (message.senderType === "BOT") {
+        return member?.nickname || member?.mentionName || `Bot ${message.senderId}`;
+      }
+      return member?.nickname || `用户 ${message.senderId}`;
+    },
+    [currentUser.aim_id, currentUser.nickname, currentUser.user_id, memberMap]
+  );
+
+  const jumpToHistoryMessage = useCallback(
+    (item: HistorySearchMessageItem) => {
+      if (item.conversationId !== conversation?.conversationId) {
+        alert("这条消息不在当前会话，请切换到对应会话后再定位。");
+        return;
+      }
+      const scroller = messageListRef.current;
+      if (!scroller) return;
+
+      const ensureAndScroll = () => {
+        const element = scroller.querySelector(`[data-message-id="${item.message.id}"]`) as HTMLElement | null;
+        if (!element) {
+          return false;
+        }
+        setHighlightedMessageId(item.message.id);
+        element.scrollIntoView({ block: "center", behavior: "smooth" });
+        setHistorySearchOpen(false);
+        return true;
+      };
+
+      if (ensureAndScroll()) return;
+
+      const tryLoadAndScroll = async () => {
+        for (let i = 0; i < 12; i += 1) {
+          const loaded = messagesRef.current.some((message) => message.id === item.message.id);
+          if (loaded && ensureAndScroll()) return;
+          await onLoadOlder();
+        }
+        if (!ensureAndScroll()) {
+          alert("未能定位到该消息，可能已超出当前可加载范围。");
+        }
+      };
+      void tryLoadAndScroll();
+    },
+    [conversation?.conversationId, messageListRef, onLoadOlder]
+  );
+
   return (
-    <main className={cx("pane chat-pane", active && "mobile-active")}>
+    <main className={cx("pane chat-pane", active && "mobile-active")} aria-label="聊天面板">
       {conversation ? (
         <>
           <header className="chat-header">
@@ -527,6 +708,9 @@ export function ChatPanel({
             </div>
             <span className="chat-id-badge">ID {conversation.conversationId}</span>
             <WsBadge status={wsStatus} />
+            <IconButton label="历史搜索" onClick={openHistorySearch}>
+              <Search size={19} />
+            </IconButton>
             <IconButton label="成员" onClick={onOpenMembers}>
               <PanelRightOpen size={19} />
             </IconButton>
@@ -540,9 +724,14 @@ export function ChatPanel({
             </IconButton>
           </header>
 
-          <div className="message-scroll" ref={messageListRef}>
+          <div className="message-scroll" ref={messageListRef} role="log" aria-live="polite" aria-label="消息列表">
             <div className="history-row">
-              <button disabled={loadingOlder || messages.length === 0} type="button" onClick={() => void onLoadOlder()}>
+              <button
+                aria-label="加载更早消息"
+                disabled={loadingOlder || messages.length === 0}
+                type="button"
+                onClick={() => void onLoadOlder()}
+              >
                 {loadingOlder ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
                 加载更多消息
               </button>
@@ -573,6 +762,9 @@ export function ChatPanel({
                     key={message.id}
                     message={message}
                     mine={mine}
+                    conversationType={conversation.type}
+                    highlighted={highlightedMessageId === message.id}
+                    senderRole={sender?.role}
                     readReceiptLabel={readReceiptLabel(conversation, message, mine)}
                     replySummaryLabel={resolveReplySenderLabel(message.replyTo)}
                     senderAvatar={sender?.avatar}
@@ -588,7 +780,7 @@ export function ChatPanel({
                 );
               })
             ) : (
-              <div className="empty-thread">
+              <div className="empty-thread" role="status" aria-live="polite">
                 <MessageCircle size={36} />
                 <strong>No messages yet</strong>
               </div>
@@ -719,6 +911,7 @@ export function ChatPanel({
                   onKeyDown={onComposerKeyDown}
                   rows={1}
                   disabled={composerDisabled}
+                  aria-label="消息输入框"
                   placeholder={wsStatus === "open" ? "Send a message" : "Connecting to realtime channel"}
                 />
                 <button aria-label="Send" disabled={sendDisabled} type="button" onClick={() => onSend()}>
@@ -787,6 +980,91 @@ export function ChatPanel({
                 })}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {historySearchOpen && (
+        <div className="modal-overlay" onClick={closeHistorySearch}>
+          <div className="modal-box history-search-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <strong>历史消息搜索</strong>
+              <button type="button" onClick={closeHistorySearch}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="history-search-body">
+              <div className="history-search-grid">
+                <label className="history-search-field">
+                  <span>开始时间</span>
+                  <input
+                    type="datetime-local"
+                    value={historySearchStartAt}
+                    onChange={(event) => setHistorySearchStartAt(event.target.value)}
+                  />
+                </label>
+                <label className="history-search-field">
+                  <span>结束时间</span>
+                  <input type="datetime-local" value={historySearchEndAt} onChange={(event) => setHistorySearchEndAt(event.target.value)} />
+                </label>
+              </div>
+              <label className="history-search-field">
+                <span>关键词</span>
+                <input
+                  type="text"
+                  value={historySearchKeyword}
+                  onChange={(event) => setHistorySearchKeyword(event.target.value)}
+                  placeholder="输入关键词，例如：话剧 / 第354题"
+                />
+              </label>
+              <label className="history-search-checkbox">
+                <input
+                  type="checkbox"
+                  checked={historySearchCurrentConversationOnly}
+                  onChange={(event) => setHistorySearchCurrentConversationOnly(event.target.checked)}
+                />
+                <span>仅搜索当前会话</span>
+              </label>
+              {historySearchError && <p className="history-search-error">{historySearchError}</p>}
+              <div className="history-search-actions">
+                <button type="button" disabled={historySearchLoading} onClick={() => void submitHistorySearch()}>
+                  {historySearchLoading ? <Loader2 className="spin" size={14} /> : <Search size={14} />}
+                  搜索
+                </button>
+              </div>
+              <div className="history-search-result-meta">
+                {historySearchSearched ? `命中 ${historySearchResults.length} 条` : "设置筛选条件后点击搜索"}
+              </div>
+              <div className="history-search-result-list">
+                {historySearchResults.map((item) => (
+                  <article
+                    key={`${item.conversationId}-${item.message.id}`}
+                    className="history-search-result-item"
+                    onClick={() => jumpToHistoryMessage(item)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        jumpToHistoryMessage(item);
+                      }
+                    }}
+                  >
+                    <header>
+                      <strong>{item.conversationTitle || item.conversationId}</strong>
+                      <time>{formatHistoryTime(item.message.createdAt)}</time>
+                    </header>
+                    <div className="history-search-result-sender">
+                      发送者：{resolveHistorySenderName(item.message)}
+                    </div>
+                    <p>{previewHistoryMessage(item.message) || "(空消息)"}</p>
+                  </article>
+                ))}
+                {historySearchSearched && !historySearchLoading && historySearchResults.length === 0 && (
+                  <div className="history-search-empty">未找到符合条件的历史消息</div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

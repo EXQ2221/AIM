@@ -136,6 +136,8 @@ const typingExpireMs = 6000;
 const typingHeartbeatMs = 2000;
 const typingIdleMs = 2500;
 const maxHiddenMessageIdsPerConversation = 2000;
+const themeStorageKey = "aim:theme:v1";
+type UITheme = "light" | "dark";
 
 function App() {
   const [booting, setBooting] = useState(true);
@@ -180,6 +182,14 @@ function App() {
   const [knowledgeSearchChunks, setKnowledgeSearchChunks] = useState<KnowledgeSearchChunkInfo[]>([]);
   const [conversationKnowledgeBases, setConversationKnowledgeBases] = useState<ConversationKnowledgeBaseInfo[]>([]);
   const [loadingKnowledge, setLoadingKnowledge] = useState(false);
+  const [theme, setTheme] = useState<UITheme>(() => {
+    try {
+      const stored = window.localStorage.getItem(themeStorageKey);
+      return stored === "dark" ? "dark" : "light";
+    } catch {
+      return "light";
+    }
+  });
 
   const selectedConversationIdRef = useRef<string | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
@@ -202,6 +212,14 @@ function App() {
     }
     return `aim:hidden-messages:v1:${user.user_id}`;
   }, [user]);
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try {
+      window.localStorage.setItem(themeStorageKey, theme);
+    } catch {
+      // ignore storage write failures
+    }
+  }, [theme]);
   useEffect(() => {
     if (!localHiddenMessagesStorageKey) {
       setHiddenMessageIdsByConversation({});
@@ -1245,6 +1263,7 @@ function App() {
       <ConversationPanel
         active={mobilePane === "conversations"}
         busy={busyAction}
+        theme={theme}
         conversations={filteredConversations}
         notifications={notifications}
         notificationUnreadCount={notificationUnreadCount}
@@ -1263,6 +1282,7 @@ function App() {
         }}
         onMarkNotificationRead={handleMarkNotificationRead}
         onMarkAllNotificationsRead={handleMarkAllNotificationsRead}
+        onToggleTheme={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
         onSelect={(id) => {
           setUnreadCounts((current) => ({ ...current, [id]: 0 }));
           setSelectedConversationId(id);

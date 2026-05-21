@@ -83,6 +83,7 @@ func New() *gin.Engine {
 	conversationGroup.DELETE("/:conversationId/knowledge-bases/:knowledgeBaseId", handler.UnbindConversationKnowledgeBase)
 	conversationGroup.GET("/:conversationId/ai-call-logs", handler.ListAICallLogs)
 	conversationGroup.GET("/:conversationId/messages", handler.ListMessages)
+	conversationGroup.GET("/history/search", handler.SearchHistoryMessages)
 
 	knowledgeBaseGroup := engine.Group("/api/v1/knowledge-bases")
 	knowledgeBaseGroup.Use(middleware.Auth())

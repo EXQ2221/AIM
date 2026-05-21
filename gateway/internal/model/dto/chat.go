@@ -68,6 +68,13 @@ type MessageInfo struct {
 	ReadCount      *int32            `json:"readCount,omitempty"`
 }
 
+type HistorySearchMessageItem struct {
+	ConversationID    string      `json:"conversationId"`
+	ConversationType  string      `json:"conversationType"`
+	ConversationTitle string      `json:"conversationTitle"`
+	Message           MessageInfo `json:"message"`
+}
+
 type ReplyPreviewInfo struct {
 	MessageID      int64  `json:"messageId"`
 	SenderID       int64  `json:"senderId"`

@@ -223,6 +223,13 @@ export type MessageInfo = {
   isBotGenerating?: boolean;
 };
 
+export type HistorySearchMessageItem = {
+  conversationId: string;
+  conversationType: string;
+  conversationTitle: string;
+  message: MessageInfo;
+};
+
 export type MessageRecalledEventInfo = {
   messageId: number;
   conversationId: string;

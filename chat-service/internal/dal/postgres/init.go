@@ -5,6 +5,7 @@ import (
 	"encoding/base32"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -45,11 +46,48 @@ func Init(dsn string) (*gorm.DB, error) {
 	); err != nil {
 		return nil, err
 	}
+	if err := ensureMessageSearchSchema(db); err != nil {
+		return nil, err
+	}
 	if err := backfillConversationIDs(db); err != nil {
 		return nil, err
 	}
 
 	return db, nil
+}
+
+func ensureMessageSearchSchema(db *gorm.DB) error {
+	if err := db.Exec(`CREATE EXTENSION IF NOT EXISTS pg_trgm;`).Error; err != nil {
+		return fmt.Errorf("enable pg_trgm extension failed: %w", err)
+	}
+	if err := db.Exec(`
+CREATE INDEX IF NOT EXISTS idx_messages_text_fts_simple
+ON messages USING GIN (
+	to_tsvector(
+		'simple',
+		concat_ws(
+			' ',
+			coalesce(content->>'text', ''),
+			coalesce(content->>'name', ''),
+			coalesce(content->>'eventType', '')
+		)
+	)
+);`).Error; err != nil {
+		return fmt.Errorf("create idx_messages_text_fts_simple failed: %w", err)
+	}
+	if err := db.Exec(`
+CREATE INDEX IF NOT EXISTS idx_messages_text_trgm
+ON messages USING GIN (
+	concat_ws(
+		' ',
+		coalesce(content->>'text', ''),
+		coalesce(content->>'name', ''),
+		coalesce(content->>'eventType', '')
+	) gin_trgm_ops
+);`).Error; err != nil {
+		return fmt.Errorf("create idx_messages_text_trgm failed: %w", err)
+	}
+	return nil
 }
 
 func rebuildConversationMemberSchemaIfNeeded(db *gorm.DB) error {
