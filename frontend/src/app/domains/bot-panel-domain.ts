@@ -2,7 +2,16 @@ import { useCallback, useEffect } from "react";
 import type { AICallLogInfo, AICallLogQuotaInfo, BotInfo } from "../../types";
 import type { DetailTab } from "../types";
 import { errorMessage } from "../utils";
-import { addBotToConversationAction, type BotDomainDeps, refreshAICallLogsAction, refreshAvailableBotsAction, refreshConversationBotsAction, removeBotFromConversationAction } from "./bot-domain";
+import {
+  addBotToConversationAction,
+  createCustomBotAction,
+  type BotDomainDeps,
+  type CreateCustomBotInput,
+  refreshAICallLogsAction,
+  refreshAvailableBotsAction,
+  refreshConversationBotsAction,
+  removeBotFromConversationAction
+} from "./bot-domain";
 
 type UseBotPanelDomainDeps = {
   detailTab: DetailTab;
@@ -63,6 +72,11 @@ export function useBotPanelDomain(deps: UseBotPanelDomainDeps) {
     [botDomainDeps]
   );
 
+  const handleCreateCustomBot = useCallback(
+    async (input: CreateCustomBotInput) => createCustomBotAction(input, botDomainDeps),
+    [botDomainDeps]
+  );
+
   useEffect(() => {
     if (detailTab === "bots" && selectedConversationId && selectedConversationType === "GROUP") {
       void (async () => {
@@ -110,6 +124,7 @@ export function useBotPanelDomain(deps: UseBotPanelDomainDeps) {
   return {
     refreshAICallLogs,
     handleAddBot,
-    handleRemoveBot
+    handleRemoveBot,
+    handleCreateCustomBot
   };
 }

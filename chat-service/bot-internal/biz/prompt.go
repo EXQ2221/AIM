@@ -22,6 +22,28 @@ func BuildPromptWithRAG(
 	scope model.BotPermissionScope,
 	ragChunks []RAGChunk,
 ) string {
+	return BuildPromptWithRAGAndMemory(
+		recentMessages,
+		currentContent,
+		limit,
+		userDisplayNames,
+		currentUserID,
+		scope,
+		ragChunks,
+		nil,
+	)
+}
+
+func BuildPromptWithRAGAndMemory(
+	recentMessages []model.Message,
+	currentContent string,
+	limit int,
+	userDisplayNames map[uint64]string,
+	currentUserID uint64,
+	scope model.BotPermissionScope,
+	ragChunks []RAGChunk,
+	longTermMemories []string,
+) string {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -54,6 +76,18 @@ func BuildPromptWithRAG(
 			for index, chunk := range ragChunks {
 				builder.WriteString(fmt.Sprintf("[%d] %s\n", index+1, strings.TrimSpace(chunk.Content)))
 			}
+		}
+		builder.WriteByte('\n')
+	}
+
+	if len(longTermMemories) > 0 {
+		builder.WriteString("\u3010\u7528\u6237\u957f\u671f\u8bb0\u5fc6\u3011\n")
+		for index, memory := range longTermMemories {
+			value := strings.TrimSpace(memory)
+			if value == "" {
+				continue
+			}
+			builder.WriteString(fmt.Sprintf("[%d] %s\n", index+1, value))
 		}
 		builder.WriteByte('\n')
 	}

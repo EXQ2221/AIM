@@ -1020,6 +1020,63 @@ func TestServiceHandleMentionConversationAndKBContinuesOnRAGError(t *testing.T) 
 	}
 }
 
+func TestServiceHandleMentionSummaryIntentForcesConversationOnly(t *testing.T) {
+	messageRepo := &fakeMessageRepo{
+		recent: []model.Message{
+			{ID: 1, ConversationID: 10, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"history message"}`), Status: model.MessageStatusNormal},
+		},
+	}
+	conversationRepo := &fakeConversationRepo{}
+	aiCallLogRepo := &fakeAICallLogRepo{}
+	llmClient := &fakeLLMClient{response: &llm.GenerateResponse{Content: "ok"}}
+	service := NewService(llmClient, messageRepo, conversationRepo, aiCallLogRepo)
+	service.SetDefaultModel("env-model")
+	service.SetLimiter(NewLimiter(10, 1))
+	searcher := &fakeRAGSearcher{
+		chunks: []RAGChunk{
+			{Index: 1, Content: "kb-1", Score: 0.92},
+		},
+	}
+	service.SetRAGSearcher(searcher)
+	service.SetMemberRepository(&fakeMemberRepo{
+		members: []model.ConversationMember{
+			{ConversationID: 10, MemberType: model.MemberTypeBot, MemberID: 7, Role: model.MemberRoleBot, Status: model.MemberStatusNormal},
+		},
+	})
+	service.SetBotRepository(&fakeBotRepo{
+		bots: map[uint64]*model.Bot{
+			7: {ID: 7, MentionName: "aim", ModelName: "db-model", Status: model.BotStatusEnabled},
+		},
+	})
+	conversationBotRepo := newFakeConversationBotRepo()
+	_ = conversationBotRepo.Create(context.Background(), &model.ConversationBot{
+		ConversationID:  10,
+		BotID:           7,
+		Enabled:         true,
+		PermissionScope: model.BotScopeConversationAndKB,
+	})
+	service.SetConversationBotRepository(conversationBotRepo)
+
+	err := service.HandleMention(context.Background(), HandleMentionRequest{
+		ConversationID: 10,
+		UserID:         10001,
+		Content:        "@aim 总结群聊消息",
+	})
+	if err != nil {
+		t.Fatalf("HandleMention returned error: %v", err)
+	}
+	if searcher.called != 0 {
+		t.Fatalf("expected rag search skipped by summary intent, got %d calls", searcher.called)
+	}
+	if len(llmClient.requests) != 1 {
+		t.Fatalf("expected one llm call, got %d", len(llmClient.requests))
+	}
+	prompt := llmClient.requests[0].Messages[1].Content
+	if strings.Contains(prompt, "【本地知识库】") {
+		t.Fatalf("summary intent should not include knowledge base prompt: %q", prompt)
+	}
+}
+
 func TestSupportsVisionModel(t *testing.T) {
 	if !supportsVisionModel("qwen3.6-plus") {
 		t.Fatalf("qwen3.6-plus should support vision")

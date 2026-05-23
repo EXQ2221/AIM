@@ -62,6 +62,7 @@ func main() {
 	messageRepo := repository.NewMessageRepository(db)
 	aiCallLogRepo := repository.NewAICallLogRepository(db)
 	notificationRepo := repository.NewNotificationRepository(db)
+	userMemoryRepo := repository.NewUserMemoryRepository(db)
 	redisClient := newRedisClient(context.Background(), strings.TrimSpace(os.Getenv("REDIS_ADDR")))
 	if redisClient != nil {
 		defer redisClient.Close()
@@ -77,13 +78,14 @@ func main() {
 	)
 	chatService.SetAICallLogRepository(aiCallLogRepo)
 	chatService.SetNotificationRepository(notificationRepo)
+	chatService.SetUserMemoryRepository(userMemoryRepo)
 	chatService.SetBotTaskTimeout(botconf.BotTaskTimeoutFromEnv())
 	chatService.SetBotManagement(
 		botRepo,
 		conversationBotRepo,
 		botrepo.NewMembershipService(repository.NewTxManager(db), conversationRepo, memberRepo, botRepo, conversationBotRepo),
 	)
-	if botService := newBotServiceFromEnv(messageRepo, conversationRepo, memberRepo, botRepo, conversationBotRepo, ragClient, aiCallLogRepo, redisClient, userClient); botService != nil {
+	if botService := newBotServiceFromEnv(messageRepo, conversationRepo, memberRepo, botRepo, conversationBotRepo, userMemoryRepo, ragClient, aiCallLogRepo, redisClient, userClient); botService != nil {
 		chatService.SetBotService(botService)
 	}
 
@@ -136,6 +138,7 @@ func newBotServiceFromEnv(
 	memberRepo repository.MemberRepository,
 	botRepo repository.BotRepository,
 	conversationBotRepo repository.ConversationBotRepository,
+	userMemoryRepo repository.UserMemoryRepository,
 	ragClient ragservice.Client,
 	aiCallLogRepo repository.AICallLogRepository,
 	redisClient *redisv9.Client,
@@ -160,6 +163,26 @@ func newBotServiceFromEnv(
 	botService := bot.NewService(llmClient, messageRepo, conversationRepo, aiCallLogRepo)
 	botService.SetDefaultModel(llmConfig.Model)
 	botService.SetLLMSelector(func(botModel model.Bot) (llm.Client, string, error) {
+		if botModel.CreatedBy > 0 {
+			customBaseURL := strings.TrimSpace(botModel.APIBaseURL)
+			customAPIKey := strings.TrimSpace(botModel.APIKeyEncrypted)
+			customModel := strings.TrimSpace(botModel.ModelName)
+			if customBaseURL == "" || customAPIKey == "" || customModel == "" {
+				return nil, "", fmt.Errorf("custom bot llm config is incomplete")
+			}
+			customClient, customErr := llm.NewOpenAICompatibleClient(llm.Config{
+				BaseURL:            customBaseURL,
+				APIKey:             customAPIKey,
+				Model:              customModel,
+				Timeout:            botconf.BotLLMTimeoutFromEnv(),
+				InsecureSkipVerify: customBotLLMInsecureSkipVerifyFromEnv(),
+			})
+			if customErr != nil {
+				return nil, "", fmt.Errorf("init custom bot llm client failed: %w", customErr)
+			}
+			return customClient, "custom", nil
+		}
+
 		provider := "primary"
 		mentionName := strings.ToLower(strings.TrimSpace(botModel.MentionName))
 		if mentionName == "qwen" {
@@ -185,6 +208,26 @@ func newBotServiceFromEnv(
 	botService.SetBotRepository(botRepo)
 	botService.SetConversationBotRepository(conversationBotRepo)
 	botService.SetUserClient(userClient)
+	botService.SetUserMemoryRepository(userMemoryRepo)
+	botService.SetMemoryExtractTimeout(botconf.MemoryExtractTimeoutFromEnv())
+	botService.SetMemoryCandidateLimit(botconf.MemoryCandidateLimitFromEnv())
+	botService.SetMemoryMaxRecall(botconf.MemoryMaxRecallFromEnv())
+	if botconf.MemoryEnabledFromEnv() {
+		memoryProvider := botconf.MemoryProviderFromEnv()
+		memoryModel := botconf.MemoryModelFromEnv()
+		memoryClient, _, providerName, selectErr := registry.Client(memoryProvider)
+		if selectErr != nil {
+			log.Printf("memory extractor degraded: provider=%s err=%v", memoryProvider, selectErr)
+		} else {
+			botService.SetUserMemoryExtractor(&bot.LLMUserMemoryExtractor{
+				Client: memoryClient,
+				Model:  memoryModel,
+			})
+			log.Printf("memory extractor enabled: provider=%s model=%s", providerName, memoryModel)
+		}
+	} else {
+		log.Printf("memory extractor disabled by MEMORY_ENABLED=false")
+	}
 	if redisClient != nil {
 		botService.SetReplyPublisher(botclient.NewRedisReplyPublisher(redisClient))
 	}
@@ -199,11 +242,24 @@ func newBotServiceFromEnv(
 	return botService
 }
 
+func customBotLLMInsecureSkipVerifyFromEnv() bool {
+	return parseBoolFromEnv(
+		"BOT_CUSTOM_LLM_INSECURE_SKIP_VERIFY",
+		parseBoolFromEnv("LLM_INSECURE_SKIP_VERIFY", false),
+	)
+}
+
 func newBotRAGSearcher(ragClient ragservice.Client) bot.RAGSearcher {
 	if ragClient == nil {
 		return nil
 	}
-	return botdal.NewConversationRAGSearcher(ragClient)
+	reranker := newRerankerFromEnv()
+	return botdal.NewConversationRAGSearcher(
+		ragClient,
+		reranker,
+		botconf.RerankRecallTopKFromEnv(),
+		botconf.RerankScoreThresholdFromEnv(),
+	)
 }
 
 func ragTopKFromEnv() int {
@@ -223,6 +279,39 @@ func ragSearchTimeoutFromEnv() time.Duration {
 		seconds = 40
 	}
 	return time.Duration(seconds) * time.Second
+}
+
+func newRerankerFromEnv() botdal.TextReranker {
+	if !botconf.RerankEnabledFromEnv() {
+		log.Printf("rerank disabled by RERANK_ENABLED=false")
+		return nil
+	}
+	apiKey := botconf.RerankAPIKeyFromEnv()
+	if strings.TrimSpace(apiKey) == "" {
+		log.Printf("rerank degraded: api key is empty")
+		return nil
+	}
+	insecureSkipVerify := parseBoolFromEnv("RERANK_INSECURE_SKIP_VERIFY", false)
+	client, err := botdal.NewDashScopeCompatibleReranker(
+		botconf.RerankBaseURLFromEnv(),
+		apiKey,
+		botconf.RerankModelFromEnv(),
+		botconf.RerankTimeoutFromEnv(),
+		insecureSkipVerify,
+	)
+	if err != nil {
+		log.Printf("rerank degraded: %v", err)
+		return nil
+	}
+	log.Printf(
+		"rerank enabled: model=%s base_url=%s timeout=%s threshold=%.3f recall_top_k=%d",
+		botconf.RerankModelFromEnv(),
+		botconf.RerankBaseURLFromEnv(),
+		botconf.RerankTimeoutFromEnv().String(),
+		botconf.RerankScoreThresholdFromEnv(),
+		botconf.RerankRecallTopKFromEnv(),
+	)
+	return client
 }
 
 func builtInBotConfigsFromEnv() []pgstore.BuiltInBotConfig {
@@ -280,6 +369,19 @@ func intFromEnv(key string, fallback int) int {
 	parsed, err := strconv.Atoi(value)
 	if err != nil || parsed <= 0 {
 		log.Printf("invalid %s=%q, using %d", key, value, fallback)
+		return fallback
+	}
+	return parsed
+}
+
+func parseBoolFromEnv(key string, fallback bool) bool {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		log.Printf("invalid %s=%q, using %t", key, value, fallback)
 		return fallback
 	}
 	return parsed

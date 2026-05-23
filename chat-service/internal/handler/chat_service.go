@@ -654,6 +654,39 @@ func (h *ChatServiceImpl) CreateMessage(ctx context.Context, req *chatpb.CreateM
 	return &chatpb.CreateMessageResponse{Message: toMessagePB(*message)}, nil
 }
 
+func (h *ChatServiceImpl) WriteUserMemory(ctx context.Context, req *chatpb.WriteUserMemoryRequest) (*chatpb.WriteUserMemoryResponse, error) {
+	item, err := h.Service.WriteUserMemory(ctx, uint64(req.OperatorId), req.Content)
+	if err != nil {
+		return nil, err
+	}
+	return &chatpb.WriteUserMemoryResponse{Memory: toUserMemoryPB(item)}, nil
+}
+
+func (h *ChatServiceImpl) ListUserMemories(ctx context.Context, req *chatpb.ListUserMemoriesRequest) (*chatpb.ListUserMemoriesResponse, error) {
+	limit := 50
+	if req.Limit != nil {
+		limit = int(*req.Limit)
+	}
+	items, err := h.Service.ListUserMemories(ctx, uint64(req.OperatorId), limit)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*chatpb.UserMemoryInfo, 0, len(items))
+	for i := range items {
+		item := items[i]
+		result = append(result, toUserMemoryPB(&item))
+	}
+	return &chatpb.ListUserMemoriesResponse{Memories: result}, nil
+}
+
+func (h *ChatServiceImpl) UpdateUserMemory(ctx context.Context, req *chatpb.UpdateUserMemoryRequest) (*chatpb.UpdateUserMemoryResponse, error) {
+	item, err := h.Service.UpdateUserMemory(ctx, uint64(req.OperatorId), uint64(req.MemoryId), req.Content)
+	if err != nil {
+		return nil, err
+	}
+	return &chatpb.UpdateUserMemoryResponse{Memory: toUserMemoryPB(item)}, nil
+}
+
 func toGroupPB(group *biz.GroupView) *chatpb.GroupInfo {
 	if group == nil {
 		return nil
@@ -884,4 +917,24 @@ func toMessageRecalledEventPB(event *biz.MessageRecalledEventView) *chatpb.Messa
 		resp.RecipientUserIds = recipients
 	}
 	return resp
+}
+
+func toUserMemoryPB(item *biz.UserMemoryView) *chatpb.UserMemoryInfo {
+	if item == nil {
+		return nil
+	}
+	pb := &chatpb.UserMemoryInfo{
+		Id:                   int64(item.ID),
+		UserId:               int64(item.UserID),
+		Content:              item.Content,
+		SourceConversationId: int64(item.SourceConversationID),
+		LastUsedAt:           item.LastUsedAt,
+		CreatedAt:            item.CreatedAt,
+		UpdatedAt:            item.UpdatedAt,
+	}
+	if item.SourceMessageID != nil {
+		value := int64(*item.SourceMessageID)
+		pb.SourceMessageId = &value
+	}
+	return pb
 }

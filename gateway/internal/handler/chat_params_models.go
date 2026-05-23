@@ -180,3 +180,23 @@ func toAICallLogModel(item *chatpb.AICallLogInfo) dto.AICallLogInfo {
 		CreatedAt:         item.CreatedAt,
 	}
 }
+
+func toUserMemoryModel(item *chatpb.UserMemoryInfo) dto.UserMemoryInfo {
+	if item == nil {
+		return dto.UserMemoryInfo{}
+	}
+	info := dto.UserMemoryInfo{
+		ID:                   item.Id,
+		UserID:               item.UserId,
+		Content:              item.Content,
+		SourceConversationID: item.SourceConversationId,
+		LastUsedAt:           item.LastUsedAt,
+		CreatedAt:            item.CreatedAt,
+		UpdatedAt:            item.UpdatedAt,
+	}
+	if item.SourceMessageId != nil {
+		value := *item.SourceMessageId
+		info.SourceMessageID = &value
+	}
+	return info
+}

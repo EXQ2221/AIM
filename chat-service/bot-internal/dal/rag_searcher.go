@@ -2,6 +2,8 @@ package botdal
 
 import (
 	"context"
+	"log"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -12,12 +14,30 @@ import (
 )
 
 type ConversationRAGSearcher struct {
-	RAGClient ragservice.Client
+	RAGClient       ragservice.Client
+	Reranker        TextReranker
+	RecallTopK      int
+	ScoreThreshold  float64
 }
 
-func NewConversationRAGSearcher(ragClient ragservice.Client) *ConversationRAGSearcher {
+func NewConversationRAGSearcher(ragClient ragservice.Client, reranker TextReranker, recallTopK int, scoreThreshold float64) *ConversationRAGSearcher {
+	if recallTopK <= 0 {
+		recallTopK = 30
+	}
+	if recallTopK > 500 {
+		recallTopK = 500
+	}
+	if scoreThreshold < 0 {
+		scoreThreshold = 0
+	}
+	if scoreThreshold > 1 {
+		scoreThreshold = 1
+	}
 	return &ConversationRAGSearcher{
-		RAGClient: ragClient,
+		RAGClient:      ragClient,
+		Reranker:       reranker,
+		RecallTopK:     recallTopK,
+		ScoreThreshold: scoreThreshold,
 	}
 }
 
@@ -42,6 +62,10 @@ func (s *ConversationRAGSearcher) SearchForConversation(ctx context.Context, req
 	if topK > 10 {
 		topK = 10
 	}
+	recallTopK := s.RecallTopK
+	if recallTopK < topK {
+		recallTopK = topK
+	}
 	conversationID := strconv.FormatUint(req.ConversationID, 10)
 
 	bindingsResp, err := s.RAGClient.ListConversationKnowledgeBases(ctx, &ragpb.ListConversationKnowledgeBasesRequest{
@@ -56,7 +80,7 @@ func (s *ConversationRAGSearcher) SearchForConversation(ctx context.Context, req
 		return nil, nil
 	}
 
-	all := make([]bot.RAGChunk, 0, len(bindings)*topK)
+	all := make([]bot.RAGChunk, 0, len(bindings)*recallTopK)
 	for _, binding := range bindings {
 		if binding == nil || binding.KnowledgeBaseId <= 0 {
 			continue
@@ -65,7 +89,7 @@ func (s *ConversationRAGSearcher) SearchForConversation(ctx context.Context, req
 			OperatorId:      int64(req.UserID),
 			KnowledgeBaseId: binding.KnowledgeBaseId,
 			Query:           question,
-			TopK:            int32Ptr(int32(topK)),
+			TopK:            int32Ptr(int32(recallTopK)),
 		})
 		if searchErr != nil {
 			return nil, searchErr
@@ -84,6 +108,23 @@ func (s *ConversationRAGSearcher) SearchForConversation(ctx context.Context, req
 	if len(all) == 0 {
 		return nil, nil
 	}
+	all = deduplicateChunksByContent(all)
+
+	if s.Reranker != nil && len(all) > 1 {
+		docs := make([]string, 0, len(all))
+		for _, item := range all {
+			docs = append(docs, strings.TrimSpace(item.Content))
+		}
+		results, err := s.Reranker.Rerank(ctx, question, docs, len(docs))
+		if err != nil {
+			log.Printf("rag rerank degraded: conversation=%d err=%v", req.ConversationID, err)
+		} else if len(results) > 0 {
+			all = applyRerankResults(all, results, s.ScoreThreshold)
+			if len(all) == 0 {
+				return nil, nil
+			}
+		}
+	}
 
 	// Keep topK chunks globally across all bound KBs.
 	sortByScoreDesc(all)
@@ -101,13 +142,49 @@ func int32Ptr(value int32) *int32 {
 }
 
 func sortByScoreDesc(chunks []bot.RAGChunk) {
-	for i := 0; i < len(chunks); i++ {
-		for j := i + 1; j < len(chunks); j++ {
-			if chunks[j].Score > chunks[i].Score {
-				chunks[i], chunks[j] = chunks[j], chunks[i]
-			}
-		}
+	sort.Slice(chunks, func(i, j int) bool {
+		return chunks[i].Score > chunks[j].Score
+	})
+}
+
+func deduplicateChunksByContent(chunks []bot.RAGChunk) []bot.RAGChunk {
+	if len(chunks) <= 1 {
+		return chunks
 	}
+	seen := make(map[string]struct{}, len(chunks))
+	result := make([]bot.RAGChunk, 0, len(chunks))
+	for _, item := range chunks {
+		key := strings.TrimSpace(item.Content)
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, item)
+	}
+	return result
+}
+
+func applyRerankResults(chunks []bot.RAGChunk, results []RerankResult, scoreThreshold float64) []bot.RAGChunk {
+	if len(chunks) == 0 || len(results) == 0 {
+		return chunks
+	}
+	reranked := make([]bot.RAGChunk, 0, len(results))
+	for _, item := range results {
+		if item.Index < 0 || item.Index >= len(chunks) {
+			continue
+		}
+		score := item.RelevanceScore
+		if score < scoreThreshold {
+			continue
+		}
+		next := chunks[item.Index]
+		next.Score = score
+		reranked = append(reranked, next)
+	}
+	return reranked
 }
 
 var _ bot.RAGSearcher = (*ConversationRAGSearcher)(nil)

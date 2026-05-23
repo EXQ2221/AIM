@@ -43,6 +43,7 @@ func Init(dsn string) (*gorm.DB, error) {
 		&model.ConversationBot{},
 		&model.AICallLog{},
 		&model.Notification{},
+		&model.UserMemory{},
 	); err != nil {
 		return nil, err
 	}
@@ -65,12 +66,9 @@ CREATE INDEX IF NOT EXISTS idx_messages_text_fts_simple
 ON messages USING GIN (
 	to_tsvector(
 		'simple',
-		concat_ws(
-			' ',
-			coalesce(content->>'text', ''),
-			coalesce(content->>'name', ''),
-			coalesce(content->>'eventType', '')
-		)
+		coalesce(content->>'text', '') || ' ' ||
+		coalesce(content->>'name', '') || ' ' ||
+		coalesce(content->>'eventType', '')
 	)
 );`).Error; err != nil {
 		return fmt.Errorf("create idx_messages_text_fts_simple failed: %w", err)
@@ -78,10 +76,9 @@ ON messages USING GIN (
 	if err := db.Exec(`
 CREATE INDEX IF NOT EXISTS idx_messages_text_trgm
 ON messages USING GIN (
-	concat_ws(
-		' ',
-		coalesce(content->>'text', ''),
-		coalesce(content->>'name', ''),
+	(
+		coalesce(content->>'text', '') || ' ' ||
+		coalesce(content->>'name', '') || ' ' ||
 		coalesce(content->>'eventType', '')
 	) gin_trgm_ops
 );`).Error; err != nil {

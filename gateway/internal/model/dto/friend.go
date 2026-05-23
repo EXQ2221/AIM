@@ -35,6 +35,8 @@ type FriendInfo struct {
 	Remark    string `json:"remark"`
 	GroupID   *int64 `json:"group_id,omitempty"`
 	Status    string `json:"status"`
+	IsOnline  bool   `json:"is_online"`
+	Presence  string `json:"presence"`
 	CreatedAt int64  `json:"created_at"`
 	UpdatedAt int64  `json:"updated_at"`
 }

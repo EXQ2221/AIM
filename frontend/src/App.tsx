@@ -92,6 +92,7 @@ import type {
   ReplyPreviewInfo,
   SessionInfo,
   TypingEventData,
+  UserMemoryInfo,
   UserInfo
 } from "./types";
 import { AuthView } from "./app/views/auth-view";
@@ -146,6 +147,7 @@ function App() {
   const [friendGroups, setFriendGroups] = useState<FriendGroupInfo[]>([]);
   const [friends, setFriends] = useState<FriendInfo[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequestInfo[]>([]);
+  const [invisibleMode, setInvisibleMode] = useState(false);
   const [conversations, setConversations] = useState<ConversationInfo[]>([]);
   const [notifications, setNotifications] = useState<NotificationInfo[]>([]);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
@@ -182,6 +184,8 @@ function App() {
   const [knowledgeSearchChunks, setKnowledgeSearchChunks] = useState<KnowledgeSearchChunkInfo[]>([]);
   const [conversationKnowledgeBases, setConversationKnowledgeBases] = useState<ConversationKnowledgeBaseInfo[]>([]);
   const [loadingKnowledge, setLoadingKnowledge] = useState(false);
+  const [userMemories, setUserMemories] = useState<UserMemoryInfo[]>([]);
+  const [loadingUserMemories, setLoadingUserMemories] = useState(false);
   const [theme, setTheme] = useState<UITheme>(() => {
     try {
       const stored = window.localStorage.getItem(themeStorageKey);
@@ -313,7 +317,7 @@ function App() {
   }, []);
   const currentMember = useMemo(() => {
     if (!user) return null;
-    return members.find((member) => member.userId === user.user_id) ?? null;
+    return members.find((member) => member.userId === user.user_id && (member.memberType || "USER") !== "BOT") ?? null;
   }, [members, user]);
   const canSendCurrentConversation = useMemo(() => {
     if (!canSendToConversation(selectedConversation, members, friends)) {
@@ -403,10 +407,16 @@ function App() {
   }, []);
 
   const refreshFriends = useCallback(async () => {
-    const [groups, friendList, requests] = await Promise.all([api.friendGroups(), api.friends(), api.friendRequests()]);
+    const [groups, friendList, requests, presenceSettings] = await Promise.all([
+      api.friendGroups(),
+      api.friends(),
+      api.friendRequests(),
+      api.getPresenceSettings()
+    ]);
     setFriendGroups(groups);
     setFriends(sortFriends(friendList));
     setFriendRequests(sortFriendRequests(requests));
+    setInvisibleMode(Boolean(presenceSettings?.invisible));
     return { groups, friends: friendList, requests };
   }, []);
 
@@ -988,6 +998,59 @@ function App() {
   const handleDeleteFriend = async (friendUserId: number) =>
     deleteFriendAction(friendUserId, friendDomainDeps);
 
+  const handleUpdateInvisibleMode = async (nextInvisible: boolean) => {
+    setBusyAction(true);
+    try {
+      const data = await api.updatePresenceSettings(nextInvisible);
+      setInvisibleMode(Boolean(data.invisible));
+      await refreshFriends();
+      showToast(nextInvisible ? "已开启隐身模式" : "已关闭隐身模式", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+      throw error;
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const refreshUserMemories = useCallback(async () => {
+    setLoadingUserMemories(true);
+    try {
+      const data = await api.listUserMemories(50);
+      setUserMemories(data);
+    } finally {
+      setLoadingUserMemories(false);
+    }
+  }, []);
+
+  const handleWriteUserMemory = async (content: string) => {
+    setBusyAction(true);
+    try {
+      await api.writeUserMemory(content);
+      await refreshUserMemories();
+      showToast("记忆已保存", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+      throw error;
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleUpdateUserMemory = async (memoryId: number, content: string) => {
+    setBusyAction(true);
+    try {
+      await api.updateUserMemory(memoryId, content);
+      await refreshUserMemories();
+      showToast("记忆已更新", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+      throw error;
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
   const handleMarkNotificationRead = async (notificationId: number) => {
     const current = notifications.find((item) => item.id === notificationId);
     if (current?.persistent === false) {
@@ -1007,7 +1070,7 @@ function App() {
     await refreshNotifications();
   };
 
-  const { refreshAICallLogs, handleAddBot, handleRemoveBot } = useBotPanelDomain({
+  const { refreshAICallLogs, handleAddBot, handleRemoveBot, handleCreateCustomBot } = useBotPanelDomain({
     detailTab,
     selectedConversationId,
     selectedConversationType: selectedConversation?.type ?? null,
@@ -1106,6 +1169,15 @@ function App() {
       void refreshKnowledgeDocuments();
     }
   }, [detailTab, refreshKnowledgeDocuments, selectedKnowledgeBaseId]);
+
+  useEffect(() => {
+    if (!user || detailTab !== "account") {
+      return;
+    }
+    void refreshUserMemories().catch((error) => {
+      showToast(errorMessage(error), "error");
+    });
+  }, [detailTab, refreshUserMemories, showToast, user]);
 
   const handleCreateKnowledgeBase = async (input: { name: string; description: string }) => {
     setKnowledgeBusy(true);
@@ -1343,6 +1415,7 @@ function App() {
         wsStatus={wsStatus}
         notificationStatus={notificationStatus}
         notificationsEnabled={notificationsEnabled}
+        invisibleMode={invisibleMode}
         selectedConversationId={selectedConversationId}
         selectedConversation={selectedConversation}
         selectedConversationType={selectedConversation?.type ?? null}
@@ -1361,6 +1434,8 @@ function App() {
         conversationKnowledgeBases={conversationKnowledgeBases}
         loadingKnowledge={loadingKnowledge}
         knowledgeBusy={knowledgeBusy}
+        userMemories={userMemories}
+        loadingUserMemories={loadingUserMemories}
         onTabChange={setDetailTab}
         onCreateFriendGroup={handleCreateFriendGroup}
         onAddFriend={handleAddFriend}
@@ -1374,6 +1449,7 @@ function App() {
         onAvatarUpload={handleAvatarUpload}
         onRevokeSession={handleRevokeSession}
         onToggleNotifications={handleToggleNotifications}
+        onToggleInvisibleMode={handleUpdateInvisibleMode}
         onTransferOwner={handleTransferOwner}
         onSetAdmin={handleSetAdmin}
         onRemoveAdmin={handleRemoveAdmin}
@@ -1384,6 +1460,7 @@ function App() {
         onUpdateGroupAnnouncement={handleUpdateGroupAnnouncement}
         onAddBot={handleAddBot}
         onRemoveBot={handleRemoveBot}
+        onCreateCustomBot={handleCreateCustomBot}
         onAICallLogStatusChange={setAICallLogStatus}
         onRefreshAICallLogs={refreshAICallLogs}
         onSelectKnowledgeBase={setSelectedKnowledgeBaseId}
@@ -1394,6 +1471,9 @@ function App() {
         onBindConversationKnowledgeBase={handleBindConversationKnowledgeBase}
         onUnbindConversationKnowledgeBase={handleUnbindConversationKnowledgeBase}
         onRefreshKnowledgePanelData={loadKnowledgePanelData}
+        onRefreshUserMemories={refreshUserMemories}
+        onWriteUserMemory={handleWriteUserMemory}
+        onUpdateUserMemory={handleUpdateUserMemory}
         onMention={handleMention}
         onClose={() => setMobilePane(selectedConversation ? "chat" : "conversations")}
       />

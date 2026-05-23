@@ -113,8 +113,8 @@ export function ConversationPanel({
 
       {createOpen && (
         <form className="drawer-form" onSubmit={create}>
-          <input required value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="Group name" />
-          <textarea value={announcement} onChange={(event) => setAnnouncement(event.target.value)} rows={3} placeholder="Announcement" />
+          <input required value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="群名称" />
+          <textarea value={announcement} onChange={(event) => setAnnouncement(event.target.value)} rows={3} placeholder="群公告" />
           <select value={joinPolicy} onChange={(event) => setJoinPolicy(event.target.value)}>
             {joinPolicies.map((item) => (
               <option key={item.value} value={item.value}>
@@ -131,7 +131,7 @@ export function ConversationPanel({
 
       {joinOpen && (
         <form className="drawer-form" onSubmit={join}>
-          <input required value={joinID} onChange={(event) => setJoinID(event.target.value)} placeholder="conversationId (for example c_xxxxx)" />
+          <input required value={joinID} onChange={(event) => setJoinID(event.target.value)} placeholder="conversationId（如 c_xxxxx）" />
           <button disabled={busy} type="submit">
             {busy ? <Loader2 className="spin" size={16} /> : <UserPlus size={16} />}
             加入
@@ -141,12 +141,7 @@ export function ConversationPanel({
 
       <label className="search-box">
         <Search size={17} />
-        <input
-          aria-label="搜索会话"
-          value={search}
-          onChange={(event) => onSearch(event.target.value)}
-          placeholder="Search conversations or IDs"
-        />
+        <input aria-label="搜索会话" value={search} onChange={(event) => onSearch(event.target.value)} placeholder="搜索会话或会话 ID" />
       </label>
 
       <div className="list-meta">
@@ -156,11 +151,7 @@ export function ConversationPanel({
 
       <div className="conversation-notification-card">
         <div className="conversation-notification-header">
-          <button
-            className="conversation-notification-toggle"
-            type="button"
-            onClick={() => setNotificationCollapsed((current) => !current)}
-          >
+          <button className="conversation-notification-toggle" type="button" onClick={() => setNotificationCollapsed((current) => !current)}>
             <Bell size={14} />
             通知中心
           </button>
@@ -245,7 +236,7 @@ export function ConversationPanel({
           <div className="empty-block">
             <UsersRound size={30} />
             <strong>暂无会话</strong>
-            <span>创建会话或输入：会话 ID 加入</span>
+            <span>创建会话或输入会话 ID 加入</span>
           </div>
         )}
       </div>

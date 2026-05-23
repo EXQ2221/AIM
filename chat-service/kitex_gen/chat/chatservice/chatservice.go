@@ -293,6 +293,27 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"WriteUserMemory": kitex.NewMethodInfo(
+		writeUserMemoryHandler,
+		newChatServiceWriteUserMemoryArgs,
+		newChatServiceWriteUserMemoryResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ListUserMemories": kitex.NewMethodInfo(
+		listUserMemoriesHandler,
+		newChatServiceListUserMemoriesArgs,
+		newChatServiceListUserMemoriesResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"UpdateUserMemory": kitex.NewMethodInfo(
+		updateUserMemoryHandler,
+		newChatServiceUpdateUserMemoryArgs,
+		newChatServiceUpdateUserMemoryResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 }
 
 var (
@@ -1079,6 +1100,60 @@ func newChatServiceFindSingleByUsersResult() interface{} {
 	return chat.NewChatServiceFindSingleByUsersResult()
 }
 
+func writeUserMemoryHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceWriteUserMemoryArgs)
+	realResult := result.(*chat.ChatServiceWriteUserMemoryResult)
+	success, err := handler.(chat.ChatService).WriteUserMemory(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceWriteUserMemoryArgs() interface{} {
+	return chat.NewChatServiceWriteUserMemoryArgs()
+}
+
+func newChatServiceWriteUserMemoryResult() interface{} {
+	return chat.NewChatServiceWriteUserMemoryResult()
+}
+
+func listUserMemoriesHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceListUserMemoriesArgs)
+	realResult := result.(*chat.ChatServiceListUserMemoriesResult)
+	success, err := handler.(chat.ChatService).ListUserMemories(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceListUserMemoriesArgs() interface{} {
+	return chat.NewChatServiceListUserMemoriesArgs()
+}
+
+func newChatServiceListUserMemoriesResult() interface{} {
+	return chat.NewChatServiceListUserMemoriesResult()
+}
+
+func updateUserMemoryHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceUpdateUserMemoryArgs)
+	realResult := result.(*chat.ChatServiceUpdateUserMemoryResult)
+	success, err := handler.(chat.ChatService).UpdateUserMemory(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceUpdateUserMemoryArgs() interface{} {
+	return chat.NewChatServiceUpdateUserMemoryArgs()
+}
+
+func newChatServiceUpdateUserMemoryResult() interface{} {
+	return chat.NewChatServiceUpdateUserMemoryResult()
+}
+
 type kClient struct {
 	c client.Client
 }
@@ -1484,6 +1559,36 @@ func (p *kClient) FindSingleByUsers(ctx context.Context, req *chat.FindSingleByU
 	_args.Req = req
 	var _result chat.ChatServiceFindSingleByUsersResult
 	if err = p.c.Call(ctx, "FindSingleByUsers", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) WriteUserMemory(ctx context.Context, req *chat.WriteUserMemoryRequest) (r *chat.WriteUserMemoryResponse, err error) {
+	var _args chat.ChatServiceWriteUserMemoryArgs
+	_args.Req = req
+	var _result chat.ChatServiceWriteUserMemoryResult
+	if err = p.c.Call(ctx, "WriteUserMemory", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListUserMemories(ctx context.Context, req *chat.ListUserMemoriesRequest) (r *chat.ListUserMemoriesResponse, err error) {
+	var _args chat.ChatServiceListUserMemoriesArgs
+	_args.Req = req
+	var _result chat.ChatServiceListUserMemoriesResult
+	if err = p.c.Call(ctx, "ListUserMemories", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) UpdateUserMemory(ctx context.Context, req *chat.UpdateUserMemoryRequest) (r *chat.UpdateUserMemoryResponse, err error) {
+	var _args chat.ChatServiceUpdateUserMemoryArgs
+	_args.Req = req
+	var _result chat.ChatServiceUpdateUserMemoryResult
+	if err = p.c.Call(ctx, "UpdateUserMemory", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

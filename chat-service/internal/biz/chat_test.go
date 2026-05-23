@@ -3,6 +3,8 @@ package biz
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -265,6 +267,148 @@ func TestCreateMessageRejectsNonMember(t *testing.T) {
 	}
 }
 
+func TestWriteUserMemorySuccess(t *testing.T) {
+	service := NewChatService(
+		newFakeConversationRepo(),
+		newFakeGroupRepo(),
+		newFakeMemberRepo(),
+		newFakeMessageRepo(),
+		&fakeTxManager{},
+		nil,
+	)
+	memoryRepo := newFakeUserMemoryRepo()
+	service.SetUserMemoryRepository(memoryRepo)
+
+	view, err := service.WriteUserMemory(context.Background(), 10001, "  我喜欢用 Go 写后端  ")
+	if err != nil {
+		t.Fatalf("WriteUserMemory returned error: %v", err)
+	}
+	if view == nil {
+		t.Fatal("WriteUserMemory returned nil view")
+	}
+	if view.UserID != 10001 || view.Content != "我喜欢用 Go 写后端" {
+		t.Fatalf("unexpected memory view: %+v", view)
+	}
+	if view.ID == 0 {
+		t.Fatalf("expected memory id assigned, got %+v", view)
+	}
+}
+
+func TestWriteUserMemoryRejectsEmptyAndTooLong(t *testing.T) {
+	service := NewChatService(
+		newFakeConversationRepo(),
+		newFakeGroupRepo(),
+		newFakeMemberRepo(),
+		newFakeMessageRepo(),
+		&fakeTxManager{},
+		nil,
+	)
+	service.SetUserMemoryRepository(newFakeUserMemoryRepo())
+
+	if _, err := service.WriteUserMemory(context.Background(), 10001, "   "); !errors.Is(err, ErrUserMemoryEmpty) {
+		t.Fatalf("expected ErrUserMemoryEmpty, got %v", err)
+	}
+
+	longContent := strings.Repeat("测", 513)
+	if _, err := service.WriteUserMemory(context.Background(), 10001, longContent); !errors.Is(err, ErrUserMemoryTooLong) {
+		t.Fatalf("expected ErrUserMemoryTooLong, got %v", err)
+	}
+}
+
+func TestWriteUserMemoryUpsertByHash(t *testing.T) {
+	service := NewChatService(
+		newFakeConversationRepo(),
+		newFakeGroupRepo(),
+		newFakeMemberRepo(),
+		newFakeMessageRepo(),
+		&fakeTxManager{},
+		nil,
+	)
+	memoryRepo := newFakeUserMemoryRepo()
+	service.SetUserMemoryRepository(memoryRepo)
+
+	first, err := service.WriteUserMemory(context.Background(), 10001, "喜欢咖啡")
+	if err != nil {
+		t.Fatalf("first WriteUserMemory returned error: %v", err)
+	}
+	second, err := service.WriteUserMemory(context.Background(), 10001, "喜欢咖啡")
+	if err != nil {
+		t.Fatalf("second WriteUserMemory returned error: %v", err)
+	}
+	if first.ID != second.ID {
+		t.Fatalf("expected same memory id after upsert, got first=%d second=%d", first.ID, second.ID)
+	}
+	if len(memoryRepo.memories) != 1 {
+		t.Fatalf("expected one stored memory after upsert, got %d", len(memoryRepo.memories))
+	}
+}
+
+func TestListUserMemories(t *testing.T) {
+	service := NewChatService(
+		newFakeConversationRepo(),
+		newFakeGroupRepo(),
+		newFakeMemberRepo(),
+		newFakeMessageRepo(),
+		&fakeTxManager{},
+		nil,
+	)
+	memoryRepo := newFakeUserMemoryRepo()
+	service.SetUserMemoryRepository(memoryRepo)
+	_, _ = service.WriteUserMemory(context.Background(), 10001, "m1")
+	_, _ = service.WriteUserMemory(context.Background(), 10001, "m2")
+
+	items, err := service.ListUserMemories(context.Background(), 10001, 20)
+	if err != nil {
+		t.Fatalf("ListUserMemories returned error: %v", err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("expected 2 memories, got %d", len(items))
+	}
+}
+
+func TestUpdateUserMemorySupportsEmptyContent(t *testing.T) {
+	service := NewChatService(
+		newFakeConversationRepo(),
+		newFakeGroupRepo(),
+		newFakeMemberRepo(),
+		newFakeMessageRepo(),
+		&fakeTxManager{},
+		nil,
+	)
+	memoryRepo := newFakeUserMemoryRepo()
+	service.SetUserMemoryRepository(memoryRepo)
+	item, _ := service.WriteUserMemory(context.Background(), 10001, "需要清空")
+
+	updated, err := service.UpdateUserMemory(context.Background(), 10001, item.ID, "   ")
+	if err != nil {
+		t.Fatalf("UpdateUserMemory returned error: %v", err)
+	}
+	if updated.Content != "" {
+		t.Fatalf("expected empty content, got %q", updated.Content)
+	}
+}
+
+func TestUpdateUserMemoryRejectsTooLongAndNotFound(t *testing.T) {
+	service := NewChatService(
+		newFakeConversationRepo(),
+		newFakeGroupRepo(),
+		newFakeMemberRepo(),
+		newFakeMessageRepo(),
+		&fakeTxManager{},
+		nil,
+	)
+	service.SetUserMemoryRepository(newFakeUserMemoryRepo())
+
+	if _, err := service.UpdateUserMemory(context.Background(), 10001, 999, "x"); !errors.Is(err, ErrUserMemoryNotFound) {
+		t.Fatalf("expected ErrUserMemoryNotFound, got %v", err)
+	}
+	longContent := strings.Repeat("测", 513)
+	_, _ = service.WriteUserMemory(context.Background(), 10001, "base")
+	if _, err := service.UpdateUserMemory(context.Background(), 10001, 1, longContent); !errors.Is(err, ErrUserMemoryTooLong) {
+		t.Fatalf("expected ErrUserMemoryTooLong, got %v", err)
+	}
+}
+
 func TestCreateMessageRejectsMutedMember(t *testing.T) {
 	service := newMessageTestService(model.MemberRoleMember, model.MemberStatusMuted, false)
 	_, err := service.CreateMessage(context.Background(), 10001, "c_test", "hello", nil, "")
@@ -401,6 +545,42 @@ func TestRecallMessageRejectsNonSender(t *testing.T) {
 	})
 	if !errors.Is(err, ErrMessageRecallDenied) {
 		t.Fatalf("expected ErrMessageRecallDenied, got %v", err)
+	}
+}
+
+func TestRecallMessageRejectsExpiredMessage(t *testing.T) {
+	conversationRepo := newFakeConversationRepo()
+	groupRepo := newFakeGroupRepo()
+	memberRepo := newFakeMemberRepo()
+	messageRepo := newFakeMessageRepo()
+	service := NewChatService(conversationRepo, groupRepo, memberRepo, messageRepo, &fakeTxManager{}, nil)
+
+	conversationRepo.conversations[1] = &model.Conversation{ID: 1, ConversationID: "c_test", Type: model.ConversationTypeGroup}
+	_ = memberRepo.Create(context.Background(), &model.ConversationMember{
+		ConversationID: 1,
+		MemberType:     model.MemberTypeUser,
+		MemberID:       10001,
+		Role:           model.MemberRoleOwner,
+		Status:         model.MemberStatusNormal,
+		JoinedAt:       time.Now(),
+	})
+	_ = messageRepo.Create(context.Background(), &model.Message{
+		ConversationID: 1,
+		SenderID:       10001,
+		SenderType:     model.SenderTypeUser,
+		MessageType:    model.MessageTypeText,
+		Content:        datatypes.JSON(`{"text":"hello"}`),
+		Status:         model.MessageStatusNormal,
+		CreatedAt:      time.Now().Add(-(messageRecallWindow + time.Second)),
+	})
+
+	_, err := service.RecallMessage(context.Background(), RecallMessageInput{
+		OperatorID:     10001,
+		ConversationID: "c_test",
+		MessageID:      1,
+	})
+	if !errors.Is(err, ErrMessageRecallExpired) {
+		t.Fatalf("expected ErrMessageRecallExpired, got %v", err)
 	}
 }
 
@@ -1303,4 +1483,106 @@ type panicBotMentionHandler struct {
 func (h *panicBotMentionHandler) HandleMention(ctx context.Context, req bot.HandleMentionRequest) error {
 	h.called <- struct{}{}
 	panic("bot panic")
+}
+
+type fakeUserMemoryRepo struct {
+	seq      uint64
+	memories map[string]*model.UserMemory
+}
+
+func newFakeUserMemoryRepo() *fakeUserMemoryRepo {
+	return &fakeUserMemoryRepo{
+		seq:      1,
+		memories: make(map[string]*model.UserMemory),
+	}
+}
+
+func (r *fakeUserMemoryRepo) key(userID uint64, hash string) string {
+	return fmt.Sprintf("%d:%s", userID, hash)
+}
+
+func (r *fakeUserMemoryRepo) ListRecentByUserID(ctx context.Context, userID uint64, limit int) ([]model.UserMemory, error) {
+	items := make([]model.UserMemory, 0, len(r.memories))
+	for _, item := range r.memories {
+		if item.UserID == userID {
+			items = append(items, *item)
+		}
+	}
+	return items, nil
+}
+
+func (r *fakeUserMemoryRepo) UpsertByHash(ctx context.Context, memory *model.UserMemory) error {
+	if memory == nil {
+		return nil
+	}
+	key := r.key(memory.UserID, memory.MemoryHash)
+	if existing, ok := r.memories[key]; ok {
+		existing.Content = memory.Content
+		existing.SourceConversationID = memory.SourceConversationID
+		existing.SourceMessageID = memory.SourceMessageID
+		existing.LastUsedAt = memory.LastUsedAt
+		existing.UpdatedAt = time.Now()
+		return nil
+	}
+	copyItem := *memory
+	copyItem.ID = r.seq
+	r.seq++
+	now := time.Now()
+	copyItem.CreatedAt = now
+	copyItem.UpdatedAt = now
+	r.memories[key] = &copyItem
+	return nil
+}
+
+func (r *fakeUserMemoryRepo) GetByHash(ctx context.Context, userID uint64, memoryHash string) (*model.UserMemory, error) {
+	item, ok := r.memories[r.key(userID, memoryHash)]
+	if !ok {
+		return nil, gorm.ErrRecordNotFound
+	}
+	copyItem := *item
+	return &copyItem, nil
+}
+
+func (r *fakeUserMemoryRepo) GetByID(ctx context.Context, userID uint64, memoryID uint64) (*model.UserMemory, error) {
+	for _, item := range r.memories {
+		if item.UserID == userID && item.ID == memoryID {
+			copyItem := *item
+			return &copyItem, nil
+		}
+	}
+	return nil, gorm.ErrRecordNotFound
+}
+
+func (r *fakeUserMemoryRepo) UpdateContentByID(ctx context.Context, userID uint64, memoryID uint64, content string, memoryHash string, lastUsedAt time.Time) error {
+	for _, item := range r.memories {
+		if item.UserID == userID && item.ID == memoryID {
+			item.Content = content
+			item.MemoryHash = memoryHash
+			item.LastUsedAt = lastUsedAt
+			item.UpdatedAt = time.Now()
+			return nil
+		}
+	}
+	return gorm.ErrRecordNotFound
+}
+
+func (r *fakeUserMemoryRepo) TouchByIDs(ctx context.Context, userID uint64, ids []uint64, usedAt time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	idSet := make(map[uint64]struct{}, len(ids))
+	for _, id := range ids {
+		idSet[id] = struct{}{}
+	}
+	for _, item := range r.memories {
+		if item.UserID != userID {
+			continue
+		}
+		if _, ok := idSet[item.ID]; !ok {
+			continue
+		}
+		item.LastUsedAt = usedAt
+		item.UpdatedAt = time.Now()
+	}
+	return nil
 }

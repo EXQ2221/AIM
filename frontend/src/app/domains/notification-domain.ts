@@ -22,11 +22,11 @@ export function useNotificationDomain(deps: UseNotificationDomainDeps) {
       if (getNotificationStatus() !== "granted") return;
       if (message.messageType === "SYSTEM") return;
 
-      const title = message.senderType === "BOT" || message.messageType === "BOT_REPLY" ? "AIM Bot reply" : "AIM new message";
+      const title = message.senderType === "BOT" || message.messageType === "BOT_REPLY" ? "AIM Bot 回复" : "AIM 新消息";
       const content = messageText(message).trim();
       try {
         new Notification(title, {
-          body: content ? truncateNotificationBody(content) : "You received a new message"
+          body: content ? truncateNotificationBody(content) : "你收到一条新消息"
         });
       } catch {
         // Notification support can disappear in restricted browser contexts.
@@ -45,7 +45,7 @@ export function useNotificationDomain(deps: UseNotificationDomainDeps) {
       setNotificationStatus("granted");
       setNotificationsEnabled(true);
       saveNotificationPreference(true);
-      showToast("Browser notifications enabled", "success");
+      showToast("浏览器通知已启用", "success");
       return;
     }
     if (Notification.permission === "denied") {
@@ -60,7 +60,7 @@ export function useNotificationDomain(deps: UseNotificationDomainDeps) {
       setNotificationsEnabled(true);
       saveNotificationPreference(true);
     }
-    showToast(permission === "granted" ? "Browser notifications enabled" : "Browser notifications not enabled", permission === "granted" ? "success" : "info");
+    showToast(permission === "granted" ? "浏览器通知已启用" : "浏览器通知未启用", permission === "granted" ? "success" : "info");
   }, [showToast]);
 
   const toggleNotifications = useCallback(async () => {
@@ -68,7 +68,7 @@ export function useNotificationDomain(deps: UseNotificationDomainDeps) {
       const next = !notificationsEnabled;
       setNotificationsEnabled(next);
       saveNotificationPreference(next);
-      showToast(next ? "Browser notifications enabled" : "Browser notifications disabled", next ? "success" : "info");
+      showToast(next ? "浏览器通知已启用" : "浏览器通知已关闭", next ? "success" : "info");
       return;
     }
     await requestNotifications();

@@ -14,6 +14,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,23 +41,28 @@ type MentionHandler interface {
 }
 
 type Service struct {
-	LLM                 llm.Client
-	LLMSelector         func(bot model.Bot) (llm.Client, string, error)
-	LLMTimeout          time.Duration
-	DefaultModel        string
-	ContextMessages     int
-	DailyTokenLimit     int64
-	Limiter             *Limiter
-	MessageRepo         repository.MessageRepository
-	ConversationRepo    repository.ConversationRepository
-	MemberRepo          repository.MemberRepository
-	BotRepo             repository.BotRepository
-	ConversationBotRepo repository.ConversationBotRepository
-	AICallLogRepo       repository.AICallLogRepository
-	ReplyPublisher      botclient.ReplyPublisher
-	UserClient          rpc.UserClient
-	RAGSearcher         RAGSearcher
-	RAGTopK             int
+	LLM                  llm.Client
+	LLMSelector          func(bot model.Bot) (llm.Client, string, error)
+	LLMTimeout           time.Duration
+	DefaultModel         string
+	ContextMessages      int
+	DailyTokenLimit      int64
+	Limiter              *Limiter
+	MessageRepo          repository.MessageRepository
+	ConversationRepo     repository.ConversationRepository
+	MemberRepo           repository.MemberRepository
+	BotRepo              repository.BotRepository
+	ConversationBotRepo  repository.ConversationBotRepository
+	AICallLogRepo        repository.AICallLogRepository
+	ReplyPublisher       botclient.ReplyPublisher
+	UserClient           rpc.UserClient
+	RAGSearcher          RAGSearcher
+	RAGTopK              int
+	UserMemoryRepo       repository.UserMemoryRepository
+	UserMemoryExtractor  UserMemoryExtractor
+	MemoryExtractTimeout time.Duration
+	MemoryCandidateLimit int
+	MemoryMaxRecall      int
 }
 
 type RAGChunk struct {
@@ -84,6 +91,8 @@ type botReplyStreamMeta struct {
 	recipientUserIDs []int64
 }
 
+var summaryCountDirectivePattern = regexp.MustCompile(`(?i)\[AIM_SUMMARY_COUNT=(\d{1,4})\]`)
+
 func NewService(
 	llmClient llm.Client,
 	messageRepo repository.MessageRepository,
@@ -91,12 +100,15 @@ func NewService(
 	aiCallLogRepo repository.AICallLogRepository,
 ) *Service {
 	return &Service{
-		LLM:              llmClient,
-		ContextMessages:  20,
-		DailyTokenLimit:  1_000_000,
-		MessageRepo:      messageRepo,
-		ConversationRepo: conversationRepo,
-		AICallLogRepo:    aiCallLogRepo,
+		LLM:                  llmClient,
+		ContextMessages:      20,
+		DailyTokenLimit:      1_000_000,
+		MemoryExtractTimeout: 6 * time.Second,
+		MemoryCandidateLimit: 20,
+		MemoryMaxRecall:      5,
+		MessageRepo:          messageRepo,
+		ConversationRepo:     conversationRepo,
+		AICallLogRepo:        aiCallLogRepo,
 	}
 }
 
@@ -164,6 +176,32 @@ func (s *Service) SetRAGTopK(topK int) {
 	s.RAGTopK = topK
 }
 
+func (s *Service) SetUserMemoryRepository(repo repository.UserMemoryRepository) {
+	s.UserMemoryRepo = repo
+}
+
+func (s *Service) SetUserMemoryExtractor(extractor UserMemoryExtractor) {
+	s.UserMemoryExtractor = extractor
+}
+
+func (s *Service) SetMemoryExtractTimeout(timeout time.Duration) {
+	if timeout > 0 {
+		s.MemoryExtractTimeout = timeout
+	}
+}
+
+func (s *Service) SetMemoryCandidateLimit(limit int) {
+	if limit > 0 {
+		s.MemoryCandidateLimit = limit
+	}
+}
+
+func (s *Service) SetMemoryMaxRecall(limit int) {
+	if limit > 0 {
+		s.MemoryMaxRecall = limit
+	}
+}
+
 func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) error {
 	if s == nil {
 		return errno.Internal("bot service is nil")
@@ -222,15 +260,23 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	if contextLimit <= 0 {
 		contextLimit = 20
 	}
+	question := ExtractQuestion(req.Content)
+	question, summaryContextLimit := extractSummaryContextLimit(question)
+	if summaryContextLimit > 0 {
+		contextLimit = summaryContextLimit
+	}
 	recentMessages, err := s.MessageRepo.ListByConversationID(ctx, req.ConversationID, nil, contextLimit)
 	if err != nil {
 		return err
 	}
 	recentMessages = filterBotVisibleMessages(recentMessages)
 	userDisplayNames := s.resolveUserDisplayNames(ctx, recentMessages, req.UserID)
-	question := ExtractQuestion(req.Content)
+	promptContent := rebuildMentionContent(req.Content, question)
 	scope := resolved.ConversationBot.PermissionScope
 	if scope == "" {
+		scope = model.BotScopeConversationOnly
+	}
+	if shouldForceConversationOnlyByIntent(question) {
 		scope = model.BotScopeConversationOnly
 	}
 	ragTopK := s.RAGTopK
@@ -248,7 +294,8 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 			return nil
 		}
 	}
-	prompt := BuildPromptWithRAG(recentMessages, req.Content, contextLimit, userDisplayNames, req.UserID, scope, ragChunks)
+	longTermMemories := s.collectLongTermMemories(ctx, req, question)
+	prompt := BuildPromptWithRAGAndMemory(recentMessages, promptContent, contextLimit, userDisplayNames, req.UserID, scope, ragChunks, longTermMemories)
 	if scope == model.BotScopeKnowledgeBaseOnly && len(ragChunks) == 0 {
 		if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, "\u5f53\u524d\u672a\u68c0\u7d22\u5230\u53ef\u7528\u7684\u77e5\u8bc6\u5e93\u8d44\u6599\uff0c\u65e0\u6cd5\u57fa\u4e8e\u77e5\u8bc6\u5e93\u56de\u7b54\u3002"); replyErr != nil {
 			return replyErr
@@ -427,6 +474,54 @@ func (s *Service) searchRAGChunks(ctx context.Context, scope model.BotPermission
 	return chunks, nil
 }
 
+func shouldForceConversationOnlyByIntent(question string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(question))
+	if normalized == "" {
+		return false
+	}
+	return strings.Contains(normalized, "总结群聊") ||
+		strings.Contains(normalized, "总结最近消息") ||
+		strings.Contains(normalized, "总结一下群聊") ||
+		strings.Contains(normalized, "总结下群聊") ||
+		strings.Contains(normalized, "群聊总结")
+}
+
+func extractSummaryContextLimit(question string) (string, int) {
+	normalized := strings.TrimSpace(question)
+	if normalized == "" {
+		return "", 0
+	}
+	matches := summaryCountDirectivePattern.FindStringSubmatch(normalized)
+	if len(matches) < 2 {
+		return normalized, 0
+	}
+	value, err := strconv.Atoi(matches[1])
+	if err != nil {
+		return strings.TrimSpace(summaryCountDirectivePattern.ReplaceAllString(normalized, "")), 0
+	}
+	if value < 20 {
+		value = 20
+	}
+	if value > 500 {
+		value = 500
+	}
+	clean := strings.TrimSpace(summaryCountDirectivePattern.ReplaceAllString(normalized, ""))
+	return clean, value
+}
+
+func rebuildMentionContent(rawContent string, question string) string {
+	trimmed := strings.TrimSpace(rawContent)
+	token, ok := leadingMentionToken(trimmed)
+	if !ok {
+		return strings.TrimSpace(question)
+	}
+	question = strings.TrimSpace(question)
+	if question == "" {
+		return "@" + token
+	}
+	return "@" + token + " " + question
+}
+
 func (s *Service) resolveTargetBot(ctx context.Context, conversationID uint64, content string) (*resolvedBot, error) {
 	token, ok := leadingMentionToken(content)
 	if !ok {
@@ -464,9 +559,6 @@ func (s *Service) resolveTargetBot(ctx context.Context, conversationID uint64, c
 			return nil, err
 		}
 		if botModel.Status != model.BotStatusEnabled {
-			continue
-		}
-		if botModel.CreatedBy != 0 {
 			continue
 		}
 		current := resolvedBot{

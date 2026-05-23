@@ -70,8 +70,14 @@ export type FriendInfo = {
   remark: string;
   group_id?: number | null;
   status: string;
+  is_online?: boolean;
+  presence?: "ONLINE" | "OFFLINE" | string;
   created_at: number;
   updated_at: number;
+};
+
+export type PresenceSettings = {
+  invisible: boolean;
 };
 
 export type FriendRequestInfo = {
@@ -297,9 +303,9 @@ export type WebSocketEvent =
   | {
       type: "FRIEND_SYNC";
       data: {
-        reason: "REQUEST_CREATED" | "REQUEST_RESPONDED" | string;
+        reason: "REQUEST_CREATED" | "REQUEST_RESPONDED" | "PRESENCE_CHANGED" | string;
         requestId?: number;
-        status?: "PENDING" | "ACCEPTED" | "REJECTED" | string;
+        status?: "PENDING" | "ACCEPTED" | "REJECTED" | "ONLINE" | "OFFLINE" | string;
         actorUserId?: number;
         friendUserId?: number;
         conversationId?: string;
@@ -391,4 +397,23 @@ export type ConversationKnowledgeBaseInfo = {
   description: string;
   status: string;
   enabled: boolean;
+};
+
+export type UserMemoryInfo = {
+  id: number;
+  userId: number;
+  content: string;
+  sourceConversationId: string;
+  sourceMessageId?: number | null;
+  lastUsedAt: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ConversationSummaryResponse = {
+  summary: string;
+  messageCountUsed: number;
+  usedCount: number;
+  remainingCount: number;
+  model: string;
 };

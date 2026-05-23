@@ -7,6 +7,7 @@ import (
 
 	"example.com/aim/chat-service/internal/dal/model"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ConversationListRow struct {
@@ -84,6 +85,15 @@ type NotificationRepository interface {
 	CountUnreadByUserID(ctx context.Context, userID uint64) (int64, error)
 	MarkRead(ctx context.Context, userID, notificationID uint64) error
 	MarkAllRead(ctx context.Context, userID uint64) error
+}
+
+type UserMemoryRepository interface {
+	ListRecentByUserID(ctx context.Context, userID uint64, limit int) ([]model.UserMemory, error)
+	UpsertByHash(ctx context.Context, memory *model.UserMemory) error
+	GetByHash(ctx context.Context, userID uint64, memoryHash string) (*model.UserMemory, error)
+	GetByID(ctx context.Context, userID uint64, memoryID uint64) (*model.UserMemory, error)
+	UpdateContentByID(ctx context.Context, userID uint64, memoryID uint64, content string, memoryHash string, lastUsedAt time.Time) error
+	TouchByIDs(ctx context.Context, userID uint64, ids []uint64, usedAt time.Time) error
 }
 
 type GormConversationRepository struct {
@@ -464,5 +474,95 @@ func (r *GormNotificationRepository) MarkAllRead(ctx context.Context, userID uin
 		Updates(map[string]any{
 			"is_read":    true,
 			"updated_at": time.Now(),
+		}).Error
+}
+
+type GormUserMemoryRepository struct {
+	db *gorm.DB
+}
+
+func NewUserMemoryRepository(db *gorm.DB) *GormUserMemoryRepository {
+	return &GormUserMemoryRepository{db: db}
+}
+
+func (r *GormUserMemoryRepository) ListRecentByUserID(ctx context.Context, userID uint64, limit int) ([]model.UserMemory, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	var items []model.UserMemory
+	err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		Order("last_used_at DESC, id DESC").
+		Limit(limit).
+		Find(&items).Error
+	return items, err
+}
+
+func (r *GormUserMemoryRepository) UpsertByHash(ctx context.Context, memory *model.UserMemory) error {
+	if memory == nil {
+		return nil
+	}
+	return r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "user_id"},
+				{Name: "memory_hash"},
+			},
+			DoUpdates: clause.Assignments(map[string]any{
+				"content":                memory.Content,
+				"source_conversation_id": memory.SourceConversationID,
+				"source_message_id":      memory.SourceMessageID,
+				"last_used_at":           memory.LastUsedAt,
+				"updated_at":             time.Now(),
+			}),
+		}).
+		Create(memory).Error
+}
+
+func (r *GormUserMemoryRepository) GetByHash(ctx context.Context, userID uint64, memoryHash string) (*model.UserMemory, error) {
+	var item model.UserMemory
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND memory_hash = ?", userID, memoryHash).
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *GormUserMemoryRepository) GetByID(ctx context.Context, userID uint64, memoryID uint64) (*model.UserMemory, error) {
+	var item model.UserMemory
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ? AND id = ?", userID, memoryID).
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *GormUserMemoryRepository) UpdateContentByID(ctx context.Context, userID uint64, memoryID uint64, content string, memoryHash string, lastUsedAt time.Time) error {
+	return r.db.WithContext(ctx).
+		Model(&model.UserMemory{}).
+		Where("user_id = ? AND id = ?", userID, memoryID).
+		Updates(map[string]any{
+			"content":      content,
+			"memory_hash":  memoryHash,
+			"last_used_at": lastUsedAt,
+			"updated_at":   time.Now(),
+		}).Error
+}
+
+func (r *GormUserMemoryRepository) TouchByIDs(ctx context.Context, userID uint64, ids []uint64, usedAt time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).
+		Model(&model.UserMemory{}).
+		Where("user_id = ? AND id IN ?", userID, ids).
+		Updates(map[string]any{
+			"last_used_at": usedAt,
+			"updated_at":   time.Now(),
 		}).Error
 }

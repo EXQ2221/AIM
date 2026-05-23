@@ -7,9 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"example.com/aim/shared/errno"
+	"example.com/aim/gateway/internal/presence"
 	chatpb "example.com/aim/gateway/kitex_gen/chat"
 	"example.com/aim/gateway/kitex_gen/chat/chatservice"
+	"example.com/aim/shared/errno"
 	gwebsocket "github.com/gorilla/websocket"
 )
 
@@ -43,8 +44,23 @@ func NewClient(userID int64, conn *gwebsocket.Conn, hub *Hub, chatClient chatser
 }
 
 func (c *Client) Run(ctx context.Context) {
-	c.hub.Add(c)
-	defer c.hub.Remove(c)
+	becameOnline := c.hub.Add(c)
+	if becameOnline {
+		invisible, err := presence.DefaultStore().GetInvisible(context.Background(), c.UserID)
+		if err == nil && !invisible {
+			c.hub.BroadcastFriendPresence(c.UserID, "ONLINE")
+		}
+	}
+	defer func() {
+		becameOffline := c.hub.Remove(c)
+		if !becameOffline {
+			return
+		}
+		invisible, err := presence.DefaultStore().GetInvisible(context.Background(), c.UserID)
+		if err == nil && !invisible {
+			c.hub.BroadcastFriendPresence(c.UserID, "OFFLINE")
+		}
+	}()
 
 	go c.writeLoop()
 	c.Send(OutgoingEvent{

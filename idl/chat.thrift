@@ -516,6 +516,45 @@ struct FindSingleByUsersResponse {
   1: optional ConversationInfo conversation
 }
 
+struct WriteUserMemoryRequest {
+  1: i64 operator_id
+  2: string content
+}
+
+struct UserMemoryInfo {
+  1: i64 id
+  2: i64 user_id
+  3: string content
+  4: i64 source_conversation_id
+  5: optional i64 source_message_id
+  6: i64 last_used_at
+  7: i64 created_at
+  8: i64 updated_at
+}
+
+struct WriteUserMemoryResponse {
+  1: UserMemoryInfo memory
+}
+
+struct ListUserMemoriesRequest {
+  1: i64 operator_id
+  2: optional i32 limit
+}
+
+struct ListUserMemoriesResponse {
+  1: list<UserMemoryInfo> memories
+}
+
+struct UpdateUserMemoryRequest {
+  1: i64 operator_id
+  2: i64 memory_id
+  3: string content
+}
+
+struct UpdateUserMemoryResponse {
+  1: UserMemoryInfo memory
+}
+
 service ChatService {
   HealthResponse Health(1: HealthRequest req)
   CreateGroupResponse CreateGroup(1: CreateGroupRequest req)
@@ -557,4 +596,7 @@ service ChatService {
   CommonResponse UnbindConversationKnowledgeBase(1: UnbindConversationKnowledgeBaseRequest req)
   CreateMessageResponse CreateMessage(1: CreateMessageRequest req)
   FindSingleByUsersResponse FindSingleByUsers(1: FindSingleByUsersRequest req)
+  WriteUserMemoryResponse WriteUserMemory(1: WriteUserMemoryRequest req)
+  ListUserMemoriesResponse ListUserMemories(1: ListUserMemoriesRequest req)
+  UpdateUserMemoryResponse UpdateUserMemory(1: UpdateUserMemoryRequest req)
 }

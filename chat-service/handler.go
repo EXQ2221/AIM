@@ -247,3 +247,21 @@ func (s *ChatServiceImpl) FindSingleByUsers(ctx context.Context, req *chat.FindS
 	// TODO: Your code here...
 	return
 }
+
+// WriteUserMemory implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) WriteUserMemory(ctx context.Context, req *chat.WriteUserMemoryRequest) (resp *chat.WriteUserMemoryResponse, err error) {
+	// TODO: Your code here...
+	return
+}
+
+// ListUserMemories implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) ListUserMemories(ctx context.Context, req *chat.ListUserMemoriesRequest) (resp *chat.ListUserMemoriesResponse, err error) {
+	// TODO: Your code here...
+	return
+}
+
+// UpdateUserMemory implements the ChatServiceImpl interface.
+func (s *ChatServiceImpl) UpdateUserMemory(ctx context.Context, req *chat.UpdateUserMemoryRequest) (resp *chat.UpdateUserMemoryResponse, err error) {
+	// TODO: Your code here...
+	return
+}

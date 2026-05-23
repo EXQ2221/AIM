@@ -34,6 +34,7 @@ import type {
   KnowledgeSearchChunkInfo,
   MemberInfo,
   SessionInfo,
+  UserMemoryInfo,
   UserInfo
 } from "../../types";
 import { AvatarUploader } from "../avatar-uploader";
@@ -82,6 +83,7 @@ export function DetailPanel({
   wsStatus,
   notificationStatus,
   notificationsEnabled,
+  invisibleMode,
   selectedConversationId,
   selectedConversation,
   selectedConversationType,
@@ -100,6 +102,8 @@ export function DetailPanel({
   conversationKnowledgeBases,
   loadingKnowledge,
   knowledgeBusy,
+  userMemories,
+  loadingUserMemories,
   onTabChange,
   onCreateFriendGroup,
   onAddFriend,
@@ -113,6 +117,7 @@ export function DetailPanel({
   onAvatarUpload,
   onRevokeSession,
   onToggleNotifications,
+  onToggleInvisibleMode,
   onTransferOwner,
   onSetAdmin,
   onRemoveAdmin,
@@ -123,6 +128,7 @@ export function DetailPanel({
   onUpdateGroupAnnouncement,
   onAddBot,
   onRemoveBot,
+  onCreateCustomBot,
   onAICallLogStatusChange,
   onRefreshAICallLogs,
   onSelectKnowledgeBase,
@@ -133,6 +139,9 @@ export function DetailPanel({
   onBindConversationKnowledgeBase,
   onUnbindConversationKnowledgeBase,
   onRefreshKnowledgePanelData,
+  onRefreshUserMemories,
+  onWriteUserMemory,
+  onUpdateUserMemory,
   onMention,
   onClose
 }: {
@@ -149,6 +158,7 @@ export function DetailPanel({
   wsStatus: WsStatus;
   notificationStatus: BrowserNotificationStatus;
   notificationsEnabled: boolean;
+  invisibleMode: boolean;
   selectedConversationId: string | null;
   selectedConversation: ConversationInfo | null;
   selectedConversationType: ConversationInfo["type"] | null;
@@ -167,6 +177,8 @@ export function DetailPanel({
   conversationKnowledgeBases: ConversationKnowledgeBaseInfo[];
   loadingKnowledge: boolean;
   knowledgeBusy: boolean;
+  userMemories: UserMemoryInfo[];
+  loadingUserMemories: boolean;
   onTabChange: (tab: DetailTab) => void;
   onCreateFriendGroup: (name: string) => Promise<void>;
   onAddFriend: (input: { targetAimId: string; remark: string; groupId: number | null }) => Promise<void>;
@@ -180,6 +192,7 @@ export function DetailPanel({
   onAvatarUpload: (avatar: Blob) => Promise<void>;
   onRevokeSession: (sessionId: string, password: string) => Promise<void>;
   onToggleNotifications: () => Promise<void>;
+  onToggleInvisibleMode: (invisible: boolean) => Promise<void>;
   onTransferOwner: (targetUserId: number) => Promise<void>;
   onSetAdmin: (targetUserId: number) => Promise<void>;
   onRemoveAdmin: (targetUserId: number) => Promise<void>;
@@ -197,6 +210,17 @@ export function DetailPanel({
     modelNameOverride?: string;
   }) => Promise<void>;
   onRemoveBot: (botId: number) => Promise<void>;
+  onCreateCustomBot: (input: {
+    name: string;
+    mentionName: string;
+    aliases?: string[];
+    description?: string;
+    apiBaseUrl: string;
+    apiKey: string;
+    modelName: string;
+    supportedModels?: string[];
+    systemPrompt?: string;
+  }) => Promise<void>;
   onAICallLogStatusChange: (status: "" | "SUCCESS" | "FAILED") => void;
   onRefreshAICallLogs: () => Promise<void>;
   onSelectKnowledgeBase: (knowledgeBaseId: number | null) => void;
@@ -213,6 +237,9 @@ export function DetailPanel({
   onBindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
   onUnbindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
   onRefreshKnowledgePanelData: () => Promise<void>;
+  onRefreshUserMemories: () => Promise<void>;
+  onWriteUserMemory: (content: string) => Promise<void>;
+  onUpdateUserMemory: (memoryId: number, content: string) => Promise<void>;
   onMention: (mentionTarget: string) => void;
   onClose: () => void;
 }) {
@@ -284,6 +311,7 @@ export function DetailPanel({
           busy={busy}
           onAddBot={onAddBot}
           onRemoveBot={onRemoveBot}
+          onCreateCustomBot={onCreateCustomBot}
           onMention={onMention}
         />
       ) : tab === "logs" ? (
@@ -325,12 +353,19 @@ export function DetailPanel({
           wsStatus={wsStatus}
           notificationStatus={notificationStatus}
           notificationsEnabled={notificationsEnabled}
+          invisibleMode={invisibleMode}
+          userMemories={userMemories}
+          loadingUserMemories={loadingUserMemories}
           onRefreshSessions={onRefreshSessions}
           onLogout={onLogout}
           onLogoutAll={onLogoutAll}
           onAvatarUpload={onAvatarUpload}
           onRevokeSession={onRevokeSession}
           onToggleNotifications={onToggleNotifications}
+          onToggleInvisibleMode={onToggleInvisibleMode}
+          onRefreshUserMemories={onRefreshUserMemories}
+          onWriteUserMemory={onWriteUserMemory}
+          onUpdateUserMemory={onUpdateUserMemory}
         />
       )}
     </aside>
@@ -809,14 +844,14 @@ function FriendsView({
           <input required value={targetAimId} onChange={(event) => setTargetAimId(event.target.value)} placeholder="目标 AIM ID" />
           <input value={remark} onChange={(event) => setRemark(event.target.value)} placeholder="备注（可选）" />
           <select value={groupId ?? ""} onChange={(event) => setGroupId(parseGroupValue(event.target.value))}>
-            <option value="">Ungrouped</option>
+            <option value="">未分组</option>
             {friendGroups.map((group) => (
               <option key={group.id} value={group.id}>
                 {group.name}
               </option>
             ))}
           </select>
-          <span className="form-hint">A chat will be created after the request is accepted.</span>
+          <span className="form-hint">对方同意后会自动创建会话。</span>
           <button disabled={busy} type="submit">
             {busy ? <Loader2 className="spin" size={16} /> : <UserPlus size={16} />}
             发送申请
@@ -898,14 +933,14 @@ function FriendsView({
           <div className="empty-block">
             <UserRound size={28} />
             <strong>当前分组暂无好友</strong>
-            <span>Move friends to another group or switch filters.</span>
+            <span>可切换分组筛选，或先把好友移动到该分组。</span>
           </div>
         )}
         {friends.length === 0 && (
           <div className="empty-block">
             <UserRound size={28} />
-            <strong>No friends yet</strong>
-            <span>You can add one by AIM ID first.</span>
+            <strong>暂无好友</strong>
+            <span>可以先通过 AIM ID 添加好友。</span>
           </div>
         )}
       </div>
@@ -931,7 +966,7 @@ function FriendRequestRow({
         <Avatar name={request.nickname || request.aim_id} src={request.avatar} />
         <div className="friend-card-meta">
           <strong>{request.nickname || request.aim_id}</strong>
-          <span>{request.aim_id} {"  "} {incoming ? "Incoming request" : "Outgoing request"}</span>
+          <span>{request.aim_id} {"  "} {incoming ? "收到的申请" : "发出的申请"}</span>
         </div>
         <StatusPill label={request.status} />
       </div>
@@ -983,6 +1018,8 @@ function FriendRow({
   }, [friend.group_id, friend.remark, friend.user_id]);
 
   const assignedGroup = friendGroups.find((group) => group.id === friend.group_id);
+  const presenceLabel = (friend.presence || "").toUpperCase() === "ONLINE" ? "在线" : "离线";
+  const presenceBadgeClass = (friend.presence || "").toUpperCase() === "ONLINE" ? "presence-online" : "presence-offline";
   const handleSave = async () => {
     await onSave(friend.user_id, { remark: remark.trim(), groupId });
     setExpanded(false);
@@ -994,9 +1031,10 @@ function FriendRow({
         <Avatar name={friend.nickname || friend.aim_id} src={friend.avatar} />
         <div className="friend-card-meta">
           <strong>{friend.remark || friend.nickname || friend.aim_id}</strong>
-          <span>{friend.aim_id} {"  "} {assignedGroup?.name || "Ungrouped"}</span>
+          <span>{friend.aim_id} {"  "} {assignedGroup?.name || "未分组"}</span>
         </div>
         <div className="friend-card-side">
+          <span className={cx("friend-presence-badge", presenceBadgeClass)}>{presenceLabel}</span>
           <StatusPill label={friend.status} />
           <button className="friend-expand-button" type="button" onClick={(e) => { e.stopPropagation(); setExpanded((value) => !value); }}>
             {expanded ? "收起" : "编辑"}
@@ -1014,7 +1052,7 @@ function FriendRow({
           <label className="field compact-field">
             <span>分组</span>
             <select value={groupId ?? ""} onChange={(event) => setGroupId(parseGroupValue(event.target.value))}>
-              <option value="">Ungrouped</option>
+              <option value="">未分组</option>
               {friendGroups.map((group) => (
                 <option key={group.id} value={group.id}>
                   {group.name}
@@ -1035,221 +1073,6 @@ function FriendRow({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function BotPanel({
-  selectedConversationId,
-  currentMember,
-  availableBots,
-  conversationBots,
-  busy,
-  onAddBot,
-  onRemoveBot,
-  onMention
-}: {
-  selectedConversationId: string | null;
-  currentMember: MemberInfo | null;
-  availableBots: BotInfo[];
-  conversationBots: BotInfo[];
-  busy: boolean;
-  onAddBot: (input: { botId: number; displayNameOverride?: string; mentionNameOverride?: string; aliasesOverride?: string[]; permissionScope?: string }) => Promise<void>;
-  onRemoveBot: (botId: number) => Promise<void>;
-  onMention: (mentionTarget: string) => void;
-}) {
-  const [addOpen, setAddOpen] = useState(false);
-  const [selectedBotId, setSelectedBotId] = useState<number | "">("");
-  const [displayNameOverride, setDisplayNameOverride] = useState("");
-  const [mentionNameOverride, setMentionNameOverride] = useState("");
-  const [aliasesOverrideText, setAliasesOverrideText] = useState("");
-
-  const canManage = currentMember?.role === "OWNER" || currentMember?.role === "ADMIN";
-  const addedBotIds = new Set(conversationBots.map((b) => b.botId));
-  const candidateBots = availableBots.filter((b) => !addedBotIds.has(b.botId));
-
-  const handleAdd = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (typeof selectedBotId !== "number" || selectedBotId <= 0) return;
-    const aliases = aliasesOverrideText.split(",").map((a) => a.trim()).filter(Boolean);
-    await onAddBot({
-      botId: selectedBotId,
-      displayNameOverride: displayNameOverride.trim() || undefined,
-      mentionNameOverride: mentionNameOverride.trim() || undefined,
-      aliasesOverride: aliases.length > 0 ? aliases : undefined
-    });
-    setSelectedBotId("");
-    setDisplayNameOverride("");
-    setMentionNameOverride("");
-    setAliasesOverrideText("");
-    setAddOpen(false);
-  };
-
-  return (
-    <div className="detail-body bot-body">
-      {!selectedConversationId ? (
-        <div className="empty-block">
-          <Bot size={30} />
-          <strong>Select a group conversation</strong>
-          <span>进入会话后可管理 AI 助手</span>
-        </div>
-      ) : (
-        <>
-          {canManage && (
-            <>
-              <div className="action-grid detail-actions">
-                <button type="button" onClick={() => setAddOpen((value) => !value)}>
-                  <BadgePlus size={18} />
-                  添加助手
-                </button>
-              </div>
-
-              {addOpen && (
-                <form className="drawer-form" onSubmit={handleAdd}>
-                  <label className="field">
-                    <span>选择 Bot</span>
-                    <select value={selectedBotId} onChange={(e) => setSelectedBotId(e.target.value ? Number(e.target.value) : "")}>
-                      <option value="">请选择</option>
-                      {candidateBots.map((bot) => (
-                        <option key={bot.botId} value={bot.botId}>
-                          {bot.displayName || bot.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  {candidateBots.length === 0 && <span className="form-hint">All available bots are already added to this conversation.</span>}
-
-                  <input value={displayNameOverride} onChange={(e) => setDisplayNameOverride(e.target.value)} placeholder="显示名称覆盖（可选）" />
-                  <input value={mentionNameOverride} onChange={(e) => setMentionNameOverride(e.target.value)} placeholder="@提及名覆盖（可选）" />
-                  <input value={aliasesOverrideText} onChange={(e) => setAliasesOverrideText(e.target.value)} placeholder="别名覆盖，逗号分隔（可选）" />
-                  <span className="form-hint">Only OWNER and ADMIN can override these fields.</span>
-                  <button disabled={busy || typeof selectedBotId !== "number"} type="submit">
-                    {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
-                    添加到会话?
-                  </button>
-                </form>
-              )}
-            </>
-          )}
-
-          <div className="section-title">
-            <span>会话中的 AI 助手</span>
-            <strong>{conversationBots.length}</strong>
-          </div>
-
-          <div className="bot-list">
-            {conversationBots.map((bot) => (
-              <BotCard key={bot.botId} bot={bot} canManage={canManage} busy={busy} onRemove={() => void onRemoveBot(bot.botId)} onMention={onMention} />
-            ))}
-            {conversationBots.length === 0 && (
-              <div className="empty-block compact-empty">
-                <Bot size={24} />
-                <strong>暂无 AI 助手</strong>
-                <span>{canManage ? "Use the add action above to add an assistant." : "Wait for an admin to add an assistant."}</span>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function BotCard({
-  bot,
-  canManage,
-  busy,
-  onRemove,
-  onMention
-}: {
-  bot: BotInfo;
-  canManage: boolean;
-  busy: boolean;
-  onRemove: () => void;
-  onMention: (mentionTarget: string) => void;
-}) {
-  return (
-    <div className="friend-card bot-card">
-      <div className="friend-card-head">
-        <Avatar name={bot.displayName || bot.name} src={bot.avatar} onContextMenu={(event) => handleAvatarMention(event, bot.mentionName, onMention)} />
-        <div className="friend-card-meta">
-          <strong>{bot.displayName || bot.name}</strong>
-          <span>@{bot.mentionName} {" · "} {bot.memberType === "BOT" ? "Bot" : bot.memberType}</span>
-        </div>
-        <StatusPill label={bot.enabled ? "启用" : "禁用"} />
-      </div>
-
-      {bot.description && <p className="request-remark">{bot.description}</p>}
-
-      <div className="bot-detail-fields">
-        <div className="bot-field-row">
-          <span className="bot-field-label">Mention</span>
-          <span className="bot-field-value">@{bot.mentionName}</span>
-        </div>
-        {bot.aliases.length > 0 && (
-          <div className="bot-field-row">
-            <span className="bot-field-label">别名</span>
-            <span className="bot-field-value">{bot.aliases.join(", ")}</span>
-          </div>
-        )}
-        <div className="bot-field-row">
-          <span className="bot-field-label">权限范围</span>
-          <span className="bot-field-value">{bot.permissionScope}</span>
-        </div>
-        <div className="bot-field-row">
-          <span className="bot-field-label">Status</span>
-          <StatusPill label={bot.memberStatus} />
-        </div>
-      </div>
-
-      {canManage && (
-        <div className="friend-row-actions">
-          <button className="danger-button" disabled={busy} type="button" onClick={onRemove}>
-            <Trash2 size={16} />
-            移除
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MembersView({ members, onMention }: { members: MemberInfo[]; onMention: (mentionTarget: string) => void }) {
-  const isBot = (m: MemberInfo) => m.memberType === "BOT";
-
-  return (
-    <div className="detail-body">
-      <div className="section-title">
-        <span>Members</span>
-        <strong>{members.length}</strong>
-      </div>
-      <div className="member-list">
-        {members.map((member) => isBot(member) ? (
-          <div className="member-row member-bot-row" key={`bot-${member.botId ?? member.userId}`}>
-            <Avatar name={member.nickname || "Bot"} src={member.avatar} onContextMenu={(event) => handleAvatarMention(event, member.mentionName || member.nickname, onMention)} />
-            <div>
-              <strong>{member.nickname || `Bot ${member.botId ?? member.userId}`}</strong>
-              <span><StatusPill label="AI" /> {"  "}@{member.mentionName ?? "bot"}{member.enabled === false && <StatusPill label="Disabled" />}</span>
-              {member.aliases && member.aliases.length > 0 && <span className="bot-member-aliases">Aliases: {member.aliases.join(", ")}</span>}
-            </div>
-          </div>
-        ) : (
-          <div className="member-row" key={member.userId}>
-            <Avatar name={member.nickname || String(member.userId)} src={member.avatar} onContextMenu={(event) => handleAvatarMention(event, member.nickname, onMention)} />
-            <div>
-              <strong>{member.nickname || `用户 ${member.userId}`}</strong>
-              <span>{roleLabel(member.role)} {" · "} {statusLabel(member.status)}</span>
-            </div>
-          </div>
-        ))}
-        {members.length === 0 && (
-          <div className="empty-block">
-            <UsersRound size={28} />
-            <strong>暂无成员数据</strong>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -1278,8 +1101,8 @@ function AICallLogsPanel({
       <div className="detail-body log-body">
         <div className="empty-block">
           <Bot size={28} />
-          <strong>Select a group conversation</strong>
-          <span>Open a group chat to inspect AI call logs.</span>
+          <strong>请选择一个群聊会话</strong>
+          <span>进入群聊后可查看 AI 调用日志。</span>
         </div>
       </div>
     );
@@ -1330,15 +1153,15 @@ function AICallLogsPanel({
           <div className="empty-block compact-empty">
             <Bot size={24} />
             <strong>暂无调用记录</strong>
-            <span>AI call logs will appear here after the assistant is triggered in this group.</span>
+            <span>该群触发 AI 助手后，这里会出现调用日志。</span>
           </div>
         ) : (
           logs.map((log) => (
             <article className="log-card" key={log.id}>
               <div className="log-card-head">
                 <div className="log-card-meta">
-                  <strong>{log.botName || `Bot ${log.botId}`}</strong>
-                  <span>{log.modelName || "unknown model"}</span>
+                  <strong>{log.botName || `机器人 ${log.botId}`}</strong>
+                  <span>{log.modelName || "未知模型"}</span>
                 </div>
                 <span className={cx("log-status", log.status === "FAILED" && "failed")}>{log.status}</span>
               </div>
@@ -1364,320 +1187,6 @@ function AICallLogsPanel({
   );
 }
 
-function MembersViewLegacy({ members, onMention }: { members: MemberInfo[]; onMention: (mentionTarget: string) => void }) {
-  return (
-    <div className="detail-body">
-      <div className="section-title">
-        <span>Members</span>
-        <strong>{members.length}</strong>
-      </div>
-      <div className="member-list">
-        {members.map((member) =>
-          member.memberType === "BOT" ? (
-            <div className="member-row member-bot-row" key={`bot-${member.botId ?? member.userId}`}>
-              <Avatar
-                name={member.nickname || "Bot"}
-                src={member.avatar}
-                onContextMenu={(event) => handleAvatarMention(event, member.mentionName || member.nickname, onMention)}
-              />
-              <div>
-                <strong>{member.nickname || `Bot ${member.botId ?? member.userId}`}</strong>
-                <span>
-                  <StatusPill label="AI" /> {"  "}@{member.mentionName ?? "bot"}
-                  {member.enabled === false && <StatusPill label="Disabled" />}
-                </span>
-                {member.aliases && member.aliases.length > 0 && (
-                  <span className="bot-member-aliases">Aliases: {member.aliases.join(", ")}</span>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="member-row" key={member.userId}>
-              <Avatar
-                name={member.nickname || String(member.userId)}
-                src={member.avatar}
-                onContextMenu={(event) => handleAvatarMention(event, member.nickname, onMention)}
-              />
-              <div>
-                <strong>{member.nickname || `用户 ${member.userId}`}</strong>
-                <span>{roleLabel(member.role)} {" · "} {statusLabel(member.status)}</span>
-              </div>
-            </div>
-          )
-        )}
-        {members.length === 0 && (
-          <div className="empty-block">
-            <UsersRound size={28} />
-            <strong>暂无成员数据</strong>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* function MembersViewClean({
-  members,
-  selectedConversation,
-  currentMember,
-  busy,
-  onMention,
-  onTransferOwner,
-  onSetAdmin,
-  onRemoveAdmin,
-  onMuteMember,
-  onUnmuteMember,
-  onRemoveMember,
-  onSetGroupMuteAll
-}: {
-  members: MemberInfo[];
-  selectedConversation: ConversationInfo | null;
-  currentMember: MemberInfo | null;
-  busy: boolean;
-  onMention: (mentionTarget: string) => void;
-  onTransferOwner: (targetUserId: number) => Promise<void>;
-  onSetAdmin: (targetUserId: number) => Promise<void>;
-  onRemoveAdmin: (targetUserId: number) => Promise<void>;
-  onMuteMember: (targetUserId: number, durationSeconds: number) => Promise<void>;
-  onUnmuteMember: (targetUserId: number) => Promise<void>;
-  onRemoveMember: (targetUserId: number) => Promise<void>;
-  onSetGroupMuteAll: (muteAll: boolean) => Promise<void>;
-}) {
-  const [muteDurations, setMuteDurations] = useState<Record<number, number>>({});
-  const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
-  const isGroup = selectedConversation?.type === "GROUP";
-  const canToggleMuteAll = isGroup && currentMember?.role === "OWNER";
-  const muteAllEnabled = Boolean(selectedConversation?.muteAll);
-  const durationOptions = [
-    { label: "10分钟", value: 10 * 60 },
-    { label: "1小时", value: 60 * 60 },
-    { label: "24小时", value: 24 * 60 * 60 }
-  ];
-
-  const getMuteDuration = (userId: number) => muteDurations[userId] ?? durationOptions[0].value;
-
-  useEffect(() => {
-    setExpandedMemberId(null);
-  }, [selectedConversation?.conversationId]);
-
-  const canTransfer = (member: MemberInfo) =>
-    isGroup &&
-    currentMember?.role === "OWNER" &&
-    member.memberType !== "BOT" &&
-    member.userId !== currentMember.userId &&
-    (member.role === "MEMBER" || member.role === "ADMIN");
-
-  const canSetAdminFor = (member: MemberInfo) =>
-    isGroup &&
-    currentMember?.role === "OWNER" &&
-    member.memberType !== "BOT" &&
-    member.userId !== currentMember.userId &&
-    member.role === "MEMBER";
-
-  const canRemoveAdminFor = (member: MemberInfo) =>
-    isGroup &&
-    currentMember?.role === "OWNER" &&
-    member.memberType !== "BOT" &&
-    member.userId !== currentMember.userId &&
-    member.role === "ADMIN";
-
-  const canManageMember = (member: MemberInfo) => {
-    if (!isGroup || member.memberType === "BOT" || !currentMember || member.userId === currentMember.userId) {
-      return false;
-    }
-    if (currentMember.role === "OWNER") {
-      return member.role === "MEMBER" || member.role === "ADMIN";
-    }
-    if (currentMember.role === "ADMIN") {
-      return member.role === "MEMBER";
-    }
-    return false;
-  };
-
-  const hasManagementActions = (member: MemberInfo) =>
-    canTransfer(member) || canSetAdminFor(member) || canRemoveAdminFor(member) || canManageMember(member);
-
-  return (
-    <div className="detail-body">
-      <div className="section-title">
-        <span>Members</span>
-        <strong>{members.length}</strong>
-      </div>
-      {canToggleMuteAll && (
-        <div className="member-toolbar">
-          <button
-            className={cx("secondary-button", "compact-button", muteAllEnabled && "member-toolbar-active")}
-            disabled={busy}
-            type="button"
-            onClick={() => void onSetGroupMuteAll(!muteAllEnabled)}
-          >
-            <LockKeyhole size={14} />
-            {muteAllEnabled ? "关闭全员禁言" : "开启全员禁言"}
-          </button>
-        </div>
-      )}
-      <div className="member-list">
-        {members.map((member) =>
-          member.memberType === "BOT" ? (
-            <div className="member-row member-bot-row" key={`bot-${member.botId ?? member.userId}`}>
-              <Avatar
-                name={member.nickname || "Bot"}
-                src={member.avatar}
-                onContextMenu={(event) => handleAvatarMention(event, member.mentionName || member.nickname, onMention)}
-              />
-              <div>
-                <strong>{member.nickname || `Bot ${member.botId ?? member.userId}`}</strong>
-                <span>
-                  <StatusPill label="AI 助手" /> {" ?"}@{member.mentionName ?? "?"}
-                  {member.enabled === false && <StatusPill label="已禁用" />}
-                </span>
-                {member.aliases && member.aliases.length > 0 && (
-                  <span className="bot-member-aliases">Aliases: {member.aliases.join(", ")}</span>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="member-row" key={member.userId}>
-              <Avatar
-                name={member.nickname || String(member.userId)}
-                src={member.avatar}
-                onContextMenu={(event) => handleAvatarMention(event, member.nickname, onMention)}
-              />
-              <div className="member-meta-stack">
-                <strong>{member.nickname || `用户 ${member.userId}`}</strong>
-                <span>{roleLabel(member.role)} {" ?"} {statusLabel(member.status)}</span>
-                {isMemberMuted(member) && (
-                  <span className="member-extra-note">已禁言?{formatMuteUntil(member.muteUntil)}</span>
-                )}
-                {member.userId === currentMember?.userId && muteAllEnabled && currentMember.role !== "OWNER" && currentMember.role !== "ADMIN" && (
-                  <span className="member-extra-note">当前群已开启全员禁言</span>
-                )}
-                {hasManagementActions(member) && (
-                  <>
-                    <button
-                      className={cx("member-expand-toggle", expandedMemberId === member.userId && "is-open")}
-                      disabled={busy}
-                      type="button"
-                      onClick={() =>
-                        setExpandedMemberId((current) => (current === member.userId ? null : member.userId))
-                      }
-                    >
-                      <span>Manage</span>
-                      <ChevronDown size={16} />
-                    </button>
-                  </>
-                )}
-                {hasManagementActions(member) && expandedMemberId === member.userId && (
-                  <div className="member-actions">
-                    {canTransfer(member) && (
-                      <button
-                        className="secondary-button compact-button"
-                        disabled={busy}
-                        type="button"
-                        onClick={() => {
-                          if (window.confirm(`确认将群主转让给 ${member.nickname || `用户 ${member.userId}`} 吗？`)) {
-                            void onTransferOwner(member.userId);
-                          }
-                        }}
-                      >
-                        <ShieldCheck size={14} />
-                        转让群主
-                      </button>
-                    )}
-                    {canSetAdminFor(member) && (
-                      <button
-                        className="secondary-button compact-button"
-                        disabled={busy}
-                        type="button"
-                        onClick={() => void onSetAdmin(member.userId)}
-                      >
-                        <ShieldCheck size={14} />
-                        设为管理�?                      </button>
-                    )}
-                    {canRemoveAdminFor(member) && (
-                      <button
-                        className="secondary-button compact-button"
-                        disabled={busy}
-                        type="button"
-                        onClick={() => void onRemoveAdmin(member.userId)}
-                      >
-                        <ShieldCheck size={14} />
-                        取消管理�?                      </button>
-                    )}
-                    {canManageMember(member) && (
-                      <div className="member-action-row">
-                        {isMemberMuted(member) ? (
-                          <button
-                            className="secondary-button compact-button"
-                            disabled={busy}
-                            type="button"
-                            onClick={() => void onUnmuteMember(member.userId)}
-                          >
-                            <LockKeyhole size={14} />
-                            解除禁言
-                          </button>
-                        ) : (
-                          <>
-                            <select
-                              className="member-action-select"
-                              value={getMuteDuration(member.userId)}
-                              onChange={(event) =>
-                                setMuteDurations((current) => ({
-                                  ...current,
-                                  [member.userId]: Number(event.target.value)
-                                }))
-                              }
-                            >
-                              {durationOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              className="secondary-button compact-button"
-                              disabled={busy}
-                              type="button"
-                              onClick={() => void onMuteMember(member.userId, getMuteDuration(member.userId))}
-                            >
-                              <LockKeyhole size={14} />
-                              禁言
-                            </button>
-                          </>
-                        )}
-                        <button
-                          className="danger-button compact-button"
-                          disabled={busy}
-                          type="button"
-                          onClick={() => {
-                            if (window.confirm(`确认�?${member.nickname || `用户 ${member.userId}`} 移出群聊吗？`)) {
-                              void onRemoveMember(member.userId);
-                            }
-                          }}
-                        >
-                          <Trash2 size={14} />
-                          移出群聊
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        )}
-        {members.length === 0 && (
-          <div className="empty-block">
-            <UsersRound size={28} />
-            <strong>暂无成员数据</strong>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-*/
 function GroupAnnouncementCard({
   groupInfo,
   members,
@@ -1708,9 +1217,9 @@ function GroupAnnouncementCard({
       : null;
   const updatedMeta =
     typeof groupInfo?.announcementUpdatedAt === "number"
-      ? `Updated ${formatRelative(groupInfo.announcementUpdatedAt)}${
+      ? `更新于 ${formatRelative(groupInfo.announcementUpdatedAt)}${
           typeof groupInfo.announcementUpdatedBy === "number"
-            ? ` by ${updater?.nickname || `User ${groupInfo.announcementUpdatedBy}`}`
+            ? `，操作人：${updater?.nickname || `用户 ${groupInfo.announcementUpdatedBy}`}`
             : ""
         }`
       : "";
@@ -1724,23 +1233,23 @@ function GroupAnnouncementCard({
     <section className="group-announcement-card">
       <div className="group-announcement-header">
         <div>
-          <strong>Announcement</strong>
-          <span>Shown in the group details area for all members.</span>
+          <strong>群公告</strong>
+          <span>会展示在群详情中，所有成员可见。</span>
         </div>
         {canEdit && !editing && (
           <button className="secondary-button compact-button" disabled={busy} type="button" onClick={() => setEditing(true)}>
-            Edit
+            编辑
           </button>
         )}
       </div>
 
       {groupInfo === null ? (
-        <p className="group-announcement-empty">Loading group announcement...</p>
+        <p className="group-announcement-empty">正在加载群公告...</p>
       ) : editing ? (
         <form className="group-announcement-form" onSubmit={handleSubmit}>
           <textarea
             maxLength={2000}
-            placeholder="Write a group announcement"
+            placeholder="请输入群公告内容"
             rows={5}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -1752,7 +1261,7 @@ function GroupAnnouncementCard({
               disabled={busy || nextAnnouncement === announcement}
               type="submit"
             >
-              Save
+              保存
             </button>
             <button
               className="secondary-button compact-button"
@@ -1763,14 +1272,14 @@ function GroupAnnouncementCard({
                 setEditing(false);
               }}
             >
-              Cancel
+              取消
             </button>
           </div>
         </form>
       ) : announcement ? (
         <p className="group-announcement-content">{announcement}</p>
       ) : (
-        <p className="group-announcement-empty">{canEdit ? "No announcement yet. Add one for the group." : "No announcement yet."}</p>
+        <p className="group-announcement-empty">{canEdit ? "暂无公告，点击编辑可新增。" : "暂无公告。"}</p>
       )}
 
       {updatedMeta && <div className="group-announcement-meta">{updatedMeta}</div>}
@@ -1815,9 +1324,9 @@ function MembersViewClean({
   const canToggleMuteAll = isGroup && currentMember?.role === "OWNER";
   const muteAllEnabled = Boolean(selectedConversation?.muteAll);
   const durationOptions = [
-    { label: "10 min", value: 10 * 60 },
-    { label: "1 hour", value: 60 * 60 },
-    { label: "24 hours", value: 24 * 60 * 60 }
+    { label: "10分钟", value: 10 * 60 },
+    { label: "1小时", value: 60 * 60 },
+    { label: "24小时", value: 24 * 60 * 60 }
   ];
 
   const getMuteDuration = (userId: number) => muteDurations[userId] ?? durationOptions[0].value;
@@ -1875,7 +1384,7 @@ function MembersViewClean({
         />
       )}
       <div className="section-title">
-        <span>Members</span>
+        <span>成员</span>
         <strong>{members.length}</strong>
       </div>
       {canToggleMuteAll && (
@@ -1887,7 +1396,7 @@ function MembersViewClean({
             onClick={() => void onSetGroupMuteAll(!muteAllEnabled)}
           >
             <LockKeyhole size={14} />
-            {muteAllEnabled ? "Disable mute all" : "Enable mute all"}
+            {muteAllEnabled ? "关闭全员禁言" : "开启全员禁言"}
           </button>
         </div>
       )}
@@ -1896,18 +1405,20 @@ function MembersViewClean({
           member.memberType === "BOT" ? (
             <div className="member-row member-bot-row" key={`bot-${member.botId ?? member.userId}`}>
               <Avatar
-                name={member.nickname || "Bot"}
+                name={member.nickname || "机器人"}
                 src={member.avatar}
-                onContextMenu={(event) => handleAvatarMention(event, member.mentionName || member.nickname, onMention)}
+                onContextMenu={(event) =>
+                  handleAvatarMention(event, member.aliases?.[0] || member.mentionName || member.nickname, onMention)
+                }
               />
               <div>
-                <strong>{member.nickname || `Bot ${member.botId ?? member.userId}`}</strong>
+                <strong>{member.nickname || `机器人 ${member.botId ?? member.userId}`}</strong>
                 <span>
                   <StatusPill label="AI" /> {"  "}@{member.mentionName ?? "bot"}
-                  {member.enabled === false && <StatusPill label="Disabled" />}
+                  {member.enabled === false && <StatusPill label="已禁用" />}
                 </span>
                 {member.aliases && member.aliases.length > 0 && (
-                  <span className="bot-member-aliases">Aliases: {member.aliases.join(", ")}</span>
+                  <span className="bot-member-aliases">别名：{member.aliases.join(", ")}</span>
                 )}
               </div>
             </div>
@@ -1919,18 +1430,18 @@ function MembersViewClean({
                 onContextMenu={(event) => handleAvatarMention(event, member.nickname, onMention)}
               />
               <div className="member-meta-stack">
-                <strong>{member.nickname || `User ${member.userId}`}</strong>
+                <strong>{member.nickname || `用户 ${member.userId}`}</strong>
                 <span>
                   {roleLabel(member.role)} {"  "} {statusLabel(member.status)}
                 </span>
                 {isMemberMuted(member) && (
-                  <span className="member-extra-note">Muted until {formatMuteUntil(member.muteUntil)}</span>
+                  <span className="member-extra-note">已禁言至 {formatMuteUntil(member.muteUntil)}</span>
                 )}
                 {member.userId === currentMember?.userId &&
                   muteAllEnabled &&
                   currentMember.role !== "OWNER" &&
                   currentMember.role !== "ADMIN" && (
-                    <span className="member-extra-note">This group is currently muted for members.</span>
+                    <span className="member-extra-note">当前群聊已开启全员禁言。</span>
                   )}
                 {hasManagementActions(member) && (
                   <button
@@ -1939,7 +1450,7 @@ function MembersViewClean({
                     type="button"
                     onClick={() => setExpandedMemberId((current) => (current === member.userId ? null : member.userId))}
                   >
-                    <span>Manage</span>
+                    <span>管理</span>
                     <ChevronDown size={16} />
                   </button>
                 )}
@@ -1951,13 +1462,13 @@ function MembersViewClean({
                         disabled={busy}
                         type="button"
                         onClick={() => {
-                          if (window.confirm(`Transfer ownership to ${member.nickname || `User ${member.userId}`}?`)) {
+                          if (window.confirm(`确认将群主转让给 ${member.nickname || `用户 ${member.userId}`} 吗？`)) {
                             void onTransferOwner(member.userId);
                           }
                         }}
                       >
                         <ShieldCheck size={14} />
-                        Transfer owner
+                        转让群主
                       </button>
                     )}
                     {canSetAdminFor(member) && (
@@ -1968,7 +1479,7 @@ function MembersViewClean({
                         onClick={() => void onSetAdmin(member.userId)}
                       >
                         <ShieldCheck size={14} />
-                        Set admin
+                        设为管理员
                       </button>
                     )}
                     {canRemoveAdminFor(member) && (
@@ -1979,7 +1490,7 @@ function MembersViewClean({
                         onClick={() => void onRemoveAdmin(member.userId)}
                       >
                         <ShieldCheck size={14} />
-                        Remove admin
+                        取消管理员
                       </button>
                     )}
                     {canManageMember(member) && (
@@ -1992,7 +1503,7 @@ function MembersViewClean({
                             onClick={() => void onUnmuteMember(member.userId)}
                           >
                             <LockKeyhole size={14} />
-                            Unmute
+                            解除禁言
                           </button>
                         ) : (
                           <>
@@ -2019,7 +1530,7 @@ function MembersViewClean({
                               onClick={() => void onMuteMember(member.userId, getMuteDuration(member.userId))}
                             >
                               <LockKeyhole size={14} />
-                              Mute
+                              禁言
                             </button>
                           </>
                         )}
@@ -2028,13 +1539,13 @@ function MembersViewClean({
                           disabled={busy}
                           type="button"
                           onClick={() => {
-                            if (window.confirm(`Remove ${member.nickname || `User ${member.userId}`} from the group?`)) {
+                            if (window.confirm(`确认将 ${member.nickname || `用户 ${member.userId}`} 移出群聊吗？`)) {
                               void onRemoveMember(member.userId);
                             }
                           }}
                         >
                           <Trash2 size={14} />
-                          Remove member
+                          移出群聊
                         </button>
                       </div>
                     )}
@@ -2047,7 +1558,7 @@ function MembersViewClean({
         {members.length === 0 && (
           <div className="empty-block">
             <UsersRound size={28} />
-            <strong>No member data</strong>
+            <strong>暂无成员数据</strong>
           </div>
         )}
       </div>
@@ -2063,6 +1574,7 @@ function BotPanelClean({
   busy,
   onAddBot,
   onRemoveBot,
+  onCreateCustomBot,
   onMention
 }: {
   selectedConversationId: string | null;
@@ -2080,12 +1592,34 @@ function BotPanelClean({
     modelNameOverride?: string;
   }) => Promise<void>;
   onRemoveBot: (botId: number) => Promise<void>;
+  onCreateCustomBot: (input: {
+    name: string;
+    mentionName: string;
+    aliases?: string[];
+    description?: string;
+    apiBaseUrl: string;
+    apiKey: string;
+    modelName: string;
+    supportedModels?: string[];
+    systemPrompt?: string;
+  }) => Promise<void>;
   onMention: (mentionTarget: string) => void;
 }) {
   const [addOpen, setAddOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [selectedBotId, setSelectedBotId] = useState<number | "">("");
   const [selectedModelName, setSelectedModelName] = useState("");
   const [selectedPermissionScope, setSelectedPermissionScope] = useState("CONVERSATION_ONLY");
+  const [selectedDisplayNameOverride, setSelectedDisplayNameOverride] = useState("");
+  const [customName, setCustomName] = useState("");
+  const [customMentionName, setCustomMentionName] = useState("");
+  const [customAliases, setCustomAliases] = useState("");
+  const [customDescription, setCustomDescription] = useState("");
+  const [customAPIBaseURL, setCustomAPIBaseURL] = useState("");
+  const [customAPIKey, setCustomAPIKey] = useState("");
+  const [customModelName, setCustomModelName] = useState("");
+  const [customSupportedModels, setCustomSupportedModels] = useState("");
+  const [customSystemPrompt, setCustomSystemPrompt] = useState("");
 
   const canManage = currentMember?.role === "OWNER" || currentMember?.role === "ADMIN";
   const addedBotIds = new Set(conversationBots.map((item) => item.botId));
@@ -2096,9 +1630,11 @@ function BotPanelClean({
   useEffect(() => {
     if (!selectedBot) {
       setSelectedModelName("");
+      setSelectedDisplayNameOverride("");
       return;
     }
     setSelectedModelName(selectedBot.modelName || selectedBot.supportedModels?.[0] || "");
+    setSelectedDisplayNameOverride("");
   }, [selectedBot]);
 
   const handleAdd = async (event: FormEvent<HTMLFormElement>) => {
@@ -2106,13 +1642,62 @@ function BotPanelClean({
     if (typeof selectedBotId !== "number" || selectedBotId <= 0 || !selectedModelName) return;
     await onAddBot({
       botId: selectedBotId,
+      displayNameOverride: selectedDisplayNameOverride.trim() || undefined,
       permissionScope: selectedPermissionScope,
       modelNameOverride: selectedModelName
     });
     setSelectedBotId("");
     setSelectedModelName("");
     setSelectedPermissionScope("CONVERSATION_ONLY");
+    setSelectedDisplayNameOverride("");
     setAddOpen(false);
+  };
+
+  const parseCSVValues = (raw: string) =>
+    raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  const handleCreateCustom = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = customName.trim();
+    const mentionName = customMentionName.trim();
+    const apiBaseUrl = customAPIBaseURL.trim();
+    const apiKey = customAPIKey.trim();
+    const modelName = customModelName.trim();
+    if (!name || !mentionName || !apiBaseUrl || !apiKey || !modelName) {
+      return;
+    }
+    if (mentionName.includes("@")) {
+      window.alert("提及名不需要包含 @");
+      return;
+    }
+    const aliases = parseCSVValues(customAliases);
+    const supportedModelsInput = parseCSVValues(customSupportedModels);
+    const supportedModels = supportedModelsInput.length > 0 ? supportedModelsInput : [modelName];
+    await onCreateCustomBot({
+      name,
+      mentionName,
+      aliases,
+      description: customDescription.trim(),
+      apiBaseUrl,
+      apiKey,
+      modelName,
+      supportedModels,
+      systemPrompt: customSystemPrompt.trim()
+    });
+    setCustomName("");
+    setCustomMentionName("");
+    setCustomAliases("");
+    setCustomDescription("");
+    setCustomAPIBaseURL("");
+    setCustomAPIKey("");
+    setCustomModelName("");
+    setCustomSupportedModels("");
+    setCustomSystemPrompt("");
+    setCreateOpen(false);
+    setAddOpen(true);
   };
 
   return (
@@ -2120,14 +1705,14 @@ function BotPanelClean({
       {!selectedConversationId ? (
         <div className="empty-block">
           <Bot size={30} />
-          <strong>Select a group conversation</strong>
+          <strong>请选择一个群聊会话</strong>
           <span>进入会话后可管理 AI 助手</span>
         </div>
       ) : selectedConversationType !== "GROUP" ? (
         <div className="empty-block">
           <Bot size={30} />
           <strong>单聊不支持添加 AI 助手</strong>
-          <span>Bots can currently be added only in group conversations.</span>
+          <span>当前仅支持在群聊中添加 AI 助手。</span>
         </div>
       ) : (
         <>
@@ -2137,6 +1722,10 @@ function BotPanelClean({
                 <button type="button" onClick={() => setAddOpen((value) => !value)}>
                   <BadgePlus size={18} />
                   添加助手
+                </button>
+                <button type="button" onClick={() => setCreateOpen((value) => !value)}>
+                  <Bot size={18} />
+                  创建自定义 Bot
                 </button>
               </div>
 
@@ -2164,6 +1753,25 @@ function BotPanelClean({
                   </label>
 
                   <label className="field">
+                    <span>群内显示昵称</span>
+                    <select
+                      value={selectedDisplayNameOverride}
+                      onChange={(event) => setSelectedDisplayNameOverride(event.target.value)}
+                      disabled={!selectedBot}
+                    >
+                      <option value="">使用默认名称（{selectedBot?.displayName || selectedBot?.name || "-"})</option>
+                      {selectedBot?.aliases?.map((alias) => (
+                        <option key={`alias-${alias}`} value={alias}>
+                          使用别名：{alias}
+                        </option>
+                      ))}
+                      {selectedBot?.mentionName && (
+                        <option value={selectedBot.mentionName}>使用提及名：{selectedBot.mentionName}</option>
+                      )}
+                    </select>
+                  </label>
+
+                  <label className="field">
                     <span>选择模型</span>
                     <select
                       value={selectedModelName}
@@ -2184,6 +1792,72 @@ function BotPanelClean({
                   <button disabled={busy || typeof selectedBotId !== "number" || !selectedModelName} type="submit">
                     {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
                     添加到会话
+                  </button>
+                </form>
+              )}
+
+              {createOpen && (
+                <form className="drawer-form" onSubmit={handleCreateCustom}>
+                  <label className="field">
+                    <span>Bot 名称</span>
+                    <input value={customName} onChange={(event) => setCustomName(event.target.value)} placeholder="例如：我的助手" required />
+                  </label>
+                  <label className="field">
+                    <span>提及名（不带 @）</span>
+                    <input value={customMentionName} onChange={(event) => setCustomMentionName(event.target.value)} placeholder="例如：mybot" required />
+                  </label>
+                  <label className="field">
+                    <span>别名（逗号分隔）</span>
+                    <input value={customAliases} onChange={(event) => setCustomAliases(event.target.value)} placeholder="例如：小助手,客服助手" />
+                  </label>
+                  <label className="field">
+                    <span>描述（可选）</span>
+                    <input value={customDescription} onChange={(event) => setCustomDescription(event.target.value)} placeholder="Bot 的用途说明" />
+                  </label>
+                  <label className="field">
+                    <span>API Base URL</span>
+                    <input
+                      value={customAPIBaseURL}
+                      onChange={(event) => setCustomAPIBaseURL(event.target.value)}
+                      placeholder="例如：https://dashscope.aliyuncs.com/compatible-mode/v1"
+                      required
+                    />
+                  </label>
+                  <label className="field">
+                    <span>API Key</span>
+                    <input value={customAPIKey} onChange={(event) => setCustomAPIKey(event.target.value)} placeholder="sk-***" required />
+                  </label>
+                  <label className="field">
+                    <span>模型名</span>
+                    <input value={customModelName} onChange={(event) => setCustomModelName(event.target.value)} placeholder="例如：qwen-plus-latest" required />
+                  </label>
+                  <label className="field">
+                    <span>支持模型（逗号分隔，可选）</span>
+                    <input value={customSupportedModels} onChange={(event) => setCustomSupportedModels(event.target.value)} placeholder="不填则默认使用模型名" />
+                  </label>
+                  <label className="field">
+                    <span>系统提示词（可选）</span>
+                    <textarea
+                      value={customSystemPrompt}
+                      onChange={(event) => setCustomSystemPrompt(event.target.value)}
+                      rows={3}
+                      placeholder="例如：你是一个专业且简洁的群聊助手。"
+                    />
+                  </label>
+                  <span className="form-hint">创建后会出现在“选择 Bot”列表中，再添加到当前群聊即可生效。</span>
+                  <button
+                    disabled={
+                      busy ||
+                      !customName.trim() ||
+                      !customMentionName.trim() ||
+                      !customAPIBaseURL.trim() ||
+                      !customAPIKey.trim() ||
+                      !customModelName.trim()
+                    }
+                    type="submit"
+                  >
+                    {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
+                    创建 Bot
                   </button>
                 </form>
               )}
@@ -2210,13 +1884,20 @@ function BotPanelClean({
                     modelNameOverride: modelName
                   })
                 }
+                onSaveProfile={(input) =>
+                  onAddBot({
+                    botId: item.botId,
+                    displayNameOverride: input.displayNameOverride,
+                    aliasesOverride: input.aliasesOverride
+                  })
+                }
               />
             ))}
             {conversationBots.length === 0 && (
               <div className="empty-block compact-empty">
                 <Bot size={24} />
                 <strong>暂无 AI 助手</strong>
-                <span>{canManage ? "Use the add action above to add an assistant." : "Wait for an admin to add an assistant."}</span>
+                <span>{canManage ? "可使用上方按钮添加助手。" : "请等待管理员添加助手。"}</span>
               </div>
             )}
           </div>
@@ -2232,7 +1913,8 @@ function BotCardClean({
   busy,
   onRemove,
   onMention,
-  onSaveModel
+  onSaveModel,
+  onSaveProfile
 }: {
   bot: BotInfo;
   canManage: boolean;
@@ -2240,13 +1922,42 @@ function BotCardClean({
   onRemove: () => void;
   onMention: (mentionTarget: string) => void;
   onSaveModel: (modelName: string) => Promise<void>;
+  onSaveProfile: (input: { displayNameOverride?: string; aliasesOverride?: string[] }) => Promise<void>;
 }) {
   const [modelName, setModelName] = useState(bot.modelName || bot.supportedModels?.[0] || "");
+  const [aliasesDraft, setAliasesDraft] = useState((bot.aliases ?? []).join(", "));
+  const [displayNameDraft, setDisplayNameDraft] = useState(bot.displayName || bot.name || "");
   const permissionScopeLabel = toPermissionScopeLabel(bot.permissionScope);
 
   useEffect(() => {
     setModelName(bot.modelName || bot.supportedModels?.[0] || "");
+    setAliasesDraft((bot.aliases ?? []).join(", "));
+    setDisplayNameDraft(bot.displayName || bot.name || "");
   }, [bot.modelName, bot.supportedModels]);
+
+  useEffect(() => {
+    setAliasesDraft((bot.aliases ?? []).join(", "));
+    setDisplayNameDraft(bot.displayName || bot.name || "");
+  }, [bot.aliases, bot.displayName, bot.name]);
+
+  const aliasOptions = aliasesDraft
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  const canSaveProfile = canManage && (aliasesDraft.trim() !== (bot.aliases ?? []).join(", ") || displayNameDraft.trim() !== (bot.displayName || bot.name || ""));
+
+  const handleSaveProfile = async () => {
+    const normalizedAliases = aliasesDraft
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const displayName = displayNameDraft.trim();
+    await onSaveProfile({
+      displayNameOverride: displayName || undefined,
+      aliasesOverride: normalizedAliases.length > 0 ? normalizedAliases : undefined
+    });
+  };
 
   return (
     <div className="friend-card bot-card">
@@ -2254,11 +1965,11 @@ function BotCardClean({
         <Avatar
           name={bot.displayName || bot.name}
           src={bot.avatar}
-          onContextMenu={(event) => handleAvatarMention(event, bot.mentionName, onMention)}
+          onContextMenu={(event) => handleAvatarMention(event, bot.aliases?.[0] || bot.mentionName, onMention)}
         />
         <div className="friend-card-meta">
           <strong>{bot.displayName || bot.name}</strong>
-          <span>@{bot.mentionName} {" · "} {bot.memberType === "BOT" ? "Bot" : bot.memberType}</span>
+          <span>@{bot.mentionName} {" · "} {bot.memberType === "BOT" ? "机器人" : bot.memberType}</span>
         </div>
         <StatusPill label={bot.enabled ? "启用" : "禁用"} />
       </div>
@@ -2267,15 +1978,42 @@ function BotCardClean({
 
       <div className="bot-detail-fields">
         <div className="bot-field-row">
-          <span className="bot-field-label">Mention</span>
+          <span className="bot-field-label">提及名</span>
           <span className="bot-field-value">@{bot.mentionName}</span>
         </div>
-        {bot.aliases.length > 0 && (
-          <div className="bot-field-row">
-            <span className="bot-field-label">别名</span>
-            <span className="bot-field-value">{bot.aliases.join(", ")}</span>
-          </div>
-        )}
+        <div className="bot-field-row">
+          <span className="bot-field-label">别名</span>
+          {canManage ? (
+            <input
+              className="bot-model-select"
+              value={aliasesDraft}
+              onChange={(event) => setAliasesDraft(event.target.value)}
+              placeholder="用逗号分隔，例如：小助手,客服助手"
+            />
+          ) : (
+            <span className="bot-field-value">{bot.aliases.join(", ") || "-"}</span>
+          )}
+        </div>
+        <div className="bot-field-row">
+          <span className="bot-field-label">显示昵称</span>
+          {canManage ? (
+            <div className="bot-model-editor">
+              <select className="bot-model-select" value={displayNameDraft} onChange={(event) => setDisplayNameDraft(event.target.value)}>
+                <option value={bot.name}>默认名称：{bot.name}</option>
+                {aliasOptions.map((alias) => (
+                  <option key={`display-${alias}`} value={alias}>
+                    使用别名：{alias}
+                  </option>
+                ))}
+              </select>
+              <button className="secondary-button compact-button" disabled={busy || !canSaveProfile} type="button" onClick={() => void handleSaveProfile()}>
+                保存资料
+              </button>
+            </div>
+          ) : (
+            <span className="bot-field-value">{bot.displayName || bot.name}</span>
+          )}
+        </div>
         <div className="bot-field-row">
           <span className="bot-field-label">权限范围</span>
           <span className="bot-field-value">{permissionScopeLabel}</span>
@@ -2305,7 +2043,7 @@ function BotCardClean({
           )}
         </div>
         <div className="bot-field-row">
-          <span className="bot-field-label">Status</span>
+          <span className="bot-field-label">状态</span>
           <StatusPill label={bot.memberStatus} />
         </div>
       </div>
@@ -2335,12 +2073,19 @@ function AccountView({
   wsStatus,
   notificationStatus,
   notificationsEnabled,
+  invisibleMode,
+  userMemories,
+  loadingUserMemories,
   onRefreshSessions,
   onLogout,
   onLogoutAll,
   onAvatarUpload,
   onRevokeSession,
-  onToggleNotifications
+  onToggleNotifications,
+  onToggleInvisibleMode,
+  onRefreshUserMemories,
+  onWriteUserMemory,
+  onUpdateUserMemory
 }: {
   user: UserInfo;
   sessions: SessionInfo[];
@@ -2348,24 +2093,79 @@ function AccountView({
   wsStatus: WsStatus;
   notificationStatus: BrowserNotificationStatus;
   notificationsEnabled: boolean;
+  invisibleMode: boolean;
+  userMemories: UserMemoryInfo[];
+  loadingUserMemories: boolean;
   onRefreshSessions: () => Promise<void>;
   onLogout: () => Promise<void>;
   onLogoutAll: (password: string) => Promise<void>;
   onAvatarUpload: (avatar: Blob) => Promise<void>;
   onRevokeSession: (sessionId: string, password: string) => Promise<void>;
   onToggleNotifications: () => Promise<void>;
+  onToggleInvisibleMode: (invisible: boolean) => Promise<void>;
+  onRefreshUserMemories: () => Promise<void>;
+  onWriteUserMemory: (content: string) => Promise<void>;
+  onUpdateUserMemory: (memoryId: number, content: string) => Promise<void>;
 }) {
   const [password, setPassword] = useState("");
+  const [newMemoryContent, setNewMemoryContent] = useState("");
+  const [memoryDrafts, setMemoryDrafts] = useState<Record<number, string>>({});
+  const [creatingMemory, setCreatingMemory] = useState(false);
+  const [savingMemoryId, setSavingMemoryId] = useState<number | null>(null);
   const notificationLabel =
     notificationStatus === "unsupported"
-      ? "Browser notifications are not supported"
+      ? "当前浏览器不支持通知"
       : notificationStatus === "denied"
-        ? "Browser notifications are blocked"
+        ? "浏览器通知权限已被阻止"
         : notificationStatus === "granted"
           ? notificationsEnabled
-            ? "Browser notifications are enabled"
-            : "Browser notifications are disabled"
-          : "Browser notifications are not granted";
+            ? "浏览器通知已开启"
+            : "浏览器通知已关闭"
+          : "浏览器通知尚未授权";
+
+  useEffect(() => {
+    setMemoryDrafts((current) => {
+      const next: Record<number, string> = {};
+      for (const memory of userMemories) {
+        const existing = current[memory.id];
+        next[memory.id] = typeof existing === "string" ? existing : memory.content || "";
+      }
+      return next;
+    });
+  }, [userMemories]);
+
+  const handleCreateMemory = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = newMemoryContent.trim();
+    if (!value) {
+      return;
+    }
+    if (value.length > 512) {
+      window.alert("记忆内容不能超过 512 字");
+      return;
+    }
+    setCreatingMemory(true);
+    try {
+      await onWriteUserMemory(value);
+      setNewMemoryContent("");
+    } finally {
+      setCreatingMemory(false);
+    }
+  };
+
+  const handleSaveMemory = async (memoryId: number) => {
+    const value = memoryDrafts[memoryId] ?? "";
+    if (value.length > 512) {
+      window.alert("记忆内容不能超过 512 字");
+      return;
+    }
+    setSavingMemoryId(memoryId);
+    try {
+      await onUpdateUserMemory(memoryId, value);
+    } finally {
+      setSavingMemoryId(null);
+    }
+  };
 
   return (
     <div className="detail-body account-body">
@@ -2404,8 +2204,90 @@ function AccountView({
           <span>{notificationLabel}</span>
         </div>
         <button className={cx(notificationStatus === "granted" && notificationsEnabled && "is-on")} disabled={notificationStatus === "unsupported"} type="button" onClick={() => void onToggleNotifications()}>
-          {notificationStatus === "granted" ? (notificationsEnabled ? "Disable" : "Enable") : "Enable notifications"}
+          {notificationStatus === "granted" ? (notificationsEnabled ? "关闭通知" : "开启通知") : "开启通知"}
         </button>
+      </div>
+
+      <div className="notification-card">
+        <div>
+          <ShieldCheck size={18} />
+          <span>{invisibleMode ? "当前为隐身模式（好友侧显示离线）" : "当前为可见在线状态"}</span>
+        </div>
+        <button className={cx(invisibleMode && "is-on")} disabled={busy} type="button" onClick={() => void onToggleInvisibleMode(!invisibleMode)}>
+          {invisibleMode ? "关闭隐身" : "开启隐身"}
+        </button>
+      </div>
+
+      <div className="memory-card">
+        <div className="memory-card-head">
+          <strong>个人记忆</strong>
+          <div className="memory-card-tools">
+            <span className="memory-count">{userMemories.length} 条</span>
+            <IconButton label="刷新记忆" onClick={() => void onRefreshUserMemories()}>
+              <RefreshCw size={16} />
+            </IconButton>
+          </div>
+        </div>
+        <p className="memory-hint">最多 512 字。支持修改为空，用于清空该条记忆。</p>
+
+        <form className="memory-create-form" onSubmit={handleCreateMemory}>
+          <textarea
+            value={newMemoryContent}
+            onChange={(event) => setNewMemoryContent(event.target.value)}
+            rows={3}
+            maxLength={512}
+            placeholder="新增一条个人记忆，例如：我偏好简洁回答，优先给结论。"
+          />
+          <button disabled={busy || creatingMemory || !newMemoryContent.trim()} type="submit">
+            {creatingMemory ? <Loader2 className="spin" size={16} /> : <BadgePlus size={16} />}
+            新增记忆
+          </button>
+        </form>
+
+        {loadingUserMemories ? (
+          <div className="memory-empty">
+            <Loader2 className="spin" size={16} />
+            <span>记忆加载中...</span>
+          </div>
+        ) : userMemories.length === 0 ? (
+          <div className="memory-empty">
+            <span>暂无记忆，新增后可在 AI 对话中优先参考。</span>
+          </div>
+        ) : (
+          <div className="memory-list">
+            {userMemories.map((memory) => (
+              <div className="memory-row" key={memory.id}>
+                <div className="memory-row-meta">
+                  <span># {memory.id}</span>
+                  <span>更新于 {formatRelative(memory.updatedAt)}</span>
+                </div>
+                <textarea
+                  value={memoryDrafts[memory.id] ?? ""}
+                  onChange={(event) =>
+                    setMemoryDrafts((current) => ({
+                      ...current,
+                      [memory.id]: event.target.value
+                    }))
+                  }
+                  rows={3}
+                  maxLength={512}
+                />
+                <div className="memory-row-actions">
+                  <span>{(memoryDrafts[memory.id] ?? "").length}/512</span>
+                  <button
+                    className="secondary-button compact-button"
+                    disabled={busy || savingMemoryId === memory.id}
+                    type="button"
+                    onClick={() => void handleSaveMemory(memory.id)}
+                  >
+                    {savingMemoryId === memory.id ? <Loader2 className="spin" size={14} /> : <CheckCircle2 size={14} />}
+                    保存修改
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="section-title">
@@ -2424,7 +2306,7 @@ function AccountView({
                 {session.device_name || "AIM Web"}
                 {session.current && <span className="inline-tag">当前</span>}
               </strong>
-              <span>{session.last_ip || session.login_ip || "unknown ip"}</span>
+              <span>{session.last_ip || session.login_ip || "未知 IP"}</span>
               <time>{formatRelative(session.last_seen_at || session.created_at)}</time>
             </div>
             <button disabled={busy} type="button" onClick={() => void onRevokeSession(session.session_id, password)}>

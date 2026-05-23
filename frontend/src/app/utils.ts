@@ -206,14 +206,14 @@ export function messageContentPreview(
     case "IMAGE":
       {
         const image = parseImageMessageContent(content);
-        preview = image?.text ? `[Image] ${image.text}` : "[Image]";
+        preview = image?.text ? `[图片] ${image.text}` : "[图片]";
       }
       break;
     case "FILE":
-      preview = parseFileMessageContent(content)?.name || "[File]";
+      preview = parseFileMessageContent(content)?.name || "[文件]";
       break;
     case "VOICE":
-      preview = "[Voice]";
+      preview = "[语音]";
       break;
     case "SYSTEM":
       preview = parseSystemMessageContent(content)?.text || content.trim();

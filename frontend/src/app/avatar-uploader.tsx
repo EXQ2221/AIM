@@ -178,7 +178,7 @@ async function createCircularAvatarBlob(src: string, imageSize: ImageSize, zoom:
   canvas.width = avatarOutputSize;
   canvas.height = avatarOutputSize;
   const context = canvas.getContext("2d");
-  if (!context) throw new Error("canvas is not supported");
+  if (!context) throw new Error("当前浏览器不支持 Canvas");
   context.clearRect(0, 0, avatarOutputSize, avatarOutputSize);
   context.save();
   context.beginPath();
@@ -189,7 +189,7 @@ async function createCircularAvatarBlob(src: string, imageSize: ImageSize, zoom:
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
-      else reject(new Error("failed to crop avatar"));
+      else reject(new Error("头像裁剪失败"));
     }, "image/png");
   });
 }
@@ -198,7 +198,7 @@ function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("failed to load image"));
+    image.onerror = () => reject(new Error("图片加载失败"));
     image.src = src;
   });
 }

@@ -6,6 +6,7 @@ import (
 
 	"example.com/aim/gateway/internal/middleware"
 	"example.com/aim/gateway/internal/model/dto"
+	"example.com/aim/gateway/internal/presence"
 	"example.com/aim/gateway/internal/rpc"
 	userpb "example.com/aim/gateway/kitex_gen/user"
 	"github.com/gin-gonic/gin"
@@ -190,7 +191,16 @@ func ListFriends(ctx *gin.Context) {
 
 	friends := make([]dto.FriendInfo, 0, len(resp.Friends))
 	for _, friend := range resp.Friends {
-		friends = append(friends, toFriendModel(friend))
+		model := toFriendModel(friend)
+		invisible, err := presence.DefaultStore().GetInvisible(ctx.Request.Context(), model.UserID)
+		if err == nil && !invisible && chatHub.IsUserOnline(model.UserID) {
+			model.IsOnline = true
+			model.Presence = "ONLINE"
+		} else {
+			model.IsOnline = false
+			model.Presence = "OFFLINE"
+		}
+		friends = append(friends, model)
 	}
 
 	writeJSON(ctx, 200, dto.APIResponse{
@@ -415,6 +425,8 @@ func toFriendModel(friend *userpb.FriendInfo) dto.FriendInfo {
 		Remark:    friend.Remark,
 		GroupID:   friend.GroupId,
 		Status:    friend.Status,
+		IsOnline:  false,
+		Presence:  "OFFLINE",
 		CreatedAt: friend.CreatedAt,
 		UpdatedAt: friend.UpdatedAt,
 	}

@@ -87,6 +87,25 @@ type MarkConversationReadRequest struct {
 	LastReadMessageID int64 `json:"lastReadMessageId"`
 }
 
+type WriteUserMemoryRequest struct {
+	Content string `json:"content"`
+}
+
+type UpdateUserMemoryRequest struct {
+	Content string `json:"content"`
+}
+
+type UserMemoryInfo struct {
+	ID                   int64  `json:"id"`
+	UserID               int64  `json:"userId"`
+	Content              string `json:"content"`
+	SourceConversationID int64  `json:"sourceConversationId"`
+	SourceMessageID      *int64 `json:"sourceMessageId,omitempty"`
+	LastUsedAt           int64  `json:"lastUsedAt"`
+	CreatedAt            int64  `json:"createdAt"`
+	UpdatedAt            int64  `json:"updatedAt"`
+}
+
 type MessageRecalledEventInfo struct {
 	MessageID      int64  `json:"messageId"`
 	ConversationID string `json:"conversationId"`

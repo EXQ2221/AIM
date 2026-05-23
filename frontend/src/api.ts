@@ -4,6 +4,7 @@ import type {
   AuthSessionResponse,
   BotInfo,
   ConversationKnowledgeBaseInfo,
+  ConversationSummaryResponse,
   ConversationInfo,
   FriendGroupInfo,
   FriendInfo,
@@ -16,10 +17,12 @@ import type {
   NotificationListResponse,
   MemberInfo,
   MessageInfo,
+  PresenceSettings,
   HistorySearchMessageItem,
   SessionInfo,
   UploadAvatarResponse,
   UploadMediaResponse,
+  UserMemoryInfo,
   UserInfo
 } from "./types";
 
@@ -81,7 +84,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const payload = (await response.json().catch(() => null)) as APIResponse<T> | null;
   if (!response.ok || !payload || payload.code !== 0) {
-    throw new APIError(payload?.message || response.statusText || "request failed", response.status, payload?.code);
+    throw new APIError(payload?.message || response.statusText || "请求失败", response.status, payload?.code);
   }
 
   return payload.data as T;
@@ -144,6 +147,26 @@ export const api = {
   },
   me() {
     return request<UserInfo>("/api/v1/users/me");
+  },
+  listUserMemories(limit?: number) {
+    const params = new URLSearchParams();
+    if (typeof limit === "number" && limit > 0) {
+      params.set("limit", String(limit));
+    }
+    const query = params.toString();
+    return request<UserMemoryInfo[]>(`/api/v1/users/memory${query ? `?${query}` : ""}`);
+  },
+  writeUserMemory(content: string) {
+    return request<UserMemoryInfo>("/api/v1/users/memory", {
+      method: "POST",
+      body: JSON.stringify({ content })
+    });
+  },
+  updateUserMemory(memoryId: number, content: string) {
+    return request<UserMemoryInfo>(`/api/v1/users/memory/${encodeURIComponent(String(memoryId))}`, {
+      method: "PUT",
+      body: JSON.stringify({ content })
+    });
   },
   uploadAvatar(file: Blob) {
     const body = new FormData();
@@ -213,6 +236,15 @@ export const api = {
   deleteFriend(friendUserId: number) {
     return request<void>(`/api/v1/friends/${friendUserId}`, {
       method: "DELETE"
+    });
+  },
+  getPresenceSettings() {
+    return request<PresenceSettings>("/api/v1/friends/presence/settings");
+  },
+  updatePresenceSettings(invisible: boolean) {
+    return request<PresenceSettings>("/api/v1/friends/presence/settings", {
+      method: "PUT",
+      body: JSON.stringify({ invisible })
     });
   },
   conversations() {
@@ -331,6 +363,13 @@ export const api = {
     params.set("limit", String(options.limit ?? 30));
     return request<MessageInfo[]>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/messages?${params}`);
   },
+  summarizeConversation(conversationId: string, messageCount: number) {
+    return request<ConversationSummaryResponse>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/summary`, {
+      method: "POST",
+      body: JSON.stringify({ messageCount }),
+      timeoutMs: 45000
+    });
+  },
   searchHistoryMessages(options: { conversationId?: string; startAt: number; endAt: number; keyword?: string }) {
     const params = new URLSearchParams();
     if (options.conversationId && options.conversationId.trim()) {
@@ -359,6 +398,22 @@ export const api = {
   },
   bots() {
     return request<BotInfo[]>("/api/v1/bots");
+  },
+  createCustomBot(input: {
+    name: string;
+    mentionName: string;
+    aliases?: string[];
+    description?: string;
+    apiBaseUrl: string;
+    apiKey: string;
+    modelName: string;
+    supportedModels?: string[];
+    systemPrompt?: string;
+  }) {
+    return request<BotInfo>("/api/v1/bots", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
   },
   conversationBots(conversationId: string) {
     return request<BotInfo[]>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/bots`);

@@ -2,6 +2,8 @@ package biz
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,12 +35,19 @@ var (
 	ErrMessageInvalid       = errors.New("bad_request: invalid message content")
 	ErrReplyTargetInvalid   = errors.New("bad_request: invalid reply target")
 	ErrMessageRecallDenied  = errors.New("forbidden: only the sender can recall this message")
+	ErrMessageRecallExpired = errors.New("forbidden: message can only be recalled within 5 minutes")
 	ErrGroupAdminRequired   = errors.New("forbidden: only owner or admin can perform this action")
 	ErrMemberMuted          = errors.New("forbidden: member is muted")
 	ErrGroupMutedAll        = errors.New("forbidden: group is muted for members")
+	ErrUserMemoryEmpty      = errors.New("bad_request: memory content is empty")
+	ErrUserMemoryTooLong    = errors.New("bad_request: memory content cannot exceed 512 characters")
+	ErrUserMemoryNotFound   = errors.New("not_found: user memory not found")
 )
 
-const replyPreviewLimit = 80
+const (
+	replyPreviewLimit   = 80
+	messageRecallWindow = 5 * time.Minute
+)
 
 type ChatService struct {
 	ConversationRepo     repository.ConversationRepository
@@ -49,6 +58,7 @@ type ChatService struct {
 	MessageRepo          repository.MessageRepository
 	AICallLogRepo        repository.AICallLogRepository
 	NotificationRepo     repository.NotificationRepository
+	UserMemoryRepo       repository.UserMemoryRepository
 	TxManager            repository.TxManager
 	UserClient           rpc.UserClient
 	BotService           bot.MentionHandler
@@ -93,10 +103,124 @@ func (s *ChatService) SetNotificationRepository(notificationRepo repository.Noti
 	s.NotificationRepo = notificationRepo
 }
 
+func (s *ChatService) SetUserMemoryRepository(userMemoryRepo repository.UserMemoryRepository) {
+	s.UserMemoryRepo = userMemoryRepo
+}
+
 func (s *ChatService) SetBotManagement(botRepo repository.BotRepository, conversationBotRepo repository.ConversationBotRepository, membershipService botrepo.MembershipManager) {
 	s.BotRepo = botRepo
 	s.ConversationBotRepo = conversationBotRepo
 	s.BotMembershipService = membershipService
+}
+
+func (s *ChatService) WriteUserMemory(ctx context.Context, operatorID uint64, content string) (*UserMemoryView, error) {
+	if operatorID == 0 {
+		return nil, ErrBadRequest
+	}
+	if s.UserMemoryRepo == nil {
+		return nil, errors.New("internal_error: user memory repository is not configured")
+	}
+
+	normalized := strings.TrimSpace(content)
+	if normalized == "" {
+		return nil, ErrUserMemoryEmpty
+	}
+	if len([]rune(normalized)) > 512 {
+		return nil, ErrUserMemoryTooLong
+	}
+
+	now := time.Now()
+	item := &model.UserMemory{
+		UserID:               operatorID,
+		MemoryHash:           hashUserMemoryContent(normalized),
+		Content:              normalized,
+		SourceConversationID: 0,
+		SourceMessageID:      nil,
+		LastUsedAt:           now,
+	}
+	if err := s.UserMemoryRepo.UpsertByHash(ctx, item); err != nil {
+		return nil, err
+	}
+
+	saved, err := s.UserMemoryRepo.GetByHash(ctx, operatorID, item.MemoryHash)
+	if err != nil {
+		return nil, err
+	}
+	return &UserMemoryView{
+		ID:                   saved.ID,
+		UserID:               saved.UserID,
+		Content:              saved.Content,
+		SourceConversationID: saved.SourceConversationID,
+		SourceMessageID:      saved.SourceMessageID,
+		LastUsedAt:           saved.LastUsedAt.UnixMilli(),
+		CreatedAt:            saved.CreatedAt.UnixMilli(),
+		UpdatedAt:            saved.UpdatedAt.UnixMilli(),
+	}, nil
+}
+
+func (s *ChatService) ListUserMemories(ctx context.Context, operatorID uint64, limit int) ([]UserMemoryView, error) {
+	if operatorID == 0 {
+		return nil, ErrBadRequest
+	}
+	if s.UserMemoryRepo == nil {
+		return nil, errors.New("internal_error: user memory repository is not configured")
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	items, err := s.UserMemoryRepo.ListRecentByUserID(ctx, operatorID, limit)
+	if err != nil {
+		return nil, err
+	}
+	views := make([]UserMemoryView, 0, len(items))
+	for _, item := range items {
+		itemCopy := item
+		view := toUserMemoryView(&itemCopy)
+		if view != nil {
+			views = append(views, *view)
+		}
+	}
+	return views, nil
+}
+
+func (s *ChatService) UpdateUserMemory(ctx context.Context, operatorID uint64, memoryID uint64, content string) (*UserMemoryView, error) {
+	if operatorID == 0 || memoryID == 0 {
+		return nil, ErrBadRequest
+	}
+	if s.UserMemoryRepo == nil {
+		return nil, errors.New("internal_error: user memory repository is not configured")
+	}
+
+	normalized := strings.TrimSpace(content)
+	if len([]rune(normalized)) > 512 {
+		return nil, ErrUserMemoryTooLong
+	}
+
+	existing, err := s.UserMemoryRepo.GetByID(ctx, operatorID, memoryID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserMemoryNotFound
+		}
+		return nil, err
+	}
+
+	now := time.Now()
+	newHash := hashUserMemoryContent(normalized)
+	if newHash == "" {
+		newHash = fmt.Sprintf("empty-%020d", memoryID)
+	}
+	if err := s.UserMemoryRepo.UpdateContentByID(ctx, operatorID, memoryID, normalized, newHash, now); err != nil {
+		return nil, err
+	}
+	existing.Content = normalized
+	existing.MemoryHash = newHash
+	existing.LastUsedAt = now
+	existing.UpdatedAt = now
+	return toUserMemoryView(existing), nil
 }
 
 func (s *ChatService) CreateGroup(ctx context.Context, input CreateGroupInput) (*GroupView, error) {
@@ -716,6 +840,9 @@ func (s *ChatService) RecallMessage(ctx context.Context, input RecallMessageInpu
 	if message.Status != model.MessageStatusNormal {
 		return nil, ErrBadRequest
 	}
+	if time.Since(message.CreatedAt) > messageRecallWindow {
+		return nil, ErrMessageRecallExpired
+	}
 
 	err = s.TxManager.WithinTransaction(ctx, func(tx *gorm.DB) error {
 		messageRepo := s.MessageRepo.WithTx(tx)
@@ -827,6 +954,31 @@ func (s *ChatService) handleBotAsync(botService bot.MentionHandler, req bot.Hand
 			log.Printf("bot async failed: %v", err)
 		}
 	}()
+}
+
+func hashUserMemoryContent(content string) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+	sum := sha1.Sum([]byte(strings.ToLower(content)))
+	return hex.EncodeToString(sum[:])
+}
+
+func toUserMemoryView(item *model.UserMemory) *UserMemoryView {
+	if item == nil {
+		return nil
+	}
+	return &UserMemoryView{
+		ID:                   item.ID,
+		UserID:               item.UserID,
+		Content:              item.Content,
+		SourceConversationID: item.SourceConversationID,
+		SourceMessageID:      item.SourceMessageID,
+		LastUsedAt:           item.LastUsedAt.UnixMilli(),
+		CreatedAt:            item.CreatedAt.UnixMilli(),
+		UpdatedAt:            item.UpdatedAt.UnixMilli(),
+	}
 }
 
 func (s *ChatService) requireConversation(ctx context.Context, conversationID string) (*model.Conversation, error) {

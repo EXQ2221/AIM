@@ -51,6 +51,9 @@ type Client interface {
 	UnbindConversationKnowledgeBase(ctx context.Context, req *chat.UnbindConversationKnowledgeBaseRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
 	CreateMessage(ctx context.Context, req *chat.CreateMessageRequest, callOptions ...callopt.Option) (r *chat.CreateMessageResponse, err error)
 	FindSingleByUsers(ctx context.Context, req *chat.FindSingleByUsersRequest, callOptions ...callopt.Option) (r *chat.FindSingleByUsersResponse, err error)
+	WriteUserMemory(ctx context.Context, req *chat.WriteUserMemoryRequest, callOptions ...callopt.Option) (r *chat.WriteUserMemoryResponse, err error)
+	ListUserMemories(ctx context.Context, req *chat.ListUserMemoriesRequest, callOptions ...callopt.Option) (r *chat.ListUserMemoriesResponse, err error)
+	UpdateUserMemory(ctx context.Context, req *chat.UpdateUserMemoryRequest, callOptions ...callopt.Option) (r *chat.UpdateUserMemoryResponse, err error)
 }
 
 // NewClient creates a client for the service defined in IDL.
@@ -280,4 +283,19 @@ func (p *kChatServiceClient) CreateMessage(ctx context.Context, req *chat.Create
 func (p *kChatServiceClient) FindSingleByUsers(ctx context.Context, req *chat.FindSingleByUsersRequest, callOptions ...callopt.Option) (r *chat.FindSingleByUsersResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.FindSingleByUsers(ctx, req)
+}
+
+func (p *kChatServiceClient) WriteUserMemory(ctx context.Context, req *chat.WriteUserMemoryRequest, callOptions ...callopt.Option) (r *chat.WriteUserMemoryResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.WriteUserMemory(ctx, req)
+}
+
+func (p *kChatServiceClient) ListUserMemories(ctx context.Context, req *chat.ListUserMemoriesRequest, callOptions ...callopt.Option) (r *chat.ListUserMemoriesResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListUserMemories(ctx, req)
+}
+
+func (p *kChatServiceClient) UpdateUserMemory(ctx context.Context, req *chat.UpdateUserMemoryRequest, callOptions ...callopt.Option) (r *chat.UpdateUserMemoryResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.UpdateUserMemory(ctx, req)
 }

@@ -992,6 +992,7 @@ select:focus-visible {
   flex-direction: column;
   align-items: flex-start;
   min-width: 0;
+  max-width: min(740px, 78%);
 }
 
 .message-main.mine {
@@ -1023,8 +1024,9 @@ select:focus-visible {
 }
 
 .message-bubble {
-  width: fit-content;
-  max-width: min(680px, 76%);
+  display: inline-block;
+  width: auto;
+  max-width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1123,7 +1125,8 @@ select:focus-visible {
 }
 
 .message-markdown {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .message-markdown > *:first-child {
@@ -2220,6 +2223,31 @@ select:focus-visible {
   gap: 8px;
 }
 
+.friend-presence-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 46px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--line);
+}
+
+.friend-presence-badge.presence-online {
+  color: #1f883d;
+  background: rgba(46, 160, 67, 0.12);
+  border-color: rgba(46, 160, 67, 0.28);
+}
+
+.friend-presence-badge.presence-offline {
+  color: var(--muted);
+  background: #f6f8fa;
+  border-color: var(--line);
+}
+
 .friend-expand-button {
   border: 0;
   background: transparent;
@@ -2579,6 +2607,105 @@ select:focus-visible {
   background: var(--teal);
 }
 
+.memory-card {
+  display: grid;
+  gap: 10px;
+  margin: 0 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-strong);
+}
+
+.memory-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.memory-card-head strong {
+  font-size: 14px;
+}
+
+.memory-card-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.memory-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.memory-create-form {
+  display: grid;
+  gap: 8px;
+}
+
+.memory-create-form textarea,
+.memory-row textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+}
+
+.memory-create-form button {
+  justify-self: start;
+}
+
+.memory-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.memory-list {
+  display: grid;
+  gap: 10px;
+}
+
+.memory-row {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-soft);
+}
+
+.memory-row-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.memory-row-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.memory-row-actions > span {
+  color: var(--quiet);
+  font-size: 12px;
+}
+
 .session-row {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) auto;
@@ -2777,7 +2904,7 @@ select:focus-visible {
 }
 
 .message-bubble {
-  max-width: min(740px, 78%);
+  max-width: 100%;
   border-radius: 6px;
   border-color: var(--line);
   background: var(--panel);
@@ -3237,6 +3364,43 @@ select:focus-visible {
 .history-search-result-item:hover {
   border-color: var(--line-strong);
   background: var(--panel-strong);
+}
+
+.conversation-summary-modal {
+  width: min(760px, calc(100vw - 32px));
+  max-height: 80vh;
+}
+
+.conversation-summary-body {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px 16px;
+  overflow: auto;
+}
+
+.conversation-summary-result {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.conversation-summary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
+.conversation-summary-result pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.55;
+  color: var(--text-main);
 }
 
 .history-search-result-item header {

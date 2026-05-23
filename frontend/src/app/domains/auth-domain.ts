@@ -13,7 +13,7 @@ export type AuthDomainDeps = {
 
 export async function revokeSessionAction(sessionId: string, password: string, deps: AuthDomainDeps) {
   if (!password.trim()) {
-    deps.showToast("Please enter your password", "error");
+    deps.showToast("请输入密码", "error");
     return;
   }
   deps.setBusyAction(true);
@@ -30,7 +30,7 @@ export async function revokeSessionAction(sessionId: string, password: string, d
 
 export async function logoutAllAction(password: string, deps: AuthDomainDeps) {
   if (!password.trim()) {
-    deps.showToast("Please enter your password", "error");
+    deps.showToast("请输入密码", "error");
     return;
   }
   deps.setBusyAction(true);
@@ -55,7 +55,7 @@ export async function uploadAvatarAction(avatar: Blob, deps: AuthDomainDeps) {
           : member
       )
     );
-    deps.showToast("Avatar updated", "success");
+    deps.showToast("头像已更新", "success");
   } catch (error) {
     deps.showToast(errorMessage(error), "error");
   } finally {

@@ -14,6 +14,18 @@ export type BotDomainDeps = {
   showToast: (message: string, tone?: "success" | "error" | "info") => void;
 };
 
+export type CreateCustomBotInput = {
+  name: string;
+  mentionName: string;
+  aliases?: string[];
+  description?: string;
+  apiBaseUrl: string;
+  apiKey: string;
+  modelName: string;
+  supportedModels?: string[];
+  systemPrompt?: string;
+};
+
 export async function refreshAvailableBotsAction(deps: BotDomainDeps) {
   const data = await api.bots();
   deps.setAvailableBots(data);
@@ -60,9 +72,23 @@ export async function addBotToConversationAction(
   try {
     await api.addConversationBot(deps.selectedConversationId, input);
     await refreshConversationBotsAction(deps);
-    deps.showToast("Bot added", "success");
+    deps.showToast("Bot 已添加", "success");
   } catch (error) {
     deps.showToast(errorMessage(error), "error");
+  } finally {
+    deps.setBusyAction(false);
+  }
+}
+
+export async function createCustomBotAction(input: CreateCustomBotInput, deps: BotDomainDeps) {
+  deps.setBusyAction(true);
+  try {
+    await api.createCustomBot(input);
+    await refreshAvailableBotsAction(deps);
+    deps.showToast("自定义 Bot 已创建", "success");
+  } catch (error) {
+    deps.showToast(errorMessage(error), "error");
+    throw error;
   } finally {
     deps.setBusyAction(false);
   }
@@ -74,7 +100,7 @@ export async function removeBotFromConversationAction(botId: number, deps: BotDo
   try {
     await api.removeConversationBot(deps.selectedConversationId, botId);
     await refreshConversationBotsAction(deps);
-    deps.showToast("Bot removed", "success");
+    deps.showToast("Bot 已移除", "success");
   } catch (error) {
     deps.showToast(errorMessage(error), "error");
   } finally {

@@ -97,7 +97,7 @@ export function buildRealtimeEventHandler(deps: RealtimeHandlerDeps) {
             current.filter((item) => !(item.conversationId === failedConversationID && item.isBotGenerating))
           );
         }
-        deps.showToast(data.errorMessage || "Message send failed", "error");
+        deps.showToast(data.errorMessage || "消息发送失败", "error");
       }
       return;
     }
@@ -166,7 +166,7 @@ export function buildRealtimeEventHandler(deps: RealtimeHandlerDeps) {
         void deps.refreshConversations();
       }
       const summary = (notification.summary || notification.title || "").trim();
-      deps.showToast(summary || "New notification", "info");
+      deps.showToast(summary || "你有一条新通知", "info");
       return;
     }
 
@@ -194,6 +194,10 @@ export function buildRealtimeEventHandler(deps: RealtimeHandlerDeps) {
         status?: string;
         conversationId?: string;
       };
+      if (data.reason === "PRESENCE_CHANGED") {
+        void deps.syncFriendStateFromRealtime();
+        return;
+      }
       void deps.syncFriendStateFromRealtime({
         refreshConversations: Boolean(data.conversationId) || (data.reason === "REQUEST_RESPONDED" && data.status === "ACCEPTED")
       });

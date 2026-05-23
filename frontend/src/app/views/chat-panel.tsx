@@ -1,10 +1,21 @@
 ﻿import { ChevronLeft, DoorOpen, FileImage, Loader2, LockKeyhole, MessageCircle, Mic, PanelRightOpen, Paperclip, RefreshCw, SendHorizontal, UserPlus, X } from "lucide-react";
 import { ChangeEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search } from "lucide-react";
+import { MessageSquarePlus, Search } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api } from "../../api";
 import { Avatar, IconButton, MessageBubble, WsBadge } from "../ui";
 import { cx, roleLabel } from "../utils";
-import type { ConversationInfo, FriendInfo, MemberInfo, MessageInfo, OutgoingMessagePayload, ReplyPreviewInfo, UserInfo } from "../../types";
+import type {
+  ConversationInfo,
+  ConversationSummaryResponse,
+  FriendInfo,
+  MemberInfo,
+  MessageInfo,
+  OutgoingMessagePayload,
+  ReplyPreviewInfo,
+  UserInfo
+} from "../../types";
 import type { HistorySearchMessageItem } from "../../types";
 import type { WsStatus } from "../types";
 
@@ -41,6 +52,14 @@ type PendingImageDraft = {
 type PendingFileDraft = {
   id: string;
   file: File;
+};
+
+type ConversationSummaryCacheItem = {
+  messageCount: number;
+  loading: boolean;
+  error: string;
+  result: ConversationSummaryResponse | null;
+  updatedAt: number;
 };
 
 function formatBytes(bytes: number) {
@@ -166,6 +185,12 @@ export function ChatPanel({
   const [historySearchError, setHistorySearchError] = useState("");
   const [historySearchSearched, setHistorySearchSearched] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
+  const [conversationSummaryOpen, setConversationSummaryOpen] = useState(false);
+  const [conversationSummaryCount, setConversationSummaryCount] = useState(100);
+  const [conversationSummaryLoading, setConversationSummaryLoading] = useState(false);
+  const [conversationSummaryError, setConversationSummaryError] = useState("");
+  const [conversationSummaryResult, setConversationSummaryResult] = useState<ConversationSummaryResponse | null>(null);
+  const [conversationSummaryCache, setConversationSummaryCache] = useState<Record<string, ConversationSummaryCacheItem>>({});
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteFriends, setInviteFriends] = useState<FriendInfo[]>([]);
@@ -189,7 +214,43 @@ export function ChatPanel({
   const messagesRef = useRef<MessageInfo[]>([]);
 
   const isGroupChat = conversation?.type === "GROUP";
+  const summaryCacheStorageKey = useMemo(() => `aim:conversation-summary:v1:${currentUser.user_id}`, [currentUser.user_id]);
   const memberUserIds = useMemo(() => new Set(members.filter((m) => m.memberType !== "BOT").map((m) => m.userId)), [members]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(summaryCacheStorageKey);
+      if (!raw) {
+        setConversationSummaryCache({});
+        return;
+      }
+      const parsed = JSON.parse(raw) as Record<string, ConversationSummaryCacheItem>;
+      const normalized: Record<string, ConversationSummaryCacheItem> = {};
+      for (const [conversationId, item] of Object.entries(parsed || {})) {
+        if (!item || typeof item !== "object") {
+          continue;
+        }
+        normalized[conversationId] = {
+          messageCount: Math.max(20, Math.min(500, Number(item.messageCount) || 100)),
+          loading: false,
+          error: typeof item.error === "string" ? item.error : "",
+          result: item.result ?? null,
+          updatedAt: Number(item.updatedAt) || 0
+        };
+      }
+      setConversationSummaryCache(normalized);
+    } catch {
+      setConversationSummaryCache({});
+    }
+  }, [summaryCacheStorageKey]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(summaryCacheStorageKey, JSON.stringify(conversationSummaryCache));
+    } catch {
+      // ignore local storage write failures
+    }
+  }, [conversationSummaryCache, summaryCacheStorageKey]);
 
   const openInviteDialog = useCallback(async () => {
     if (!conversation) return;
@@ -213,7 +274,7 @@ export function ChatPanel({
       setInviteFriends((prev) => prev.filter((f) => f.user_id !== friend.user_id));
       setInviteOpen(false);
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Invite failed");
+      alert(err instanceof Error ? err.message : "邀请失败");
     } finally {
       setInviteInvitingId(null);
     }
@@ -495,25 +556,39 @@ export function ChatPanel({
   const sendDisabled = !conversation || !canSend || !messageDraft.trim() || wsStatus !== "open";
   const composerDisabled = !conversation || !canSend || wsStatus !== "open";
   const hasMediaDrafts = imageDrafts.length > 0 || fileDrafts.length > 0;
-  const memberMap = useMemo(() => new Map(members.map((member) => [member.userId, member])), [members]);
+  const memberMap = useMemo(() => {
+    const map = new Map<string, MemberInfo>();
+    for (const member of members) {
+      const memberType = member.memberType === "BOT" ? "BOT" : "USER";
+      map.set(`${memberType}:${member.userId}`, member);
+    }
+    return map;
+  }, [members]);
+  const findMemberBySender = useCallback(
+    (senderType: string, senderId: number) => {
+      const normalizedType = senderType === "BOT" ? "BOT" : "USER";
+      return memberMap.get(`${normalizedType}:${senderId}`);
+    },
+    [memberMap]
+  );
   const resolveReplySenderLabel = useCallback(
     (replyPreview: ReplyPreviewInfo | null | undefined) => {
       if (!replyPreview) {
-        return "Original message unavailable";
+        return "原消息不可用";
       }
       if (replyPreview.senderType === "SYSTEM") {
-        return "System";
+        return "系统";
       }
       if (replyPreview.senderType === "BOT") {
-        const botMember = memberMap.get(replyPreview.senderId);
-        return botMember?.nickname || botMember?.mentionName || `Bot ${replyPreview.senderId}`;
+        const botMember = findMemberBySender(replyPreview.senderType, replyPreview.senderId);
+        return botMember?.nickname || botMember?.mentionName || `机器人 ${replyPreview.senderId}`;
       }
-      if (replyPreview.senderId === currentUser.user_id) {
+      if (replyPreview.senderType === "USER" && replyPreview.senderId === currentUser.user_id) {
         return currentUser.nickname || currentUser.aim_id;
       }
-      return memberMap.get(replyPreview.senderId)?.nickname || `User ${replyPreview.senderId}`;
+      return findMemberBySender(replyPreview.senderType, replyPreview.senderId)?.nickname || `用户 ${replyPreview.senderId}`;
     },
-    [currentUser.aim_id, currentUser.nickname, currentUser.user_id, memberMap]
+    [currentUser.aim_id, currentUser.nickname, currentUser.user_id, findMemberBySender]
   );
   /* const lockedReason = !conversation
     ? ""
@@ -529,12 +604,12 @@ export function ChatPanel({
   const lockedReason = !conversation
     ? ""
     : conversation.type === "SINGLE"
-      ? "You can no longer send direct messages in this conversation."
+      ? "你已无法在该单聊中继续发送消息"
       : isMemberMuted(currentMember)
-        ? `You are muted until ${formatMuteUntil(currentMember?.muteUntil)}`
+        ? `你已被禁言至 ${formatMuteUntil(currentMember?.muteUntil)}`
         : conversation.muteAll && currentMember?.role !== "OWNER" && currentMember?.role !== "ADMIN"
-          ? "This group is muted for regular members."
-          : "You cannot send messages right now.";
+          ? "当前群聊已开启全员禁言"
+          : "当前无法发送消息";
 
   const onComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (!canSend) {
@@ -595,6 +670,72 @@ export function ChatPanel({
     setHistorySearchOpen(true);
   }, []);
 
+  const openConversationSummary = useCallback(() => {
+    if (!conversation || conversation.type !== "GROUP") {
+      return;
+    }
+    const cached = conversationSummaryCache[conversation.conversationId];
+    setConversationSummaryCount(cached?.messageCount ?? 100);
+    setConversationSummaryError(cached?.error ?? "");
+    setConversationSummaryResult(cached?.result ?? null);
+    setConversationSummaryLoading(Boolean(cached?.loading));
+    setConversationSummaryOpen(true);
+  }, [conversation, conversationSummaryCache]);
+
+  const closeConversationSummary = useCallback(() => {
+    setConversationSummaryOpen(false);
+  }, []);
+
+  const submitConversationSummary = useCallback(async () => {
+    if (!conversation || conversation.type !== "GROUP") {
+      setConversationSummaryError("仅支持群聊总结");
+      return;
+    }
+    const nextCount = Math.max(20, Math.min(500, Number.isFinite(conversationSummaryCount) ? conversationSummaryCount : 100));
+    const targetConversationId = conversation.conversationId;
+    setConversationSummaryLoading(true);
+    setConversationSummaryError("");
+    setConversationSummaryCache((current) => ({
+      ...current,
+      [targetConversationId]: {
+        messageCount: nextCount,
+        loading: true,
+        error: "",
+        result: current[targetConversationId]?.result ?? null,
+        updatedAt: Date.now()
+      }
+    }));
+    try {
+      const data = await api.summarizeConversation(targetConversationId, nextCount);
+      setConversationSummaryResult(data);
+      setConversationSummaryCache((current) => ({
+        ...current,
+        [targetConversationId]: {
+          messageCount: nextCount,
+          loading: false,
+          error: "",
+          result: data,
+          updatedAt: Date.now()
+        }
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "群聊总结失败";
+      setConversationSummaryError(message);
+      setConversationSummaryCache((current) => ({
+        ...current,
+        [targetConversationId]: {
+          messageCount: nextCount,
+          loading: false,
+          error: message,
+          result: current[targetConversationId]?.result ?? null,
+          updatedAt: Date.now()
+        }
+      }));
+    } finally {
+      setConversationSummaryLoading(false);
+    }
+  }, [conversation, conversationSummaryCount]);
+
   const closeHistorySearch = useCallback(() => {
     setHistorySearchOpen(false);
     setHistorySearchLoading(false);
@@ -643,14 +784,16 @@ export function ChatPanel({
   const resolveHistorySenderName = useCallback(
     (message: MessageInfo) => {
       if (message.senderType === "SYSTEM") return "系统";
-      if (message.senderId === currentUser.user_id) return `${currentUser.nickname || currentUser.aim_id}（我）`;
-      const member = memberMap.get(message.senderId);
+      if (message.senderType === "USER" && message.senderId === currentUser.user_id) {
+        return `${currentUser.nickname || currentUser.aim_id}（我）`;
+      }
+      const member = findMemberBySender(message.senderType, message.senderId);
       if (message.senderType === "BOT") {
-        return member?.nickname || member?.mentionName || `Bot ${message.senderId}`;
+        return member?.nickname || member?.mentionName || `机器人 ${message.senderId}`;
       }
       return member?.nickname || `用户 ${message.senderId}`;
     },
-    [currentUser.aim_id, currentUser.nickname, currentUser.user_id, memberMap]
+    [currentUser.aim_id, currentUser.nickname, currentUser.user_id, findMemberBySender]
   );
 
   const jumpToHistoryMessage = useCallback(
@@ -711,15 +854,20 @@ export function ChatPanel({
             <IconButton label="历史搜索" onClick={openHistorySearch}>
               <Search size={19} />
             </IconButton>
+            {isGroupChat && (
+              <IconButton label="群聊总结" onClick={openConversationSummary}>
+                <MessageSquarePlus size={19} />
+              </IconButton>
+            )}
             <IconButton label="成员" onClick={onOpenMembers}>
               <PanelRightOpen size={19} />
             </IconButton>
             {isGroupChat && onInviteMember && (
-              <IconButton label="Invite friend" onClick={openInviteDialog}>
+              <IconButton label="邀请好友" onClick={openInviteDialog}>
                 <UserPlus size={19} />
               </IconButton>
             )}
-            <IconButton label="Leave group" disabled={busy} onClick={() => void onLeaveGroup()}>
+            <IconButton label="退出群聊" disabled={busy} onClick={() => void onLeaveGroup()}>
               <DoorOpen size={19} />
             </IconButton>
           </header>
@@ -743,9 +891,9 @@ export function ChatPanel({
               </div>
             ) : messages.length > 0 ? (
               messages.map((message) => {
-                const mine = message.senderId === currentUser.user_id;
+                const mine = message.senderType === "USER" && message.senderId === currentUser.user_id;
                 const sender =
-                  memberMap.get(message.senderId) ??
+                  findMemberBySender(message.senderType, message.senderId) ??
                   (mine
                     ? {
                         userId: currentUser.user_id,
@@ -772,7 +920,11 @@ export function ChatPanel({
                     onReply={() => onReplySelect(message)}
                     onRecall={() => void onRecallMessage(message)}
                     onDeleteLocal={() => onDeleteLocalMessage(message)}
-                    mentionTarget={message.senderType === "BOT" ? sender?.mentionName || sender?.nickname || "ai" : sender?.nickname}
+                    mentionTarget={
+                      message.senderType === "BOT"
+                        ? sender?.aliases?.[0] || sender?.mentionName || sender?.nickname || "ai"
+                        : sender?.nickname
+                    }
                     senderName={
                       message.senderType === "BOT" ? sender?.nickname || sender?.mentionName || "AI 助手" : sender?.nickname || `用户 ${message.senderId}`
                     }
@@ -782,7 +934,7 @@ export function ChatPanel({
             ) : (
               <div className="empty-thread" role="status" aria-live="polite">
                 <MessageCircle size={36} />
-                <strong>No messages yet</strong>
+                <strong>暂无消息</strong>
               </div>
             )}
           </div>
@@ -792,11 +944,11 @@ export function ChatPanel({
               {replyingTo && (
                 <div className="replying-banner">
                   <div className="replying-banner-copy">
-                    <strong>Replying to {resolveReplySenderLabel(replyingTo)}</strong>
+                    <strong>正在回复 {resolveReplySenderLabel(replyingTo)}</strong>
                     <span>{replyingTo.contentPreview}</span>
                   </div>
                   <button type="button" onClick={onCancelReply}>
-                    Cancel
+                    取消
                   </button>
                 </div>
               )}
@@ -912,7 +1064,7 @@ export function ChatPanel({
                   rows={1}
                   disabled={composerDisabled}
                   aria-label="消息输入框"
-                  placeholder={wsStatus === "open" ? "Send a message" : "Connecting to realtime channel"}
+                  placeholder={wsStatus === "open" ? "输入消息" : "正在连接实时通道..."}
                 />
                 <button aria-label="Send" disabled={sendDisabled} type="button" onClick={() => onSend()}>
                   <SendHorizontal size={21} />
@@ -930,7 +1082,7 @@ export function ChatPanel({
         <div className="no-selection">
           <div className="brand-mark">A</div>
           <h2>AIM</h2>
-          <p>Pick a conversation to start chatting</p>
+          <p>选择一个会话开始聊天</p>
         </div>
       )}
 
@@ -938,7 +1090,7 @@ export function ChatPanel({
         <div className="modal-overlay" onClick={() => setInviteOpen(false)}>
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <strong>Invite a friend</strong>
+              <strong>邀请好友</strong>
               <button type="button" onClick={() => setInviteOpen(false)}>
                 <X size={18} />
               </button>
@@ -949,7 +1101,7 @@ export function ChatPanel({
               </div>
             ) : inviteFriends.length === 0 ? (
               <div className="center-state" style={{ padding: "2rem 0" }}>
-                <p>No inviteable friends</p>
+                <p>暂无可邀请的好友</p>
               </div>
             ) : (
               <div className="invite-friend-list">
@@ -961,10 +1113,10 @@ export function ChatPanel({
                       <Avatar name={friend.nickname || friend.aim_id} src={friend.avatar} />
                       <div className="invite-friend-info">
                         <strong>{friend.remark || friend.nickname || friend.aim_id}</strong>
-                        <span>{alreadyIn ? "Already in group" : friend.nickname || friend.aim_id}</span>
+                        <span>{alreadyIn ? "已在群聊中" : friend.nickname || friend.aim_id}</span>
                       </div>
                       {alreadyIn ? (
-                        <span className="invite-badge in-group">Already in group</span>
+                        <span className="invite-badge in-group">已在群聊中</span>
                       ) : (
                         <button
                           className="btn btn-sm"
@@ -972,7 +1124,7 @@ export function ChatPanel({
                           type="button"
                           onClick={() => void handleInviteFriend(friend)}
                         >
-                          {inviting ? <Loader2 className="spin" size={14} /> : "Invite"}
+                          {inviting ? <Loader2 className="spin" size={14} /> : "邀请"}
                         </button>
                       )}
                     </div>
@@ -1064,6 +1216,52 @@ export function ChatPanel({
                   <div className="history-search-empty">未找到符合条件的历史消息</div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {conversationSummaryOpen && (
+        <div className="modal-overlay" onClick={closeConversationSummary}>
+          <div className="modal-box conversation-summary-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <strong>群聊总结</strong>
+              <button type="button" onClick={closeConversationSummary}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="conversation-summary-body">
+              <label className="history-search-field">
+                <span>消息条数（20-500）</span>
+                <input
+                  type="number"
+                  min={20}
+                  max={500}
+                  value={conversationSummaryCount}
+                  onChange={(event) => setConversationSummaryCount(Number(event.target.value) || 100)}
+                />
+              </label>
+              <div className="history-search-actions">
+                <button type="button" disabled={conversationSummaryLoading} onClick={() => void submitConversationSummary()}>
+                  {conversationSummaryLoading ? <Loader2 className="spin" size={14} /> : <MessageSquarePlus size={14} />}
+                  生成总结
+                </button>
+              </div>
+              {conversationSummaryLoading && <p className="history-search-result-meta">正在生成中，你可以先关闭弹窗，稍后再打开查看结果。</p>}
+              {conversationSummaryError && <p className="history-search-error">{conversationSummaryError}</p>}
+              {conversationSummaryResult && (
+                <div className="conversation-summary-result">
+                  <div className="conversation-summary-meta">
+                    <span>模型：{conversationSummaryResult.model}</span>
+                    <span>已使用：{conversationSummaryResult.usedCount}</span>
+                    <span>今日剩余：{conversationSummaryResult.remainingCount}</span>
+                    <span>消息条数：{conversationSummaryResult.messageCountUsed}</span>
+                  </div>
+                  <div className="message-markdown">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{conversationSummaryResult.summary}</ReactMarkdown>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

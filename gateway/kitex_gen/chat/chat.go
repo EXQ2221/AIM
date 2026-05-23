@@ -4520,6 +4520,344 @@ var fieldIDToName_FindSingleByUsersResponse = map[int16]string{
 	1: "conversation",
 }
 
+type WriteUserMemoryRequest struct {
+	OperatorId int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	Content    string `thrift:"content,2" frugal:"2,default,string" json:"content"`
+}
+
+func NewWriteUserMemoryRequest() *WriteUserMemoryRequest {
+	return &WriteUserMemoryRequest{}
+}
+
+func (p *WriteUserMemoryRequest) InitDefault() {
+}
+
+func (p *WriteUserMemoryRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *WriteUserMemoryRequest) GetContent() (v string) {
+	return p.Content
+}
+func (p *WriteUserMemoryRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *WriteUserMemoryRequest) SetContent(val string) {
+	p.Content = val
+}
+
+func (p *WriteUserMemoryRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WriteUserMemoryRequest(%+v)", *p)
+}
+
+var fieldIDToName_WriteUserMemoryRequest = map[int16]string{
+	1: "operator_id",
+	2: "content",
+}
+
+type UserMemoryInfo struct {
+	Id                   int64  `thrift:"id,1" frugal:"1,default,i64" json:"id"`
+	UserId               int64  `thrift:"user_id,2" frugal:"2,default,i64" json:"user_id"`
+	Content              string `thrift:"content,3" frugal:"3,default,string" json:"content"`
+	SourceConversationId int64  `thrift:"source_conversation_id,4" frugal:"4,default,i64" json:"source_conversation_id"`
+	SourceMessageId      *int64 `thrift:"source_message_id,5,optional" frugal:"5,optional,i64" json:"source_message_id,omitempty"`
+	LastUsedAt           int64  `thrift:"last_used_at,6" frugal:"6,default,i64" json:"last_used_at"`
+	CreatedAt            int64  `thrift:"created_at,7" frugal:"7,default,i64" json:"created_at"`
+	UpdatedAt            int64  `thrift:"updated_at,8" frugal:"8,default,i64" json:"updated_at"`
+}
+
+func NewUserMemoryInfo() *UserMemoryInfo {
+	return &UserMemoryInfo{}
+}
+
+func (p *UserMemoryInfo) InitDefault() {
+}
+
+func (p *UserMemoryInfo) GetId() (v int64) {
+	return p.Id
+}
+
+func (p *UserMemoryInfo) GetUserId() (v int64) {
+	return p.UserId
+}
+
+func (p *UserMemoryInfo) GetContent() (v string) {
+	return p.Content
+}
+
+func (p *UserMemoryInfo) GetSourceConversationId() (v int64) {
+	return p.SourceConversationId
+}
+
+var UserMemoryInfo_SourceMessageId_DEFAULT int64
+
+func (p *UserMemoryInfo) GetSourceMessageId() (v int64) {
+	if !p.IsSetSourceMessageId() {
+		return UserMemoryInfo_SourceMessageId_DEFAULT
+	}
+	return *p.SourceMessageId
+}
+
+func (p *UserMemoryInfo) GetLastUsedAt() (v int64) {
+	return p.LastUsedAt
+}
+
+func (p *UserMemoryInfo) GetCreatedAt() (v int64) {
+	return p.CreatedAt
+}
+
+func (p *UserMemoryInfo) GetUpdatedAt() (v int64) {
+	return p.UpdatedAt
+}
+func (p *UserMemoryInfo) SetId(val int64) {
+	p.Id = val
+}
+func (p *UserMemoryInfo) SetUserId(val int64) {
+	p.UserId = val
+}
+func (p *UserMemoryInfo) SetContent(val string) {
+	p.Content = val
+}
+func (p *UserMemoryInfo) SetSourceConversationId(val int64) {
+	p.SourceConversationId = val
+}
+func (p *UserMemoryInfo) SetSourceMessageId(val *int64) {
+	p.SourceMessageId = val
+}
+func (p *UserMemoryInfo) SetLastUsedAt(val int64) {
+	p.LastUsedAt = val
+}
+func (p *UserMemoryInfo) SetCreatedAt(val int64) {
+	p.CreatedAt = val
+}
+func (p *UserMemoryInfo) SetUpdatedAt(val int64) {
+	p.UpdatedAt = val
+}
+
+func (p *UserMemoryInfo) IsSetSourceMessageId() bool {
+	return p.SourceMessageId != nil
+}
+
+func (p *UserMemoryInfo) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("UserMemoryInfo(%+v)", *p)
+}
+
+var fieldIDToName_UserMemoryInfo = map[int16]string{
+	1: "id",
+	2: "user_id",
+	3: "content",
+	4: "source_conversation_id",
+	5: "source_message_id",
+	6: "last_used_at",
+	7: "created_at",
+	8: "updated_at",
+}
+
+type WriteUserMemoryResponse struct {
+	Memory *UserMemoryInfo `thrift:"memory,1" frugal:"1,default,UserMemoryInfo" json:"memory"`
+}
+
+func NewWriteUserMemoryResponse() *WriteUserMemoryResponse {
+	return &WriteUserMemoryResponse{}
+}
+
+func (p *WriteUserMemoryResponse) InitDefault() {
+}
+
+var WriteUserMemoryResponse_Memory_DEFAULT *UserMemoryInfo
+
+func (p *WriteUserMemoryResponse) GetMemory() (v *UserMemoryInfo) {
+	if !p.IsSetMemory() {
+		return WriteUserMemoryResponse_Memory_DEFAULT
+	}
+	return p.Memory
+}
+func (p *WriteUserMemoryResponse) SetMemory(val *UserMemoryInfo) {
+	p.Memory = val
+}
+
+func (p *WriteUserMemoryResponse) IsSetMemory() bool {
+	return p.Memory != nil
+}
+
+func (p *WriteUserMemoryResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("WriteUserMemoryResponse(%+v)", *p)
+}
+
+var fieldIDToName_WriteUserMemoryResponse = map[int16]string{
+	1: "memory",
+}
+
+type ListUserMemoriesRequest struct {
+	OperatorId int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	Limit      *int32 `thrift:"limit,2,optional" frugal:"2,optional,i32" json:"limit,omitempty"`
+}
+
+func NewListUserMemoriesRequest() *ListUserMemoriesRequest {
+	return &ListUserMemoriesRequest{}
+}
+
+func (p *ListUserMemoriesRequest) InitDefault() {
+}
+
+func (p *ListUserMemoriesRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+var ListUserMemoriesRequest_Limit_DEFAULT int32
+
+func (p *ListUserMemoriesRequest) GetLimit() (v int32) {
+	if !p.IsSetLimit() {
+		return ListUserMemoriesRequest_Limit_DEFAULT
+	}
+	return *p.Limit
+}
+func (p *ListUserMemoriesRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *ListUserMemoriesRequest) SetLimit(val *int32) {
+	p.Limit = val
+}
+
+func (p *ListUserMemoriesRequest) IsSetLimit() bool {
+	return p.Limit != nil
+}
+
+func (p *ListUserMemoriesRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListUserMemoriesRequest(%+v)", *p)
+}
+
+var fieldIDToName_ListUserMemoriesRequest = map[int16]string{
+	1: "operator_id",
+	2: "limit",
+}
+
+type ListUserMemoriesResponse struct {
+	Memories []*UserMemoryInfo `thrift:"memories,1" frugal:"1,default,list<UserMemoryInfo>" json:"memories"`
+}
+
+func NewListUserMemoriesResponse() *ListUserMemoriesResponse {
+	return &ListUserMemoriesResponse{}
+}
+
+func (p *ListUserMemoriesResponse) InitDefault() {
+}
+
+func (p *ListUserMemoriesResponse) GetMemories() (v []*UserMemoryInfo) {
+	return p.Memories
+}
+func (p *ListUserMemoriesResponse) SetMemories(val []*UserMemoryInfo) {
+	p.Memories = val
+}
+
+func (p *ListUserMemoriesResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListUserMemoriesResponse(%+v)", *p)
+}
+
+var fieldIDToName_ListUserMemoriesResponse = map[int16]string{
+	1: "memories",
+}
+
+type UpdateUserMemoryRequest struct {
+	OperatorId int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	MemoryId   int64  `thrift:"memory_id,2" frugal:"2,default,i64" json:"memory_id"`
+	Content    string `thrift:"content,3" frugal:"3,default,string" json:"content"`
+}
+
+func NewUpdateUserMemoryRequest() *UpdateUserMemoryRequest {
+	return &UpdateUserMemoryRequest{}
+}
+
+func (p *UpdateUserMemoryRequest) InitDefault() {
+}
+
+func (p *UpdateUserMemoryRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *UpdateUserMemoryRequest) GetMemoryId() (v int64) {
+	return p.MemoryId
+}
+
+func (p *UpdateUserMemoryRequest) GetContent() (v string) {
+	return p.Content
+}
+func (p *UpdateUserMemoryRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *UpdateUserMemoryRequest) SetMemoryId(val int64) {
+	p.MemoryId = val
+}
+func (p *UpdateUserMemoryRequest) SetContent(val string) {
+	p.Content = val
+}
+
+func (p *UpdateUserMemoryRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("UpdateUserMemoryRequest(%+v)", *p)
+}
+
+var fieldIDToName_UpdateUserMemoryRequest = map[int16]string{
+	1: "operator_id",
+	2: "memory_id",
+	3: "content",
+}
+
+type UpdateUserMemoryResponse struct {
+	Memory *UserMemoryInfo `thrift:"memory,1" frugal:"1,default,UserMemoryInfo" json:"memory"`
+}
+
+func NewUpdateUserMemoryResponse() *UpdateUserMemoryResponse {
+	return &UpdateUserMemoryResponse{}
+}
+
+func (p *UpdateUserMemoryResponse) InitDefault() {
+}
+
+var UpdateUserMemoryResponse_Memory_DEFAULT *UserMemoryInfo
+
+func (p *UpdateUserMemoryResponse) GetMemory() (v *UserMemoryInfo) {
+	if !p.IsSetMemory() {
+		return UpdateUserMemoryResponse_Memory_DEFAULT
+	}
+	return p.Memory
+}
+func (p *UpdateUserMemoryResponse) SetMemory(val *UserMemoryInfo) {
+	p.Memory = val
+}
+
+func (p *UpdateUserMemoryResponse) IsSetMemory() bool {
+	return p.Memory != nil
+}
+
+func (p *UpdateUserMemoryResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("UpdateUserMemoryResponse(%+v)", *p)
+}
+
+var fieldIDToName_UpdateUserMemoryResponse = map[int16]string{
+	1: "memory",
+}
+
 type ChatService interface {
 	Health(ctx context.Context, req *HealthRequest) (r *HealthResponse, err error)
 
@@ -4600,6 +4938,12 @@ type ChatService interface {
 	CreateMessage(ctx context.Context, req *CreateMessageRequest) (r *CreateMessageResponse, err error)
 
 	FindSingleByUsers(ctx context.Context, req *FindSingleByUsersRequest) (r *FindSingleByUsersResponse, err error)
+
+	WriteUserMemory(ctx context.Context, req *WriteUserMemoryRequest) (r *WriteUserMemoryResponse, err error)
+
+	ListUserMemories(ctx context.Context, req *ListUserMemoriesRequest) (r *ListUserMemoriesResponse, err error)
+
+	UpdateUserMemory(ctx context.Context, req *UpdateUserMemoryRequest) (r *UpdateUserMemoryResponse, err error)
 }
 
 type ChatServiceHealthArgs struct {
@@ -7639,5 +7983,233 @@ func (p *ChatServiceFindSingleByUsersResult) String() string {
 }
 
 var fieldIDToName_ChatServiceFindSingleByUsersResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceWriteUserMemoryArgs struct {
+	Req *WriteUserMemoryRequest `thrift:"req,1" frugal:"1,default,WriteUserMemoryRequest" json:"req"`
+}
+
+func NewChatServiceWriteUserMemoryArgs() *ChatServiceWriteUserMemoryArgs {
+	return &ChatServiceWriteUserMemoryArgs{}
+}
+
+func (p *ChatServiceWriteUserMemoryArgs) InitDefault() {
+}
+
+var ChatServiceWriteUserMemoryArgs_Req_DEFAULT *WriteUserMemoryRequest
+
+func (p *ChatServiceWriteUserMemoryArgs) GetReq() (v *WriteUserMemoryRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceWriteUserMemoryArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceWriteUserMemoryArgs) SetReq(val *WriteUserMemoryRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceWriteUserMemoryArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceWriteUserMemoryArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceWriteUserMemoryArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceWriteUserMemoryArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceWriteUserMemoryResult struct {
+	Success *WriteUserMemoryResponse `thrift:"success,0,optional" frugal:"0,optional,WriteUserMemoryResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceWriteUserMemoryResult() *ChatServiceWriteUserMemoryResult {
+	return &ChatServiceWriteUserMemoryResult{}
+}
+
+func (p *ChatServiceWriteUserMemoryResult) InitDefault() {
+}
+
+var ChatServiceWriteUserMemoryResult_Success_DEFAULT *WriteUserMemoryResponse
+
+func (p *ChatServiceWriteUserMemoryResult) GetSuccess() (v *WriteUserMemoryResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceWriteUserMemoryResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceWriteUserMemoryResult) SetSuccess(x interface{}) {
+	p.Success = x.(*WriteUserMemoryResponse)
+}
+
+func (p *ChatServiceWriteUserMemoryResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceWriteUserMemoryResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceWriteUserMemoryResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceWriteUserMemoryResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceListUserMemoriesArgs struct {
+	Req *ListUserMemoriesRequest `thrift:"req,1" frugal:"1,default,ListUserMemoriesRequest" json:"req"`
+}
+
+func NewChatServiceListUserMemoriesArgs() *ChatServiceListUserMemoriesArgs {
+	return &ChatServiceListUserMemoriesArgs{}
+}
+
+func (p *ChatServiceListUserMemoriesArgs) InitDefault() {
+}
+
+var ChatServiceListUserMemoriesArgs_Req_DEFAULT *ListUserMemoriesRequest
+
+func (p *ChatServiceListUserMemoriesArgs) GetReq() (v *ListUserMemoriesRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceListUserMemoriesArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceListUserMemoriesArgs) SetReq(val *ListUserMemoriesRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceListUserMemoriesArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceListUserMemoriesArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListUserMemoriesArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListUserMemoriesArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceListUserMemoriesResult struct {
+	Success *ListUserMemoriesResponse `thrift:"success,0,optional" frugal:"0,optional,ListUserMemoriesResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceListUserMemoriesResult() *ChatServiceListUserMemoriesResult {
+	return &ChatServiceListUserMemoriesResult{}
+}
+
+func (p *ChatServiceListUserMemoriesResult) InitDefault() {
+}
+
+var ChatServiceListUserMemoriesResult_Success_DEFAULT *ListUserMemoriesResponse
+
+func (p *ChatServiceListUserMemoriesResult) GetSuccess() (v *ListUserMemoriesResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceListUserMemoriesResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceListUserMemoriesResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ListUserMemoriesResponse)
+}
+
+func (p *ChatServiceListUserMemoriesResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceListUserMemoriesResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListUserMemoriesResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListUserMemoriesResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceUpdateUserMemoryArgs struct {
+	Req *UpdateUserMemoryRequest `thrift:"req,1" frugal:"1,default,UpdateUserMemoryRequest" json:"req"`
+}
+
+func NewChatServiceUpdateUserMemoryArgs() *ChatServiceUpdateUserMemoryArgs {
+	return &ChatServiceUpdateUserMemoryArgs{}
+}
+
+func (p *ChatServiceUpdateUserMemoryArgs) InitDefault() {
+}
+
+var ChatServiceUpdateUserMemoryArgs_Req_DEFAULT *UpdateUserMemoryRequest
+
+func (p *ChatServiceUpdateUserMemoryArgs) GetReq() (v *UpdateUserMemoryRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceUpdateUserMemoryArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceUpdateUserMemoryArgs) SetReq(val *UpdateUserMemoryRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceUpdateUserMemoryArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceUpdateUserMemoryArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUpdateUserMemoryArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUpdateUserMemoryArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceUpdateUserMemoryResult struct {
+	Success *UpdateUserMemoryResponse `thrift:"success,0,optional" frugal:"0,optional,UpdateUserMemoryResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceUpdateUserMemoryResult() *ChatServiceUpdateUserMemoryResult {
+	return &ChatServiceUpdateUserMemoryResult{}
+}
+
+func (p *ChatServiceUpdateUserMemoryResult) InitDefault() {
+}
+
+var ChatServiceUpdateUserMemoryResult_Success_DEFAULT *UpdateUserMemoryResponse
+
+func (p *ChatServiceUpdateUserMemoryResult) GetSuccess() (v *UpdateUserMemoryResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceUpdateUserMemoryResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceUpdateUserMemoryResult) SetSuccess(x interface{}) {
+	p.Success = x.(*UpdateUserMemoryResponse)
+}
+
+func (p *ChatServiceUpdateUserMemoryResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceUpdateUserMemoryResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUpdateUserMemoryResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUpdateUserMemoryResult = map[int16]string{
 	0: "success",
 }

@@ -82,12 +82,12 @@ export function useMessageActions(deps: UseMessageActionsDeps) {
       const content = messageDraft.trim();
       if (!selectedConversationId || !user) return null;
       if (!canSendCurrentConversation) {
-        showToast("You cannot continue sending messages in this conversation.", "error");
+        showToast("当前会话暂不可继续发送消息", "error");
         return null;
       }
       const socket = socketRef.current;
       if (!socket || socket.readyState !== WebSocket.OPEN) {
-        showToast("Realtime connection is not ready", "error");
+        showToast("实时连接未就绪，请稍后再试", "error");
         return null;
       }
 
@@ -174,7 +174,7 @@ export function useMessageActions(deps: UseMessageActionsDeps) {
             status: "FAILED"
           })
         );
-        showToast("Send failed", "error");
+        showToast("发送失败，请重试", "error");
         return null;
       }
       if (outgoing.messageType === "TEXT") {

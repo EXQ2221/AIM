@@ -264,3 +264,14 @@ type CreateNotificationInput struct {
 	ConversationID   string
 	RelatedMessageID *uint64
 }
+
+type UserMemoryView struct {
+	ID                   uint64
+	UserID               uint64
+	Content              string
+	SourceConversationID uint64
+	SourceMessageID      *uint64
+	LastUsedAt           int64
+	CreatedAt            int64
+	UpdatedAt            int64
+}

@@ -36,6 +36,9 @@ func New() *gin.Engine {
 	userGroup.Use(middleware.Auth())
 	userGroup.GET("/me", handler.Me)
 	userGroup.POST("/me/avatar", handler.UploadAvatar)
+	userGroup.GET("/memory", handler.ListUserMemories)
+	userGroup.POST("/memory", handler.WriteUserMemory)
+	userGroup.PUT("/memory/:memoryId", handler.UpdateUserMemory)
 
 	uploadGroup := engine.Group("/api/v1/uploads")
 	uploadGroup.Use(middleware.Auth())
@@ -53,6 +56,8 @@ func New() *gin.Engine {
 	friendGroup.DELETE("/:friendUserId", handler.DeleteFriend)
 	friendGroup.GET("/groups", handler.ListFriendGroups)
 	friendGroup.POST("/groups", handler.CreateFriendGroup)
+	friendGroup.GET("/presence/settings", handler.GetPresenceSettings)
+	friendGroup.PUT("/presence/settings", handler.UpdatePresenceSettings)
 
 	conversationGroup := engine.Group("/api/v1/conversations")
 	conversationGroup.Use(middleware.Auth())
@@ -83,6 +88,7 @@ func New() *gin.Engine {
 	conversationGroup.DELETE("/:conversationId/knowledge-bases/:knowledgeBaseId", handler.UnbindConversationKnowledgeBase)
 	conversationGroup.GET("/:conversationId/ai-call-logs", handler.ListAICallLogs)
 	conversationGroup.GET("/:conversationId/messages", handler.ListMessages)
+	conversationGroup.POST("/:conversationId/summary", handler.SummarizeConversation)
 	conversationGroup.GET("/history/search", handler.SearchHistoryMessages)
 
 	knowledgeBaseGroup := engine.Group("/api/v1/knowledge-bases")

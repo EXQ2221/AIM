@@ -3,17 +3,16 @@ ARG RUNTIME_IMAGE=m.daocloud.io/docker.io/library/alpine:3.20
 
 FROM ${GO_IMAGE} AS builder
 
-WORKDIR /src/chat-service
+WORKDIR /src
 
 ENV GOPROXY=https://goproxy.cn,direct
 ENV GOSUMDB=off
 
-COPY chat-service/go.mod chat-service/go.sum ./
-RUN go mod download
-
-COPY chat-service/ ./
+COPY chat-service/ ./chat-service/
+COPY shared/ ./shared/
+RUN printf "go 1.25.2\n\nuse (\n\t./chat-service\n\t./shared\n)\n" > ./go.work
 RUN mkdir -p /out
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/server ./chat-service/cmd/server
 
 FROM ${RUNTIME_IMAGE}
 

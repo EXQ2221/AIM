@@ -95,9 +95,6 @@ func (s *ChatService) ListConversationBots(ctx context.Context, operatorID uint6
 			}
 			return nil, err
 		}
-		if botModel.CreatedBy != 0 {
-			continue
-		}
 		view, err := buildConversationBotView(*botModel, conversationBot, *member)
 		if err != nil {
 			return nil, err
@@ -206,7 +203,7 @@ func (s *ChatService) CreateCustomBot(ctx context.Context, input CreateCustomBot
 
 	name := strings.TrimSpace(input.Name)
 	mentionName := normalizeOptionalName(input.MentionName)
-	baseURL := strings.TrimSpace(input.APIBaseURL)
+	baseURL := normalizeOpenAIBaseURL(input.APIBaseURL)
 	apiKey := strings.TrimSpace(input.APIKey)
 	modelName := strings.TrimSpace(input.ModelName)
 	if name == "" || mentionName == "" || baseURL == "" || apiKey == "" || modelName == "" {
@@ -256,6 +253,18 @@ func (s *ChatService) CreateCustomBot(ctx context.Context, input CreateCustomBot
 		return nil, err
 	}
 	return &view, nil
+}
+
+func normalizeOpenAIBaseURL(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	lower := strings.ToLower(value)
+	if strings.HasSuffix(lower, "/chat/completions") {
+		return strings.TrimSpace(value[:len(value)-len("/chat/completions")])
+	}
+	return value
 }
 
 func (s *ChatService) RemoveConversationBot(ctx context.Context, operatorID uint64, conversationID string, botID uint64) error {
