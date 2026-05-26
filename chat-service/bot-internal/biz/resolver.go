@@ -36,31 +36,6 @@ func leadingMentionToken(content string) (string, bool) {
 	return token, true
 }
 
-func trimLeadingMention(content string) string {
-	trimmed := strings.TrimSpace(content)
-	if trimmed == "" {
-		return ""
-	}
-	first, size := utf8.DecodeRuneInString(trimmed)
-	if first == utf8.RuneError && size == 0 {
-		return ""
-	}
-	if !isAtRune(first) {
-		return strings.TrimSpace(trimmed)
-	}
-
-	index := size
-	for _, r := range trimmed[size:] {
-		if unicode.IsSpace(r) || isMentionSeparator(r) {
-			break
-		}
-		index += utf8.RuneLen(r)
-	}
-	trimmed = strings.TrimSpace(trimmed[index:])
-	trimmed = strings.TrimLeft(trimmed, ":：,，;；、")
-	return strings.TrimSpace(trimmed)
-}
-
 func isMentionSeparator(r rune) bool {
 	switch r {
 	case ':', '：', ',', '，', ';', '；', '、':

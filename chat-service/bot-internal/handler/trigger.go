@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"example.com/aim/chat-service/internal/dal/model"
 )
@@ -38,12 +39,19 @@ func ExtractQuestion(content string) string {
 
 func leadingMentionToken(content string) (string, bool) {
 	trimmed := strings.TrimSpace(content)
-	if trimmed == "" || !strings.HasPrefix(trimmed, "@") {
+	if trimmed == "" {
+		return "", false
+	}
+	first, size := utf8.DecodeRuneInString(trimmed)
+	if first == utf8.RuneError && size == 0 {
+		return "", false
+	}
+	if !isAtRune(first) {
 		return "", false
 	}
 
 	var builder strings.Builder
-	for _, r := range trimmed[1:] {
+	for _, r := range trimmed[size:] {
 		if unicode.IsSpace(r) || isMentionSeparator(r) {
 			break
 		}
@@ -58,27 +66,38 @@ func leadingMentionToken(content string) (string, bool) {
 
 func trimLeadingMention(content string) string {
 	trimmed := strings.TrimSpace(content)
-	if trimmed == "" || !strings.HasPrefix(trimmed, "@") {
+	if trimmed == "" {
+		return ""
+	}
+	first, size := utf8.DecodeRuneInString(trimmed)
+	if first == utf8.RuneError && size == 0 {
+		return ""
+	}
+	if !isAtRune(first) {
 		return strings.TrimSpace(trimmed)
 	}
 
-	index := 1
-	for _, r := range trimmed[1:] {
+	index := size
+	for _, r := range trimmed[size:] {
 		if unicode.IsSpace(r) || isMentionSeparator(r) {
 			break
 		}
-		index += len(string(r))
+		index += utf8.RuneLen(r)
 	}
 	trimmed = strings.TrimSpace(trimmed[index:])
-	trimmed = strings.TrimLeft(trimmed, ":：,，;；")
+	trimmed = strings.TrimLeft(trimmed, ":：,，;；、")
 	return strings.TrimSpace(trimmed)
 }
 
 func isMentionSeparator(r rune) bool {
 	switch r {
-	case ':', '：', ',', '，', ';', '；':
+	case ':', '：', ',', '，', ';', '；', '、':
 		return true
 	default:
 		return false
 	}
+}
+
+func isAtRune(r rune) bool {
+	return r == '@' || r == '\uFF20'
 }
