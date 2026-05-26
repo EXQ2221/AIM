@@ -1620,6 +1620,7 @@ function BotPanelClean({
   const [customModelName, setCustomModelName] = useState("");
   const [customSupportedModels, setCustomSupportedModels] = useState("");
   const [customSystemPrompt, setCustomSystemPrompt] = useState("");
+  const customBaseURLLooksLikeEndpoint = /\/chat\/completions\/?$/i.test(customAPIBaseURL.trim());
 
   const canManage = currentMember?.role === "OWNER" || currentMember?.role === "ADMIN";
   const addedBotIds = new Set(conversationBots.map((item) => item.botId));
@@ -1822,6 +1823,12 @@ function BotPanelClean({
                       placeholder="例如：https://dashscope.aliyuncs.com/compatible-mode/v1"
                       required
                     />
+                    <small className="form-hint">请填写到 `/v1`，不要包含 `/chat/completions`（系统会自动拼接）。</small>
+                    {customBaseURLLooksLikeEndpoint && (
+                      <small className="form-hint form-hint-warning">
+                        你当前填的是完整接口路径。建议只填 Base URL（如 `.../v1`），不要带 `/chat/completions`。
+                      </small>
+                    )}
                   </label>
                   <label className="field">
                     <span>API Key</span>

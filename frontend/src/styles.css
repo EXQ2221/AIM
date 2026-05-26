@@ -531,6 +531,11 @@ select:focus-visible {
   font-size: 12px;
 }
 
+.form-hint-warning {
+  color: #cf222e;
+  font-weight: 600;
+}
+
 .search-box,
 .password-box {
   display: flex;
