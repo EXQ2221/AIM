@@ -71,10 +71,14 @@ type AICallLog struct {
 	ConversationID    uint64       `gorm:"not null;index" json:"conversationId"`
 	RequestMessageID  *uint64      `gorm:"index" json:"requestMessageId"`
 	ResponseMessageID *uint64      `gorm:"index" json:"responseMessageId"`
+	ProviderName      string       `gorm:"type:varchar(64);not null;default:'';index" json:"providerName"`
 	ModelName         string       `gorm:"type:varchar(128);not null" json:"modelName"`
 	PromptTokens      int          `gorm:"not null;default:0" json:"promptTokens"`
 	CompletionTokens  int          `gorm:"not null;default:0" json:"completionTokens"`
 	TotalTokens       int          `gorm:"not null;default:0" json:"totalTokens"`
+	InputUnitPrice    int64        `gorm:"not null;default:0" json:"inputUnitPrice"`
+	OutputUnitPrice   int64        `gorm:"not null;default:0" json:"outputUnitPrice"`
+	EstimatedCost     int64        `gorm:"not null;default:0" json:"estimatedCost"`
 	LatencyMS         int64        `gorm:"not null;default:0" json:"latencyMs"`
 	Status            AICallStatus `gorm:"type:varchar(32);not null" json:"status"`
 	ErrorMessage      string       `gorm:"type:text" json:"errorMessage"`

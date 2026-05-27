@@ -2218,6 +2218,7 @@ type AICallLogInfo struct {
 	Status            string `thrift:"status,13" frugal:"13,default,string" json:"status"`
 	ErrorMessage      string `thrift:"error_message,14" frugal:"14,default,string" json:"error_message"`
 	CreatedAt         int64  `thrift:"created_at,15" frugal:"15,default,i64" json:"created_at"`
+	IsPlatformBot     bool   `thrift:"is_platform_bot,16" frugal:"16,default,bool" json:"is_platform_bot"`
 }
 
 func NewAICallLogInfo() *AICallLogInfo {
@@ -2296,6 +2297,10 @@ func (p *AICallLogInfo) GetErrorMessage() (v string) {
 func (p *AICallLogInfo) GetCreatedAt() (v int64) {
 	return p.CreatedAt
 }
+
+func (p *AICallLogInfo) GetIsPlatformBot() (v bool) {
+	return p.IsPlatformBot
+}
 func (p *AICallLogInfo) SetId(val int64) {
 	p.Id = val
 }
@@ -2341,6 +2346,9 @@ func (p *AICallLogInfo) SetErrorMessage(val string) {
 func (p *AICallLogInfo) SetCreatedAt(val int64) {
 	p.CreatedAt = val
 }
+func (p *AICallLogInfo) SetIsPlatformBot(val bool) {
+	p.IsPlatformBot = val
+}
 
 func (p *AICallLogInfo) IsSetRequestMessageId() bool {
 	return p.RequestMessageId != nil
@@ -2373,6 +2381,7 @@ var fieldIDToName_AICallLogInfo = map[int16]string{
 	13: "status",
 	14: "error_message",
 	15: "created_at",
+	16: "is_platform_bot",
 }
 
 type AICallLogQuotaInfo struct {
@@ -3709,6 +3718,286 @@ var fieldIDToName_CreateCustomBotResponse = map[int16]string{
 	1: "bot",
 }
 
+type ListCustomBotsRequest struct {
+	OperatorId int64 `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+}
+
+func NewListCustomBotsRequest() *ListCustomBotsRequest {
+	return &ListCustomBotsRequest{}
+}
+
+func (p *ListCustomBotsRequest) InitDefault() {
+}
+
+func (p *ListCustomBotsRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+func (p *ListCustomBotsRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+
+func (p *ListCustomBotsRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListCustomBotsRequest(%+v)", *p)
+}
+
+var fieldIDToName_ListCustomBotsRequest = map[int16]string{
+	1: "operator_id",
+}
+
+type ListCustomBotsResponse struct {
+	Bots []*BotInfo `thrift:"bots,1" frugal:"1,default,list<BotInfo>" json:"bots"`
+}
+
+func NewListCustomBotsResponse() *ListCustomBotsResponse {
+	return &ListCustomBotsResponse{}
+}
+
+func (p *ListCustomBotsResponse) InitDefault() {
+}
+
+func (p *ListCustomBotsResponse) GetBots() (v []*BotInfo) {
+	return p.Bots
+}
+func (p *ListCustomBotsResponse) SetBots(val []*BotInfo) {
+	p.Bots = val
+}
+
+func (p *ListCustomBotsResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListCustomBotsResponse(%+v)", *p)
+}
+
+var fieldIDToName_ListCustomBotsResponse = map[int16]string{
+	1: "bots",
+}
+
+type UpdateCustomBotRequest struct {
+	OperatorId      int64    `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	BotId           int64    `thrift:"bot_id,2" frugal:"2,default,i64" json:"bot_id"`
+	Name            string   `thrift:"name,3" frugal:"3,default,string" json:"name"`
+	MentionName     string   `thrift:"mention_name,4" frugal:"4,default,string" json:"mention_name"`
+	Aliases         []string `thrift:"aliases,5" frugal:"5,default,list<string>" json:"aliases"`
+	Description     string   `thrift:"description,6" frugal:"6,default,string" json:"description"`
+	ApiBaseUrl      *string  `thrift:"api_base_url,7,optional" frugal:"7,optional,string" json:"api_base_url,omitempty"`
+	ApiKey          *string  `thrift:"api_key,8,optional" frugal:"8,optional,string" json:"api_key,omitempty"`
+	ModelName       string   `thrift:"model_name,9" frugal:"9,default,string" json:"model_name"`
+	SupportedModels []string `thrift:"supported_models,10" frugal:"10,default,list<string>" json:"supported_models"`
+	SystemPrompt    *string  `thrift:"system_prompt,11,optional" frugal:"11,optional,string" json:"system_prompt,omitempty"`
+}
+
+func NewUpdateCustomBotRequest() *UpdateCustomBotRequest {
+	return &UpdateCustomBotRequest{}
+}
+
+func (p *UpdateCustomBotRequest) InitDefault() {
+}
+
+func (p *UpdateCustomBotRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *UpdateCustomBotRequest) GetBotId() (v int64) {
+	return p.BotId
+}
+
+func (p *UpdateCustomBotRequest) GetName() (v string) {
+	return p.Name
+}
+
+func (p *UpdateCustomBotRequest) GetMentionName() (v string) {
+	return p.MentionName
+}
+
+func (p *UpdateCustomBotRequest) GetAliases() (v []string) {
+	return p.Aliases
+}
+
+func (p *UpdateCustomBotRequest) GetDescription() (v string) {
+	return p.Description
+}
+
+var UpdateCustomBotRequest_ApiBaseUrl_DEFAULT string
+
+func (p *UpdateCustomBotRequest) GetApiBaseUrl() (v string) {
+	if !p.IsSetApiBaseUrl() {
+		return UpdateCustomBotRequest_ApiBaseUrl_DEFAULT
+	}
+	return *p.ApiBaseUrl
+}
+
+var UpdateCustomBotRequest_ApiKey_DEFAULT string
+
+func (p *UpdateCustomBotRequest) GetApiKey() (v string) {
+	if !p.IsSetApiKey() {
+		return UpdateCustomBotRequest_ApiKey_DEFAULT
+	}
+	return *p.ApiKey
+}
+
+func (p *UpdateCustomBotRequest) GetModelName() (v string) {
+	return p.ModelName
+}
+
+func (p *UpdateCustomBotRequest) GetSupportedModels() (v []string) {
+	return p.SupportedModels
+}
+
+var UpdateCustomBotRequest_SystemPrompt_DEFAULT string
+
+func (p *UpdateCustomBotRequest) GetSystemPrompt() (v string) {
+	if !p.IsSetSystemPrompt() {
+		return UpdateCustomBotRequest_SystemPrompt_DEFAULT
+	}
+	return *p.SystemPrompt
+}
+func (p *UpdateCustomBotRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *UpdateCustomBotRequest) SetBotId(val int64) {
+	p.BotId = val
+}
+func (p *UpdateCustomBotRequest) SetName(val string) {
+	p.Name = val
+}
+func (p *UpdateCustomBotRequest) SetMentionName(val string) {
+	p.MentionName = val
+}
+func (p *UpdateCustomBotRequest) SetAliases(val []string) {
+	p.Aliases = val
+}
+func (p *UpdateCustomBotRequest) SetDescription(val string) {
+	p.Description = val
+}
+func (p *UpdateCustomBotRequest) SetApiBaseUrl(val *string) {
+	p.ApiBaseUrl = val
+}
+func (p *UpdateCustomBotRequest) SetApiKey(val *string) {
+	p.ApiKey = val
+}
+func (p *UpdateCustomBotRequest) SetModelName(val string) {
+	p.ModelName = val
+}
+func (p *UpdateCustomBotRequest) SetSupportedModels(val []string) {
+	p.SupportedModels = val
+}
+func (p *UpdateCustomBotRequest) SetSystemPrompt(val *string) {
+	p.SystemPrompt = val
+}
+
+func (p *UpdateCustomBotRequest) IsSetApiBaseUrl() bool {
+	return p.ApiBaseUrl != nil
+}
+
+func (p *UpdateCustomBotRequest) IsSetApiKey() bool {
+	return p.ApiKey != nil
+}
+
+func (p *UpdateCustomBotRequest) IsSetSystemPrompt() bool {
+	return p.SystemPrompt != nil
+}
+
+func (p *UpdateCustomBotRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("UpdateCustomBotRequest(%+v)", *p)
+}
+
+var fieldIDToName_UpdateCustomBotRequest = map[int16]string{
+	1:  "operator_id",
+	2:  "bot_id",
+	3:  "name",
+	4:  "mention_name",
+	5:  "aliases",
+	6:  "description",
+	7:  "api_base_url",
+	8:  "api_key",
+	9:  "model_name",
+	10: "supported_models",
+	11: "system_prompt",
+}
+
+type UpdateCustomBotResponse struct {
+	Bot *BotInfo `thrift:"bot,1" frugal:"1,default,BotInfo" json:"bot"`
+}
+
+func NewUpdateCustomBotResponse() *UpdateCustomBotResponse {
+	return &UpdateCustomBotResponse{}
+}
+
+func (p *UpdateCustomBotResponse) InitDefault() {
+}
+
+var UpdateCustomBotResponse_Bot_DEFAULT *BotInfo
+
+func (p *UpdateCustomBotResponse) GetBot() (v *BotInfo) {
+	if !p.IsSetBot() {
+		return UpdateCustomBotResponse_Bot_DEFAULT
+	}
+	return p.Bot
+}
+func (p *UpdateCustomBotResponse) SetBot(val *BotInfo) {
+	p.Bot = val
+}
+
+func (p *UpdateCustomBotResponse) IsSetBot() bool {
+	return p.Bot != nil
+}
+
+func (p *UpdateCustomBotResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("UpdateCustomBotResponse(%+v)", *p)
+}
+
+var fieldIDToName_UpdateCustomBotResponse = map[int16]string{
+	1: "bot",
+}
+
+type DeleteCustomBotRequest struct {
+	OperatorId int64 `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	BotId      int64 `thrift:"bot_id,2" frugal:"2,default,i64" json:"bot_id"`
+}
+
+func NewDeleteCustomBotRequest() *DeleteCustomBotRequest {
+	return &DeleteCustomBotRequest{}
+}
+
+func (p *DeleteCustomBotRequest) InitDefault() {
+}
+
+func (p *DeleteCustomBotRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *DeleteCustomBotRequest) GetBotId() (v int64) {
+	return p.BotId
+}
+func (p *DeleteCustomBotRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *DeleteCustomBotRequest) SetBotId(val int64) {
+	p.BotId = val
+}
+
+func (p *DeleteCustomBotRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("DeleteCustomBotRequest(%+v)", *p)
+}
+
+var fieldIDToName_DeleteCustomBotRequest = map[int16]string{
+	1: "operator_id",
+	2: "bot_id",
+}
+
 type RemoveConversationBotRequest struct {
 	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
 	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
@@ -4902,6 +5191,12 @@ type ChatService interface {
 	ListBots(ctx context.Context, req *ListBotsRequest) (r *ListBotsResponse, err error)
 
 	CreateCustomBot(ctx context.Context, req *CreateCustomBotRequest) (r *CreateCustomBotResponse, err error)
+
+	ListCustomBots(ctx context.Context, req *ListCustomBotsRequest) (r *ListCustomBotsResponse, err error)
+
+	UpdateCustomBot(ctx context.Context, req *UpdateCustomBotRequest) (r *UpdateCustomBotResponse, err error)
+
+	DeleteCustomBot(ctx context.Context, req *DeleteCustomBotRequest) (r *CommonResponse, err error)
 
 	ListConversationBots(ctx context.Context, req *ListConversationBotsRequest) (r *ListConversationBotsResponse, err error)
 
@@ -6615,6 +6910,234 @@ func (p *ChatServiceCreateCustomBotResult) String() string {
 }
 
 var fieldIDToName_ChatServiceCreateCustomBotResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceListCustomBotsArgs struct {
+	Req *ListCustomBotsRequest `thrift:"req,1" frugal:"1,default,ListCustomBotsRequest" json:"req"`
+}
+
+func NewChatServiceListCustomBotsArgs() *ChatServiceListCustomBotsArgs {
+	return &ChatServiceListCustomBotsArgs{}
+}
+
+func (p *ChatServiceListCustomBotsArgs) InitDefault() {
+}
+
+var ChatServiceListCustomBotsArgs_Req_DEFAULT *ListCustomBotsRequest
+
+func (p *ChatServiceListCustomBotsArgs) GetReq() (v *ListCustomBotsRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceListCustomBotsArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceListCustomBotsArgs) SetReq(val *ListCustomBotsRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceListCustomBotsArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceListCustomBotsArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListCustomBotsArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListCustomBotsArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceListCustomBotsResult struct {
+	Success *ListCustomBotsResponse `thrift:"success,0,optional" frugal:"0,optional,ListCustomBotsResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceListCustomBotsResult() *ChatServiceListCustomBotsResult {
+	return &ChatServiceListCustomBotsResult{}
+}
+
+func (p *ChatServiceListCustomBotsResult) InitDefault() {
+}
+
+var ChatServiceListCustomBotsResult_Success_DEFAULT *ListCustomBotsResponse
+
+func (p *ChatServiceListCustomBotsResult) GetSuccess() (v *ListCustomBotsResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceListCustomBotsResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceListCustomBotsResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ListCustomBotsResponse)
+}
+
+func (p *ChatServiceListCustomBotsResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceListCustomBotsResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListCustomBotsResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListCustomBotsResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceUpdateCustomBotArgs struct {
+	Req *UpdateCustomBotRequest `thrift:"req,1" frugal:"1,default,UpdateCustomBotRequest" json:"req"`
+}
+
+func NewChatServiceUpdateCustomBotArgs() *ChatServiceUpdateCustomBotArgs {
+	return &ChatServiceUpdateCustomBotArgs{}
+}
+
+func (p *ChatServiceUpdateCustomBotArgs) InitDefault() {
+}
+
+var ChatServiceUpdateCustomBotArgs_Req_DEFAULT *UpdateCustomBotRequest
+
+func (p *ChatServiceUpdateCustomBotArgs) GetReq() (v *UpdateCustomBotRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceUpdateCustomBotArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceUpdateCustomBotArgs) SetReq(val *UpdateCustomBotRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceUpdateCustomBotArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceUpdateCustomBotArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUpdateCustomBotArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUpdateCustomBotArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceUpdateCustomBotResult struct {
+	Success *UpdateCustomBotResponse `thrift:"success,0,optional" frugal:"0,optional,UpdateCustomBotResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceUpdateCustomBotResult() *ChatServiceUpdateCustomBotResult {
+	return &ChatServiceUpdateCustomBotResult{}
+}
+
+func (p *ChatServiceUpdateCustomBotResult) InitDefault() {
+}
+
+var ChatServiceUpdateCustomBotResult_Success_DEFAULT *UpdateCustomBotResponse
+
+func (p *ChatServiceUpdateCustomBotResult) GetSuccess() (v *UpdateCustomBotResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceUpdateCustomBotResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceUpdateCustomBotResult) SetSuccess(x interface{}) {
+	p.Success = x.(*UpdateCustomBotResponse)
+}
+
+func (p *ChatServiceUpdateCustomBotResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceUpdateCustomBotResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUpdateCustomBotResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUpdateCustomBotResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceDeleteCustomBotArgs struct {
+	Req *DeleteCustomBotRequest `thrift:"req,1" frugal:"1,default,DeleteCustomBotRequest" json:"req"`
+}
+
+func NewChatServiceDeleteCustomBotArgs() *ChatServiceDeleteCustomBotArgs {
+	return &ChatServiceDeleteCustomBotArgs{}
+}
+
+func (p *ChatServiceDeleteCustomBotArgs) InitDefault() {
+}
+
+var ChatServiceDeleteCustomBotArgs_Req_DEFAULT *DeleteCustomBotRequest
+
+func (p *ChatServiceDeleteCustomBotArgs) GetReq() (v *DeleteCustomBotRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceDeleteCustomBotArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceDeleteCustomBotArgs) SetReq(val *DeleteCustomBotRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceDeleteCustomBotArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceDeleteCustomBotArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceDeleteCustomBotArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceDeleteCustomBotArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceDeleteCustomBotResult struct {
+	Success *CommonResponse `thrift:"success,0,optional" frugal:"0,optional,CommonResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceDeleteCustomBotResult() *ChatServiceDeleteCustomBotResult {
+	return &ChatServiceDeleteCustomBotResult{}
+}
+
+func (p *ChatServiceDeleteCustomBotResult) InitDefault() {
+}
+
+var ChatServiceDeleteCustomBotResult_Success_DEFAULT *CommonResponse
+
+func (p *ChatServiceDeleteCustomBotResult) GetSuccess() (v *CommonResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceDeleteCustomBotResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceDeleteCustomBotResult) SetSuccess(x interface{}) {
+	p.Success = x.(*CommonResponse)
+}
+
+func (p *ChatServiceDeleteCustomBotResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceDeleteCustomBotResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceDeleteCustomBotResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceDeleteCustomBotResult = map[int16]string{
 	0: "success",
 }
 

@@ -104,7 +104,10 @@ func New() *gin.Engine {
 	botGroup := engine.Group("/api/v1/bots")
 	botGroup.Use(middleware.Auth())
 	botGroup.GET("", handler.ListBots)
+	botGroup.GET("/custom", handler.ListCustomBots)
 	botGroup.POST("", handler.CreateCustomBot)
+	botGroup.PUT("/:botId", handler.UpdateCustomBot)
+	botGroup.DELETE("/:botId", handler.DeleteCustomBot)
 
 	notificationGroup := engine.Group("/api/v1/notifications")
 	notificationGroup.Use(middleware.Auth())

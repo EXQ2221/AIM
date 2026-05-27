@@ -30,6 +30,7 @@ func BuildPromptWithRAG(
 		currentUserID,
 		scope,
 		ragChunks,
+		"",
 		nil,
 	)
 }
@@ -42,6 +43,7 @@ func BuildPromptWithRAGAndMemory(
 	currentUserID uint64,
 	scope model.BotPermissionScope,
 	ragChunks []RAGChunk,
+	topicSummary string,
 	longTermMemories []string,
 ) string {
 	if limit <= 0 {
@@ -58,8 +60,9 @@ func BuildPromptWithRAGAndMemory(
 		if len(recentMessages) == 0 {
 			builder.WriteString("\uff08\u6682\u65e0\u6700\u8fd1\u6d88\u606f\uff09\n")
 		} else {
-			for _, msg := range recentMessages {
-				builder.WriteString(formatMessageLine(msg, userDisplayNames))
+			total := len(recentMessages)
+			for index, msg := range recentMessages {
+				builder.WriteString(formatMessageLine(index+1, total, msg, userDisplayNames))
 				builder.WriteByte('\n')
 			}
 		}
@@ -92,29 +95,58 @@ func BuildPromptWithRAGAndMemory(
 		builder.WriteByte('\n')
 	}
 
+	if value := strings.TrimSpace(topicSummary); value != "" {
+		builder.WriteString("【当前话题摘要】")
+		builder.WriteString(value)
+		builder.WriteByte('\n')
+		builder.WriteByte('\n')
+	}
+
 	builder.WriteString("\u3010\u5f53\u524d\u63d0\u95ee\u7528\u6237\u3011")
 	builder.WriteString(userDisplayName(currentUserID, userDisplayNames))
+	builder.WriteByte('\n')
+	builder.WriteString("\u3010\u5f53\u524d\u7528\u6237\u539f\u59cb\u8f93\u5165\uff08\u9ad8\u4f18\u5148\u7ea7\uff09\u3011")
+	builder.WriteString(strings.TrimSpace(currentContent))
 	builder.WriteByte('\n')
 	builder.WriteString("\u3010\u7528\u6237\u95ee\u9898\u3011")
 	builder.WriteString(ExtractQuestion(currentContent))
 	builder.WriteByte('\n')
 	builder.WriteString("\u3010\u56de\u7b54\u8981\u6c42\u3011\n")
-	builder.WriteString("1. \u4f18\u5148\u4f9d\u636e\u77e5\u8bc6\u5e93\u8d44\u6599\u56de\u7b54\uff1b\u8d44\u6599\u4e0d\u8db3\u8bf7\u660e\u786e\u8bf4\u660e\u4e0d\u786e\u5b9a\u3002\n")
-	builder.WriteString("2. \u4e0d\u8981\u7f16\u9020\u7fa4\u804a\u6216\u77e5\u8bc6\u5e93\u4e2d\u4e0d\u5b58\u5728\u7684\u4fe1\u606f\u3002\n")
-	builder.WriteString("3. \u56de\u7b54\u4fdd\u6301\u7b80\u6d01\u51c6\u786e\u3002\n")
-	builder.WriteString("4. \u5982\u679c\u5f15\u7528\u4e86\u672c\u5730\u77e5\u8bc6\u5e93\u7684\u5185\u5bb9\uff0c\u8bf7\u8bf4\u660e\"\u6839\u636e\u60a8\u4e0a\u4f20\u7684\u6587\u6863\"\u3002\n")
+	switch scope {
+	case model.BotScopeKnowledgeBaseOnly:
+		builder.WriteString("1. \u4ec5\u4f9d\u636e\u672c\u5730\u77e5\u8bc6\u5e93\u8d44\u6599\u56de\u7b54\uff1b\u8d44\u6599\u4e0d\u8db3\u8bf7\u660e\u786e\u8bf4\u660e\u4e0d\u786e\u5b9a\u3002\n")
+		builder.WriteString("2. \u4e0d\u8981\u7f16\u9020\u77e5\u8bc6\u5e93\u4e2d\u4e0d\u5b58\u5728\u7684\u4fe1\u606f\u3002\n")
+		builder.WriteString("3. \u56de\u7b54\u4fdd\u6301\u7b80\u6d01\u51c6\u786e\u3002\n")
+		builder.WriteString("4. \u5982\u679c\u5f15\u7528\u4e86\u672c\u5730\u77e5\u8bc6\u5e93\u7684\u5185\u5bb9\uff0c\u8bf7\u8bf4\u660e\"\u6839\u636e\u60a8\u4e0a\u4f20\u7684\u6587\u6863\"\u3002\n")
+	case model.BotScopeConversationAndKB:
+		builder.WriteString("1. \u5fc5\u987b\u7ed3\u5408\u7fa4\u804a\u4e0a\u4e0b\u6587\u3001\u77e5\u8bc6\u5e93\u8d44\u6599\u4e0e\u7528\u6237\u957f\u671f\u8bb0\u5fc6\uff08\u547d\u4e2d\u65f6\uff09\u7efc\u5408\u56de\u7b54\uff0c\u4e0d\u8981\u53ea\u57fa\u4e8e\u5355\u4e00\u6765\u6e90\u56de\u7b54\u3002\n")
+		builder.WriteString("2. \u5982\u679c\u7fa4\u804a\u4e0a\u4e0b\u6587\u5df2\u8db3\u591f\uff0c\u4e0d\u8981\u56e0\u4e3a\u77e5\u8bc6\u5e93\u672a\u547d\u4e2d\u800c\u62d2\u7b54\u3002\n")
+		builder.WriteString("3. \u4e0d\u8981\u7f16\u9020\u7fa4\u804a\u3001\u77e5\u8bc6\u5e93\u6216\u8bb0\u5fc6\u4e2d\u4e0d\u5b58\u5728\u7684\u4fe1\u606f\u3002\n")
+		builder.WriteString("4. \u56de\u7b54\u4fdd\u6301\u7b80\u6d01\u51c6\u786e\uff1b\u5f15\u7528\u77e5\u8bc6\u5e93\u65f6\u8bf4\u660e\"\u6839\u636e\u60a8\u4e0a\u4f20\u7684\u6587\u6863\"\u3002\n")
+	default:
+		builder.WriteString("1. \u4f9d\u636e\u7fa4\u804a\u4e0a\u4e0b\u6587\u56de\u7b54\uff1b\u4e0a\u4e0b\u6587\u4e0d\u8db3\u65f6\u660e\u786e\u8bf4\u660e\u4e0d\u786e\u5b9a\u3002\n")
+		builder.WriteString("2. \u4e0d\u8981\u7f16\u9020\u7fa4\u804a\u4e2d\u4e0d\u5b58\u5728\u7684\u4fe1\u606f\u3002\n")
+		builder.WriteString("3. \u56de\u7b54\u4fdd\u6301\u7b80\u6d01\u51c6\u786e\u3002\n")
+	}
 	return builder.String()
 }
 
-func formatMessageLine(msg model.Message, userDisplayNames map[uint64]string) string {
+func formatMessageLine(seq int, total int, msg model.Message, userDisplayNames map[uint64]string) string {
 	content := strings.TrimSpace(model.MessagePreview(msg.MessageType, msg.Content))
+	timestamp := "--:--"
+	if !msg.CreatedAt.IsZero() {
+		timestamp = msg.CreatedAt.Local().Format("15:04:05")
+	}
+	_ = seq
+	_ = total
+	prefix := fmt.Sprintf("[%s]", timestamp)
 	switch msg.SenderType {
 	case model.SenderTypeBot:
-		return fmt.Sprintf("[AIM]: %s", content)
+		return fmt.Sprintf("%s BOT#%d: %s", prefix, msg.SenderID, content)
 	case model.SenderTypeSystem:
-		return fmt.Sprintf("[SYSTEM]: %s", content)
+		return fmt.Sprintf("%s SYSTEM: %s", prefix, content)
 	default:
-		return fmt.Sprintf("[%s]: %s", userDisplayName(msg.SenderID, userDisplayNames), content)
+		return fmt.Sprintf("%s %s: %s", prefix, userDisplayName(msg.SenderID, userDisplayNames), content)
 	}
 }
 

@@ -34,6 +34,8 @@ type HandleMentionRequest struct {
 	RequestMessageID uint64
 	UserID           uint64
 	Content          string
+	ReplyToID        *uint64
+	ReplyToPreview   string
 }
 
 type MentionHandler interface {
@@ -46,7 +48,6 @@ type Service struct {
 	LLMTimeout           time.Duration
 	DefaultModel         string
 	ContextMessages      int
-	DailyTokenLimit      int64
 	Limiter              *Limiter
 	MessageRepo          repository.MessageRepository
 	ConversationRepo     repository.ConversationRepository
@@ -92,6 +93,12 @@ type botReplyStreamMeta struct {
 }
 
 var summaryCountDirectivePattern = regexp.MustCompile(`(?i)\[AIM_SUMMARY_COUNT=(\d{1,4})\]`)
+var implicitReferenceQuestionPattern = regexp.MustCompile(`(?i)(你怎么看|怎么看|怎么想|觉得呢|有何看法|你的看法|你的意见)`)
+
+const (
+	botPersonaPragmatic = "你是实用派助手：直接给可落地方案，优先步骤、命令、风险与验收点，表达简洁，不绕弯子。"
+	botPersonaDeep      = "你是深度派助手：先解释为什么，再讲原理、边界条件与长期影响，最后给可执行建议。"
+)
 
 func NewService(
 	llmClient llm.Client,
@@ -102,7 +109,6 @@ func NewService(
 	return &Service{
 		LLM:                  llmClient,
 		ContextMessages:      20,
-		DailyTokenLimit:      1_000_000,
 		MemoryExtractTimeout: 6 * time.Second,
 		MemoryCandidateLimit: 20,
 		MemoryMaxRecall:      5,
@@ -128,12 +134,6 @@ func (s *Service) SetLimiter(limiter *Limiter) {
 
 func (s *Service) SetLLMSelector(selector func(bot model.Bot) (llm.Client, string, error)) {
 	s.LLMSelector = selector
-}
-
-func (s *Service) SetDailyTokenLimit(limit int64) {
-	if limit > 0 {
-		s.DailyTokenLimit = limit
-	}
 }
 
 func (s *Service) SetContextMessages(limit int) {
@@ -245,17 +245,17 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	}
 	defer release()
 
+	providerName := resolveProviderNameForBilling(resolved.Bot)
 	modelName := EffectiveModelName(resolved.Bot, resolved.ConversationBot, s.DefaultModel)
 	if modelName == "" {
 		start := time.Now()
 		err := errno.Required("model")
 		latencyMS := time.Since(start).Milliseconds()
-		if logErr := s.createFailedLog(ctx, req, resolved.Bot, modelName, err, latencyMS); logErr != nil {
+		if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, err, latencyMS); logErr != nil {
 			return fmt.Errorf("record failed ai call log: %w; bot error: %v", logErr, err)
 		}
 		return err
 	}
-
 	contextLimit := s.ContextMessages
 	if contextLimit <= 0 {
 		contextLimit = 20
@@ -270,8 +270,10 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 		return err
 	}
 	recentMessages = filterBotVisibleMessages(recentMessages)
+	recentMessages = reverseMessagesInPlace(recentMessages)
 	userDisplayNames := s.resolveUserDisplayNames(ctx, recentMessages, req.UserID)
 	promptContent := rebuildMentionContent(req.Content, question)
+	promptContent = attachReplyContext(promptContent, req.ReplyToPreview)
 	scope := resolved.ConversationBot.PermissionScope
 	if scope == "" {
 		scope = model.BotScopeConversationOnly
@@ -283,19 +285,38 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	if ragTopK <= 0 {
 		ragTopK = 5
 	}
-	ragChunks, ragErr := s.searchRAGChunks(ctx, scope, req.UserID, req.ConversationID, question, ragTopK)
-	if ragErr != nil {
-		log.Printf("rag search failed: conversation=%d bot=%d scope=%s err=%v", req.ConversationID, resolved.Bot.ID, scope, ragErr)
-		if scope == model.BotScopeKnowledgeBaseOnly {
-			if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, "\u77e5\u8bc6\u5e93\u68c0\u7d22\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5"); replyErr != nil {
-				return replyErr
-			}
-			_ = s.createFailedLog(ctx, req, resolved.Bot, modelName, ragErr, 0)
-			return nil
+	ragQueries := buildRAGQueries(question, recentMessages, req.RequestMessageID)
+	var (
+		ragChunks []RAGChunk
+		ragErr    error
+	)
+	for index, ragQuery := range ragQueries {
+		chunks, searchErr := s.searchRAGChunks(ctx, scope, req.UserID, req.ConversationID, ragQuery, ragTopK)
+		if searchErr != nil {
+			ragErr = searchErr
+			log.Printf("rag search failed: conversation=%d bot=%d scope=%s query=%q err=%v", req.ConversationID, resolved.Bot.ID, scope, ragQuery, searchErr)
+			continue
 		}
+		if len(chunks) == 0 {
+			continue
+		}
+		ragChunks = chunks
+		if index > 0 {
+			log.Printf("rag query fallback hit: conversation=%d bot=%d scope=%s query=%q chunks=%d", req.ConversationID, resolved.Bot.ID, scope, ragQuery, len(chunks))
+		}
+		ragErr = nil
+		break
+	}
+	if ragErr != nil && scope == model.BotScopeKnowledgeBaseOnly {
+		if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, "\u77e5\u8bc6\u5e93\u68c0\u7d22\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5"); replyErr != nil {
+			return replyErr
+		}
+		_ = s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, ragErr, 0)
+		return nil
 	}
 	longTermMemories := s.collectLongTermMemories(ctx, req, question)
-	prompt := BuildPromptWithRAGAndMemory(recentMessages, promptContent, contextLimit, userDisplayNames, req.UserID, scope, ragChunks, longTermMemories)
+	topicSummary := summarizeRecentTopicV2(recentMessages, req.RequestMessageID, 5)
+	prompt := BuildPromptWithRAGAndMemory(recentMessages, promptContent, contextLimit, userDisplayNames, req.UserID, scope, ragChunks, topicSummary, longTermMemories)
 	if scope == model.BotScopeKnowledgeBaseOnly && len(ragChunks) == 0 {
 		if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, "\u5f53\u524d\u672a\u68c0\u7d22\u5230\u53ef\u7528\u7684\u77e5\u8bc6\u5e93\u8d44\u6599\uff0c\u65e0\u6cd5\u57fa\u4e8e\u77e5\u8bc6\u5e93\u56de\u7b54\u3002"); replyErr != nil {
 			return replyErr
@@ -306,9 +327,10 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	if systemPrompt == "" {
 		systemPrompt = DefaultSystemPrompt
 	}
+	systemPrompt = mergePersonaIntoSystemPrompt(systemPrompt, resolved.Bot)
 
-	if err := s.checkDailyTokenLimit(ctx, req, resolved.Bot); err != nil {
-		if logErr := s.createFailedLog(ctx, req, resolved.Bot, modelName, err, 0); logErr != nil {
+	if err := s.checkDailyTokenLimit(ctx, req, resolved.Bot, providerName, modelName); err != nil {
+		if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, err, 0); logErr != nil {
 			return fmt.Errorf("record failed ai call log: %w; bot error: %v", logErr, err)
 		}
 		return err
@@ -317,12 +339,15 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	start := time.Now()
 	llmClient := s.LLM
 	if s.LLMSelector != nil {
-		selectedClient, _, selectErr := s.LLMSelector(resolved.Bot)
+		selectedClient, selectedProviderName, selectErr := s.LLMSelector(resolved.Bot)
 		if selectErr != nil {
-			if logErr := s.createFailedLog(ctx, req, resolved.Bot, modelName, selectErr, 0); logErr != nil {
+			if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, selectErr, 0); logErr != nil {
 				return fmt.Errorf("record failed ai call log: %w; llm select error: %v", logErr, selectErr)
 			}
 			return selectErr
+		}
+		if strings.TrimSpace(selectedProviderName) != "" {
+			providerName = strings.TrimSpace(selectedProviderName)
 		}
 		if selectedClient != nil {
 			llmClient = selectedClient
@@ -331,7 +356,7 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 
 	parts, err := buildUserPromptParts(ctx, prompt, recentMessages, supportsVisionModel(modelName))
 	if err != nil {
-		if logErr := s.createFailedLog(ctx, req, resolved.Bot, modelName, err, 0); logErr != nil {
+		if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, err, 0); logErr != nil {
 			return fmt.Errorf("record failed ai call log: %w; build prompt parts error: %v", logErr, err)
 		}
 		if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, err.Error()); replyErr != nil {
@@ -358,6 +383,7 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 			},
 		},
 	}
+	logLLMRequestDebug(req, resolved.Bot, llmReq)
 	var resp *llm.GenerateResponse
 	llmStart := time.Now()
 	streamer, supportsStreaming := llmClient.(llmStreamingClient)
@@ -422,7 +448,7 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	}
 	latencyMS := time.Since(start).Milliseconds()
 	if err != nil {
-		if logErr := s.createFailedLog(ctx, req, resolved.Bot, modelName, err, latencyMS); logErr != nil {
+		if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, err, latencyMS); logErr != nil {
 			return fmt.Errorf("record failed ai call log: %w; llm error: %v", logErr, err)
 		}
 		var statusErr *llm.HTTPStatusError
@@ -436,7 +462,7 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	}
 	if resp == nil {
 		err := errno.Internal("llm response is nil")
-		if logErr := s.createFailedLog(ctx, req, resolved.Bot, modelName, err, latencyMS); logErr != nil {
+		if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, err, latencyMS); logErr != nil {
 			return fmt.Errorf("record failed ai call log: %w; bot error: %v", logErr, err)
 		}
 		return err
@@ -444,12 +470,12 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 
 	botMessage, err := s.createBotReplyMessage(ctx, req, resolved.Bot, resp.Content)
 	if err != nil {
-		if logErr := s.createFailedLog(ctx, req, resolved.Bot, modelName, err, latencyMS); logErr != nil {
+		if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, err, latencyMS); logErr != nil {
 			return fmt.Errorf("record failed ai call log: %w; create bot reply error: %v", logErr, err)
 		}
 		return err
 	}
-	return s.createSuccessLog(ctx, req, resolved.Bot, modelName, botMessage.ID, resp, latencyMS)
+	return s.createSuccessLog(ctx, req, resolved.Bot, providerName, modelName, botMessage.ID, resp, latencyMS)
 }
 
 func (s *Service) searchRAGChunks(ctx context.Context, scope model.BotPermissionScope, userID uint64, conversationID uint64, question string, topK int) ([]RAGChunk, error) {
@@ -520,6 +546,67 @@ func rebuildMentionContent(rawContent string, question string) string {
 		return "@" + token
 	}
 	return "@" + token + " " + question
+}
+
+func attachReplyContext(content string, replyPreview string) string {
+	content = strings.TrimSpace(content)
+	replyPreview = strings.TrimSpace(replyPreview)
+	if replyPreview == "" {
+		return content
+	}
+	if content == "" {
+		return "【回复目标】" + replyPreview
+	}
+	return content + "\n【回复目标】" + replyPreview
+}
+
+func attachImplicitReferenceContext(content string, question string, recentMessages []model.Message, requestMessageID uint64) string {
+	content = strings.TrimSpace(content)
+	question = strings.TrimSpace(question)
+	if question == "" || !implicitReferenceQuestionPattern.MatchString(question) {
+		return content
+	}
+	if strings.Contains(content, "【回复目标】") || strings.Contains(content, "【隐式指代参考】") {
+		return content
+	}
+	ref := findImplicitReferencePreview(recentMessages, requestMessageID)
+	if ref == "" {
+		return content
+	}
+	if content == "" {
+		return "【隐式指代参考】" + ref
+	}
+	return content + "\n【隐式指代参考】" + ref
+}
+
+func findImplicitReferencePreview(recentMessages []model.Message, requestMessageID uint64) string {
+	if len(recentMessages) == 0 {
+		return ""
+	}
+	currentIndex := len(recentMessages) - 1
+	if requestMessageID > 0 {
+		for i := len(recentMessages) - 1; i >= 0; i-- {
+			if recentMessages[i].ID == requestMessageID {
+				currentIndex = i
+				break
+			}
+		}
+	}
+	for i := currentIndex - 1; i >= 0; i-- {
+		msg := recentMessages[i]
+		if msg.Status != model.MessageStatusNormal {
+			continue
+		}
+		if msg.SenderType == model.SenderTypeSystem {
+			continue
+		}
+		preview := strings.TrimSpace(model.MessagePreview(msg.MessageType, msg.Content))
+		if preview == "" || preview == "[图片]" || preview == "[文件]" || preview == "[语音]" {
+			continue
+		}
+		return preview
+	}
+	return ""
 }
 
 func (s *Service) resolveTargetBot(ctx context.Context, conversationID uint64, content string) (*resolvedBot, error) {
@@ -726,13 +813,13 @@ func (s *Service) acquireConcurrencySlot(conversationID uint64, req HandleMentio
 	}
 
 	log.Printf("bot concurrency limit reached: conversation=%d bot=%d err=%v", conversationID, botModel.ID, err)
-	if logErr := s.createFailedLog(context.Background(), req, botModel, "", err, 0); logErr != nil {
+	if logErr := s.createFailedLog(context.Background(), req, botModel, "", "", err, 0); logErr != nil {
 		return nil, fmt.Errorf("record failed ai call log: %w; concurrency error: %v", logErr, err)
 	}
 	return nil, err
 }
 
-func (s *Service) createSuccessLog(ctx context.Context, req HandleMentionRequest, botModel model.Bot, modelName string, responseMessageID uint64, resp *llm.GenerateResponse, latencyMS int64) error {
+func (s *Service) createSuccessLog(ctx context.Context, req HandleMentionRequest, botModel model.Bot, providerName string, modelName string, responseMessageID uint64, resp *llm.GenerateResponse, latencyMS int64) error {
 	requestMessageID := nullableID(req.RequestMessageID)
 	return s.AICallLogRepo.Create(ctx, &model.AICallLog{
 		UserID:            req.UserID,
@@ -740,6 +827,7 @@ func (s *Service) createSuccessLog(ctx context.Context, req HandleMentionRequest
 		ConversationID:    req.ConversationID,
 		RequestMessageID:  requestMessageID,
 		ResponseMessageID: &responseMessageID,
+		ProviderName:      strings.TrimSpace(providerName),
 		ModelName:         modelName,
 		PromptTokens:      resp.PromptTokens,
 		CompletionTokens:  resp.CompletionTokens,
@@ -749,7 +837,7 @@ func (s *Service) createSuccessLog(ctx context.Context, req HandleMentionRequest
 	})
 }
 
-func (s *Service) createFailedLog(ctx context.Context, req HandleMentionRequest, botModel model.Bot, modelName string, cause error, latencyMS int64) error {
+func (s *Service) createFailedLog(ctx context.Context, req HandleMentionRequest, botModel model.Bot, providerName string, modelName string, cause error, latencyMS int64) error {
 	requestMessageID := nullableID(req.RequestMessageID)
 	errorMessage := ""
 	if cause != nil {
@@ -766,6 +854,7 @@ func (s *Service) createFailedLog(ctx context.Context, req HandleMentionRequest,
 		BotID:            botModel.ID,
 		ConversationID:   req.ConversationID,
 		RequestMessageID: requestMessageID,
+		ProviderName:     strings.TrimSpace(providerName),
 		ModelName:        modelName,
 		LatencyMS:        latencyMS,
 		Status:           model.AICallStatusFailed,
@@ -819,23 +908,57 @@ func durationMillis(start time.Time, end time.Time) int64 {
 	return end.Sub(start).Milliseconds()
 }
 
-func (s *Service) checkDailyTokenLimit(ctx context.Context, req HandleMentionRequest, botModel model.Bot) error {
-	if s.AICallLogRepo == nil || s.DailyTokenLimit <= 0 {
+func (s *Service) checkDailyTokenLimit(ctx context.Context, req HandleMentionRequest, botModel model.Bot, providerName string, modelName string) error {
+	if s.AICallLogRepo == nil {
 		return nil
 	}
 	// User-owned bots (CreatedBy > 0) should not consume platform quota.
 	if botModel.CreatedBy > 0 {
 		return nil
 	}
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		modelName = strings.TrimSpace(botModel.ModelName)
+	}
+	if modelName == "" {
+		return nil
+	}
+	providerName = strings.ToLower(strings.TrimSpace(providerName))
+	dailyLimit := dailyTokenLimitByProviderModel(providerName, modelName)
+	if dailyLimit <= 0 {
+		return nil
+	}
 	startAt, endAt := dayWindow()
-	total, err := s.AICallLogRepo.SumTotalTokensByConversationBetween(ctx, req.ConversationID, startAt, endAt)
+	total, err := s.AICallLogRepo.SumTotalTokensByConversationAndProviderModelBetween(ctx, req.ConversationID, providerName, modelName, startAt, endAt)
 	if err != nil {
 		return err
 	}
-	if total >= s.DailyTokenLimit {
+	if total >= dailyLimit {
 		return errno.Forbidden("daily ai token limit reached")
 	}
 	return nil
+}
+
+func dailyTokenLimitByProviderModel(providerName string, modelName string) int64 {
+	name := strings.ToLower(strings.TrimSpace(modelName))
+	if name == "" {
+		return 0
+	}
+	if supportsVisionModel(name) {
+		return 25_000
+	}
+	return 50_000
+}
+
+func resolveProviderNameForBilling(botModel model.Bot) string {
+	if botModel.CreatedBy > 0 {
+		return "custom"
+	}
+	modelName := strings.ToLower(strings.TrimSpace(botModel.ModelName))
+	if strings.HasPrefix(modelName, "qwen") || strings.Contains(modelName, "tongyi") {
+		return "secondary"
+	}
+	return "primary"
 }
 
 func dayWindow() (time.Time, time.Time) {
@@ -932,6 +1055,304 @@ func filterBotVisibleMessages(messages []model.Message) []model.Message {
 		filtered = append(filtered, msg)
 	}
 	return filtered
+}
+
+func reverseMessagesInPlace(messages []model.Message) []model.Message {
+	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+	return messages
+}
+
+func findRecentFallbackQuestions(recentMessages []model.Message, requestMessageID uint64, maxCount int) []string {
+	if len(recentMessages) == 0 {
+		return nil
+	}
+	if maxCount <= 0 {
+		maxCount = 1
+	}
+	currentIndex := len(recentMessages) - 1
+	if requestMessageID > 0 {
+		for i := len(recentMessages) - 1; i >= 0; i-- {
+			if recentMessages[i].ID == requestMessageID {
+				currentIndex = i
+				break
+			}
+		}
+	}
+	result := make([]string, 0, maxCount)
+	seen := make(map[string]struct{}, maxCount)
+	for i := currentIndex - 1; i >= 0; i-- {
+		msg := recentMessages[i]
+		if msg.SenderType != model.SenderTypeUser || msg.Status != model.MessageStatusNormal {
+			continue
+		}
+		raw := strings.TrimSpace(model.ExtractTextMessageContent(msg.Content))
+		if raw == "" {
+			continue
+		}
+		question := strings.TrimSpace(ExtractQuestion(raw))
+		if question == "" {
+			continue
+		}
+		if _, exists := seen[question]; exists {
+			continue
+		}
+		seen[question] = struct{}{}
+		result = append(result, question)
+		if len(result) >= maxCount {
+			break
+		}
+	}
+	return result
+}
+
+func buildRAGQueries(currentQuestion string, recentMessages []model.Message, requestMessageID uint64) []string {
+	currentQuestion = strings.TrimSpace(currentQuestion)
+	fallbackQuestions := findRecentFallbackQuestions(recentMessages, requestMessageID, 3)
+	if isWeakRAGQuestion(currentQuestion) {
+		queries := make([]string, 0, len(fallbackQuestions)+1)
+		queries = append(queries, fallbackQuestions...)
+		if currentQuestion != "" {
+			queries = append(queries, currentQuestion)
+		}
+		return deduplicateQuestions(queries)
+	}
+	if currentQuestion == "" {
+		return nil
+	}
+	// For explicit questions, keep retrieval anchored to the current question only.
+	return []string{currentQuestion}
+}
+
+func isWeakRAGQuestion(question string) bool {
+	normalized := strings.TrimSpace(strings.ToLower(question))
+	if normalized == "" {
+		return true
+	}
+	weak := []string{
+		"你怎么看", "怎么看", "你觉得呢", "觉得呢", "怎么想", "为什么这样做",
+		"what do you think", "thoughts", "why so",
+	}
+	for _, token := range weak {
+		if strings.Contains(normalized, token) {
+			return true
+		}
+	}
+	if len([]rune(normalized)) <= 8 {
+		return true
+	}
+	return false
+}
+
+func deduplicateQuestions(questions []string) []string {
+	result := make([]string, 0, len(questions))
+	seen := make(map[string]struct{}, len(questions))
+	for _, item := range questions {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
+}
+
+func summarizeRecentTopicV2(recentMessages []model.Message, requestMessageID uint64, blockSize int) string {
+	if len(recentMessages) == 0 {
+		return ""
+	}
+	if blockSize <= 0 {
+		blockSize = 5
+	}
+	currentIndex := len(recentMessages) - 1
+	if requestMessageID > 0 {
+		for i := len(recentMessages) - 1; i >= 0; i-- {
+			if recentMessages[i].ID == requestMessageID {
+				currentIndex = i
+				break
+			}
+		}
+	}
+	start := currentIndex - blockSize + 1
+	if start < 0 {
+		start = 0
+	}
+
+	parts := make([]string, 0, blockSize)
+	historyTexts := make([]string, 0, blockSize)
+	latestPreview := ""
+
+	for i := start; i <= currentIndex && i < len(recentMessages); i++ {
+		msg := recentMessages[i]
+		if msg.Status != model.MessageStatusNormal || msg.SenderType == model.SenderTypeSystem {
+			continue
+		}
+		preview := strings.TrimSpace(model.MessagePreview(msg.MessageType, msg.Content))
+		if preview == "" {
+			continue
+		}
+		if i == currentIndex {
+			latestPreview = preview
+		} else {
+			historyTexts = append(historyTexts, preview)
+		}
+		name := "BOT"
+		if msg.SenderType == model.SenderTypeUser {
+			name = "用户"
+		}
+		parts = append(parts, fmt.Sprintf("%s提到%s", name, preview))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+
+	base := strings.Join(parts, "；")
+	if latestPreview != "" && isTopicShiftedV2(latestPreview, historyTexts) {
+		return fmt.Sprintf("最新话题优先：%s。前序讨论：%s", latestPreview, base)
+	}
+	return base
+}
+
+func isTopicShiftedV2(latest string, history []string) bool {
+	latestTokens := topicTokensV2(latest)
+	if len(latestTokens) == 0 || len(history) == 0 {
+		return false
+	}
+	historySet := make(map[string]struct{}, 64)
+	for _, item := range history {
+		for _, token := range topicTokensV2(item) {
+			historySet[token] = struct{}{}
+		}
+	}
+	matchCount := 0
+	for _, token := range latestTokens {
+		if _, ok := historySet[token]; ok {
+			matchCount++
+		}
+	}
+	overlapRatio := float64(matchCount) / float64(len(latestTokens))
+	return overlapRatio < 0.2
+}
+
+func topicTokensV2(text string) []string {
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" {
+		return nil
+	}
+	raw := strings.FieldsFunc(text, func(r rune) bool {
+		if r >= 'a' && r <= 'z' {
+			return false
+		}
+		if r >= '0' && r <= '9' {
+			return false
+		}
+		if r >= 0x4e00 && r <= 0x9fff {
+			return false
+		}
+		return true
+	})
+	stop := map[string]struct{}{
+		"的": {}, "了": {}, "吗": {}, "呢": {}, "吧": {}, "是": {}, "有": {}, "和": {}, "或": {}, "就": {}, "都": {},
+		"你": {}, "我": {}, "他": {}, "她": {}, "它": {}, "我们": {}, "你们": {},
+		"怎么看": {}, "怎么想": {}, "怎么样": {}, "对吗": {}, "觉得": {}, "看法": {}, "意见": {},
+	}
+	result := make([]string, 0, len(raw))
+	for _, item := range raw {
+		if _, ok := stop[item]; ok {
+			continue
+		}
+		if len([]rune(item)) <= 1 {
+			continue
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+func summarizeRecentTopic(recentMessages []model.Message, requestMessageID uint64, blockSize int) string {
+	if len(recentMessages) == 0 {
+		return ""
+	}
+	if blockSize <= 0 {
+		blockSize = 5
+	}
+	currentIndex := len(recentMessages) - 1
+	if requestMessageID > 0 {
+		for i := len(recentMessages) - 1; i >= 0; i-- {
+			if recentMessages[i].ID == requestMessageID {
+				currentIndex = i
+				break
+			}
+		}
+	}
+	start := currentIndex - blockSize + 1
+	if start < 0 {
+		start = 0
+	}
+	parts := make([]string, 0, blockSize)
+	for i := start; i <= currentIndex && i < len(recentMessages); i++ {
+		msg := recentMessages[i]
+		if msg.Status != model.MessageStatusNormal || msg.SenderType == model.SenderTypeSystem {
+			continue
+		}
+		preview := strings.TrimSpace(model.MessagePreview(msg.MessageType, msg.Content))
+		if preview == "" {
+			continue
+		}
+		name := "BOT"
+		if msg.SenderType == model.SenderTypeUser {
+			name = "用户"
+		}
+		parts = append(parts, fmt.Sprintf("%s提到%s", name, preview))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "；")
+}
+
+func mergePersonaIntoSystemPrompt(systemPrompt string, botModel model.Bot) string {
+	systemPrompt = strings.TrimSpace(systemPrompt)
+	if systemPrompt == "" {
+		systemPrompt = DefaultSystemPrompt
+	}
+	mention := strings.ToLower(strings.TrimSpace(botModel.MentionName))
+	name := strings.ToLower(strings.TrimSpace(botModel.Name))
+	persona := ""
+	switch {
+	case mention == "ai" || strings.Contains(name, "deepseek"):
+		persona = botPersonaPragmatic
+	case mention == "qwen" || strings.Contains(name, "通义") || strings.Contains(name, "qwen"):
+		persona = botPersonaDeep
+	default:
+		return systemPrompt
+	}
+	return systemPrompt + "\n" + persona
+}
+
+func logLLMRequestDebug(req HandleMentionRequest, botModel model.Bot, llmReq llm.GenerateRequest) {
+	flag := strings.ToLower(strings.TrimSpace(os.Getenv("BOT_DEBUG_LLM_REQUEST")))
+	if flag != "1" && flag != "true" && flag != "yes" {
+		return
+	}
+	payload, err := json.MarshalIndent(llmReq, "", "  ")
+	if err != nil {
+		log.Printf("bot llm request debug marshal failed: conversation=%d bot=%d request=%d err=%v", req.ConversationID, botModel.ID, req.RequestMessageID, err)
+		return
+	}
+	log.Printf(
+		"bot llm request debug: conversation=%d bot=%d request=%d user=%d payload=%s",
+		req.ConversationID,
+		botModel.ID,
+		req.RequestMessageID,
+		req.UserID,
+		string(payload),
+	)
 }
 
 func normalizeImageURLForLLM(ctx context.Context, raw string) (string, error) {

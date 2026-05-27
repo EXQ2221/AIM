@@ -705,6 +705,18 @@ func (r *fakeAICallLogRepo) SumTotalTokensByConversationBetween(ctx context.Cont
 	return r.usedToday, nil
 }
 
+func (r *fakeAICallLogRepo) SumPlatformTotalTokensByConversationBetween(ctx context.Context, conversationID uint64, startAt time.Time, endAt time.Time) (int64, error) {
+	return r.usedToday, nil
+}
+
+func (r *fakeAICallLogRepo) SumTotalTokensByConversationAndModelBetween(ctx context.Context, conversationID uint64, modelName string, startAt time.Time, endAt time.Time) (int64, error) {
+	return r.usedToday, nil
+}
+
+func (r *fakeAICallLogRepo) SumTotalTokensByConversationAndProviderModelBetween(ctx context.Context, conversationID uint64, providerName string, modelName string, startAt time.Time, endAt time.Time) (int64, error) {
+	return r.usedToday, nil
+}
+
 type fakeMemberRepo struct {
 	members            []model.ConversationMember
 	listConversationID uint64

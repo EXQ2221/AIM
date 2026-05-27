@@ -66,6 +66,9 @@ func (s *ConversationRAGSearcher) SearchForConversation(ctx context.Context, req
 	if recallTopK < topK {
 		recallTopK = topK
 	}
+	if recallTopK > 10 {
+		recallTopK = 10
+	}
 	conversationID := strconv.FormatUint(req.ConversationID, 10)
 
 	bindingsResp, err := s.RAGClient.ListConversationKnowledgeBases(ctx, &ragpb.ListConversationKnowledgeBasesRequest{
@@ -109,6 +112,10 @@ func (s *ConversationRAGSearcher) SearchForConversation(ctx context.Context, req
 		return nil, nil
 	}
 	all = deduplicateChunksByContent(all)
+	all = filterChunksByScoreThreshold(all, s.ScoreThreshold)
+	if len(all) == 0 {
+		return nil, nil
+	}
 
 	if s.Reranker != nil && len(all) > 1 {
 		docs := make([]string, 0, len(all))
@@ -165,6 +172,20 @@ func deduplicateChunksByContent(chunks []bot.RAGChunk) []bot.RAGChunk {
 		result = append(result, item)
 	}
 	return result
+}
+
+func filterChunksByScoreThreshold(chunks []bot.RAGChunk, scoreThreshold float64) []bot.RAGChunk {
+	if len(chunks) == 0 || scoreThreshold <= 0 {
+		return chunks
+	}
+	filtered := make([]bot.RAGChunk, 0, len(chunks))
+	for _, item := range chunks {
+		if item.Score < scoreThreshold {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered
 }
 
 func applyRerankResults(chunks []bot.RAGChunk, results []RerankResult, scoreThreshold float64) []bot.RAGChunk {

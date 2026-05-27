@@ -76,6 +76,9 @@ type AICallLogRepository interface {
 	Create(ctx context.Context, callLog *model.AICallLog) error
 	ListByConversationID(ctx context.Context, conversationID uint64, beforeID *uint64, limit int, botID *uint64, status string) ([]model.AICallLog, error)
 	SumTotalTokensByConversationBetween(ctx context.Context, conversationID uint64, startAt time.Time, endAt time.Time) (int64, error)
+	SumPlatformTotalTokensByConversationBetween(ctx context.Context, conversationID uint64, startAt time.Time, endAt time.Time) (int64, error)
+	SumTotalTokensByConversationAndModelBetween(ctx context.Context, conversationID uint64, modelName string, startAt time.Time, endAt time.Time) (int64, error)
+	SumTotalTokensByConversationAndProviderModelBetween(ctx context.Context, conversationID uint64, providerName string, modelName string, startAt time.Time, endAt time.Time) (int64, error)
 }
 
 type NotificationRepository interface {
@@ -413,6 +416,37 @@ func (r *GormAICallLogRepository) SumTotalTokensByConversationBetween(ctx contex
 	err := r.db.WithContext(ctx).
 		Model(&model.AICallLog{}).
 		Where("conversation_id = ? AND created_at >= ? AND created_at < ?", conversationID, startAt, endAt).
+		Select("COALESCE(SUM(total_tokens), 0)").
+		Scan(&total).Error
+	return total, err
+}
+
+func (r *GormAICallLogRepository) SumPlatformTotalTokensByConversationBetween(ctx context.Context, conversationID uint64, startAt time.Time, endAt time.Time) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).
+		Table("ai_call_logs AS l").
+		Joins("JOIN bots AS b ON b.id = l.bot_id").
+		Where("l.conversation_id = ? AND l.created_at >= ? AND l.created_at < ? AND b.created_by = 0", conversationID, startAt, endAt).
+		Select("COALESCE(SUM(l.total_tokens), 0)").
+		Scan(&total).Error
+	return total, err
+}
+
+func (r *GormAICallLogRepository) SumTotalTokensByConversationAndModelBetween(ctx context.Context, conversationID uint64, modelName string, startAt time.Time, endAt time.Time) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).
+		Model(&model.AICallLog{}).
+		Where("conversation_id = ? AND model_name = ? AND created_at >= ? AND created_at < ?", conversationID, modelName, startAt, endAt).
+		Select("COALESCE(SUM(total_tokens), 0)").
+		Scan(&total).Error
+	return total, err
+}
+
+func (r *GormAICallLogRepository) SumTotalTokensByConversationAndProviderModelBetween(ctx context.Context, conversationID uint64, providerName string, modelName string, startAt time.Time, endAt time.Time) (int64, error) {
+	var total int64
+	err := r.db.WithContext(ctx).
+		Model(&model.AICallLog{}).
+		Where("conversation_id = ? AND provider_name = ? AND model_name = ? AND created_at >= ? AND created_at < ?", conversationID, providerName, modelName, startAt, endAt).
 		Select("COALESCE(SUM(total_tokens), 0)").
 		Scan(&total).Error
 	return total, err

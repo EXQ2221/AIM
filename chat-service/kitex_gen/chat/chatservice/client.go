@@ -33,6 +33,9 @@ type Client interface {
 	RecallMessage(ctx context.Context, req *chat.RecallMessageRequest, callOptions ...callopt.Option) (r *chat.MessageRecalledEventResponse, err error)
 	ListBots(ctx context.Context, req *chat.ListBotsRequest, callOptions ...callopt.Option) (r *chat.ListBotsResponse, err error)
 	CreateCustomBot(ctx context.Context, req *chat.CreateCustomBotRequest, callOptions ...callopt.Option) (r *chat.CreateCustomBotResponse, err error)
+	ListCustomBots(ctx context.Context, req *chat.ListCustomBotsRequest, callOptions ...callopt.Option) (r *chat.ListCustomBotsResponse, err error)
+	UpdateCustomBot(ctx context.Context, req *chat.UpdateCustomBotRequest, callOptions ...callopt.Option) (r *chat.UpdateCustomBotResponse, err error)
+	DeleteCustomBot(ctx context.Context, req *chat.DeleteCustomBotRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
 	ListConversationBots(ctx context.Context, req *chat.ListConversationBotsRequest, callOptions ...callopt.Option) (r *chat.ListConversationBotsResponse, err error)
 	AddConversationBot(ctx context.Context, req *chat.AddConversationBotRequest, callOptions ...callopt.Option) (r *chat.AddConversationBotResponse, err error)
 	RemoveConversationBot(ctx context.Context, req *chat.RemoveConversationBotRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
@@ -193,6 +196,21 @@ func (p *kChatServiceClient) ListBots(ctx context.Context, req *chat.ListBotsReq
 func (p *kChatServiceClient) CreateCustomBot(ctx context.Context, req *chat.CreateCustomBotRequest, callOptions ...callopt.Option) (r *chat.CreateCustomBotResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.CreateCustomBot(ctx, req)
+}
+
+func (p *kChatServiceClient) ListCustomBots(ctx context.Context, req *chat.ListCustomBotsRequest, callOptions ...callopt.Option) (r *chat.ListCustomBotsResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListCustomBots(ctx, req)
+}
+
+func (p *kChatServiceClient) UpdateCustomBot(ctx context.Context, req *chat.UpdateCustomBotRequest, callOptions ...callopt.Option) (r *chat.UpdateCustomBotResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.UpdateCustomBot(ctx, req)
+}
+
+func (p *kChatServiceClient) DeleteCustomBot(ctx context.Context, req *chat.DeleteCustomBotRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.DeleteCustomBot(ctx, req)
 }
 
 func (p *kChatServiceClient) ListConversationBots(ctx context.Context, req *chat.ListConversationBotsRequest, callOptions ...callopt.Option) (r *chat.ListConversationBotsResponse, err error) {

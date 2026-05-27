@@ -922,11 +922,17 @@ func (s *ChatService) CreateMessage(ctx context.Context, operatorID uint64, conv
 	}
 
 	if s.BotService != nil && bot.ShouldTriggerBot(*message) {
+		var replyPreviewText string
+		if replyPreview != nil {
+			replyPreviewText = strings.TrimSpace(replyPreview.ContentPreview)
+		}
 		s.handleBotAsync(s.BotService, bot.HandleMentionRequest{
 			ConversationID:   message.ConversationID,
 			RequestMessageID: message.ID,
 			UserID:           message.SenderID,
 			Content:          model.ExtractTextMessageContent(message.Content),
+			ReplyToID:        message.ReplyToID,
+			ReplyToPreview:   replyPreviewText,
 		})
 	}
 

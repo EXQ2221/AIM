@@ -45,6 +45,28 @@ func (r *fakeBotRepo) ListEnabledByOwner(ctx context.Context, ownerID uint64) ([
 	return result, nil
 }
 
+func (r *fakeBotRepo) ListCustomByOwner(ctx context.Context, ownerID uint64) ([]model.Bot, error) {
+	result := make([]model.Bot, 0, len(r.bots))
+	for _, item := range r.bots {
+		if item.CreatedBy == ownerID && (item.Status == "" || item.Status == model.BotStatusEnabled) {
+			result = append(result, *item)
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeBotRepo) Update(ctx context.Context, bot *model.Bot) error {
+	if bot == nil {
+		return nil
+	}
+	if r.bots == nil {
+		r.bots = make(map[uint64]*model.Bot)
+	}
+	botCopy := *bot
+	r.bots[bot.ID] = &botCopy
+	return nil
+}
+
 func (r *fakeBotRepo) ListEnabled(ctx context.Context) ([]model.Bot, error) {
 	result := make([]model.Bot, 0, len(r.bots))
 	for _, item := range r.bots {

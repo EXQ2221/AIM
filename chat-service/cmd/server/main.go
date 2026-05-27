@@ -183,11 +183,7 @@ func newBotServiceFromEnv(
 			return customClient, "custom", nil
 		}
 
-		provider := "primary"
-		mentionName := strings.ToLower(strings.TrimSpace(botModel.MentionName))
-		if mentionName == "qwen" {
-			provider = "secondary"
-		}
+		provider := providerByModelName(strings.TrimSpace(botModel.ModelName))
 		client, _, providerName, selectErr := registry.Client(provider)
 		if selectErr != nil {
 			if provider == "secondary" {
@@ -315,50 +311,86 @@ func newRerankerFromEnv() botdal.TextReranker {
 }
 
 func builtInBotConfigsFromEnv() []pgstore.BuiltInBotConfig {
-	deepSeekSupportedModels := []string{"deepseek-v4-flash", "deepseek-v4-pro"}
-	deepSeekModelName := deepSeekSupportedModels[0]
-	if envModel := strings.TrimSpace(os.Getenv("LLM_MODEL")); envModel != "" {
-		for _, supportedModel := range deepSeekSupportedModels {
-			if supportedModel == envModel {
-				deepSeekModelName = envModel
-				break
-			}
-		}
-	}
-
-	qwenSupportedModels := []string{"qwen-turbo", "qwen-plus", "qwen-max", "qwen3.6-plus", "qwen3.5-plus"}
-	qwenModelName := qwenSupportedModels[0]
-	if envModel := strings.TrimSpace(os.Getenv("LLM2_MODEL")); envModel != "" {
-		for _, supportedModel := range qwenSupportedModels {
-			if supportedModel == envModel {
-				qwenModelName = envModel
-				break
-			}
-		}
-	}
-
 	return []pgstore.BuiltInBotConfig{
 		{
 			ID:              uint64(intFromEnv("BOT_ID", 100000)),
-			Name:            "DeepSeek",
-			MentionName:     "ai",
+			Name:            "DeepSeek Flash",
+			MentionName:     "dsflash",
 			Aliases:         []string{"deepseek"},
-			Description:     "\u5e73\u53f0\u5185\u7f6e AI \u52a9\u624b\uff08\u6587\u672c\u63a8\u7406\u4f18\u5148\uff09\u3002",
-			ModelName:       deepSeekModelName,
-			SupportedModels: deepSeekSupportedModels,
+			Description:     "\u5e73\u53f0\u5185\u7f6e DeepSeek Flash\uff08\u901f\u5ea6\u4f18\u5148\uff09\u3002",
+			ModelName:       "deepseek-v4-flash",
+			SupportedModels: []string{"deepseek-v4-flash"},
 			SystemPrompt:    bot.DefaultSystemPrompt,
 		},
 		{
 			ID:              uint64(intFromEnv("BOT2_ID", 100001)),
-			Name:            "\u901a\u4e49\u5343\u95ee",
-			MentionName:     "qwen",
-			Aliases:         []string{"tongyi", "qw"},
-			Description:     "\u5e73\u53f0\u5185\u7f6e\u901a\u4e49\u5343\u95ee\u52a9\u624b\uff1aqwen-turbo\uff08\u901f\u5ea6\u5feb\uff09\u3001qwen-plus\uff08\u5747\u8861\uff09\u3001qwen-max\uff08\u6548\u679c\u6700\u597d\uff09\u3001qwen3.6-plus\uff08\u652f\u6301\u8bfb\u56fe\uff09\u3001qwen3.5-plus\uff08\u652f\u6301\u8bfb\u56fe\uff09\u3002",
-			ModelName:       qwenModelName,
-			SupportedModels: qwenSupportedModels,
+			Name:            "DeepSeek Pro",
+			MentionName:     "dspro",
+			Aliases:         []string{"deepseek-pro"},
+			Description:     "\u5e73\u53f0\u5185\u7f6e DeepSeek Pro\uff08\u6548\u679c\u4f18\u5148\uff09\u3002",
+			ModelName:       "deepseek-v4-pro",
+			SupportedModels: []string{"deepseek-v4-pro"},
+			SystemPrompt:    bot.DefaultSystemPrompt,
+		},
+		{
+			ID:              uint64(intFromEnv("BOT3_ID", 100002)),
+			Name:            "\u901a\u4e49 Turbo",
+			MentionName:     "qwenturbo",
+			Aliases:         []string{"tongyi-turbo"},
+			Description:     "\u5e73\u53f0\u5185\u7f6e\u901a\u4e49 Turbo\uff08\u901f\u5ea6\u4f18\u5148\uff09\u3002",
+			ModelName:       "qwen-turbo",
+			SupportedModels: []string{"qwen-turbo"},
+			SystemPrompt:    bot.DefaultSystemPrompt,
+		},
+		{
+			ID:              uint64(intFromEnv("BOT4_ID", 100003)),
+			Name:            "\u901a\u4e49 Plus",
+			MentionName:     "qwenplus",
+			Aliases:         []string{"tongyi-plus"},
+			Description:     "\u5e73\u53f0\u5185\u7f6e\u901a\u4e49 Plus\uff08\u5747\u8861\uff09\u3002",
+			ModelName:       "qwen-plus",
+			SupportedModels: []string{"qwen-plus"},
+			SystemPrompt:    bot.DefaultSystemPrompt,
+		},
+		{
+			ID:              uint64(intFromEnv("BOT5_ID", 100004)),
+			Name:            "\u901a\u4e49 Max",
+			MentionName:     "qwenmax",
+			Aliases:         []string{"tongyi-max"},
+			Description:     "\u5e73\u53f0\u5185\u7f6e\u901a\u4e49 Max\uff08\u6548\u679c\u4f18\u5148\uff09\u3002",
+			ModelName:       "qwen-max",
+			SupportedModels: []string{"qwen-max"},
+			SystemPrompt:    bot.DefaultSystemPrompt,
+		},
+		{
+			ID:              uint64(intFromEnv("BOT6_ID", 100005)),
+			Name:            "\u901a\u4e49 3.6 Plus",
+			MentionName:     "qwen36",
+			Aliases:         []string{"tongyi-36"},
+			Description:     "\u5e73\u53f0\u5185\u7f6e\u901a\u4e49 3.6 Plus\uff08\u8bfb\u56fe/\u591a\u6a21\u6001\u589e\u5f3a\uff09\u3002",
+			ModelName:       "qwen3.6-plus",
+			SupportedModels: []string{"qwen3.6-plus"},
+			SystemPrompt:    bot.DefaultSystemPrompt,
+		},
+		{
+			ID:              uint64(intFromEnv("BOT7_ID", 100006)),
+			Name:            "\u901a\u4e49 3.5 Plus",
+			MentionName:     "qwen35",
+			Aliases:         []string{"tongyi-35", "qwen"},
+			Description:     "\u5e73\u53f0\u5185\u7f6e\u901a\u4e49 3.5 Plus\u3002",
+			ModelName:       "qwen3.5-plus",
+			SupportedModels: []string{"qwen3.5-plus"},
 			SystemPrompt:    bot.DefaultSystemPrompt,
 		},
 	}
+}
+
+func providerByModelName(modelName string) string {
+	name := strings.ToLower(strings.TrimSpace(modelName))
+	if strings.HasPrefix(name, "qwen") || strings.Contains(name, "tongyi") {
+		return "secondary"
+	}
+	return "primary"
 }
 
 func intFromEnv(key string, fallback int) int {

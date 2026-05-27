@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -254,7 +255,7 @@ func TestListAICallLogsReturnsConversationLogs(t *testing.T) {
 	if result.Logs[0].BotName != "AIM Bot" || result.Logs[0].ConversationID != "c_test" || result.Logs[0].TotalTokens != 30 {
 		t.Fatalf("unexpected log view: %+v", result.Logs[0])
 	}
-	if result.Quota.DailyTokenLimit != 1_000_000 || result.Quota.DailyTotalTokens != 30 {
+	if result.Quota.DailyTokenLimit != 50_000 || result.Quota.DailyTotalTokens != 30 {
 		t.Fatalf("unexpected quota view: %+v", result.Quota)
 	}
 }
@@ -1194,6 +1195,7 @@ func (r *fakeMemberRepo) ListUserMemberIDs(ctx context.Context, conversationID u
 			memberIDs = append(memberIDs, key.memberID)
 		}
 	}
+	sort.Slice(memberIDs, func(i, j int) bool { return memberIDs[i] < memberIDs[j] })
 	return memberIDs, nil
 }
 
@@ -1349,6 +1351,28 @@ func (r *fakeConversationListBotRepo) ListEnabledByOwner(ctx context.Context, ow
 	return result, nil
 }
 
+func (r *fakeConversationListBotRepo) ListCustomByOwner(ctx context.Context, ownerID uint64) ([]model.Bot, error) {
+	result := make([]model.Bot, 0, len(r.bots))
+	for _, botModel := range r.bots {
+		if botModel.CreatedBy == ownerID && (botModel.Status == "" || botModel.Status == model.BotStatusEnabled) {
+			result = append(result, *botModel)
+		}
+	}
+	return result, nil
+}
+
+func (r *fakeConversationListBotRepo) Update(ctx context.Context, botModel *model.Bot) error {
+	if botModel == nil {
+		return nil
+	}
+	if r.bots == nil {
+		r.bots = make(map[uint64]*model.Bot)
+	}
+	botCopy := *botModel
+	r.bots[botModel.ID] = &botCopy
+	return nil
+}
+
 func (r *fakeListAICallLogRepo) WithTx(tx *gorm.DB) repository.AICallLogRepository {
 	return r
 }
@@ -1385,6 +1409,57 @@ func (r *fakeListAICallLogRepo) SumTotalTokensByConversationBetween(ctx context.
 	var total int64
 	for _, item := range r.logs {
 		if item.ConversationID != conversationID {
+			continue
+		}
+		if item.CreatedAt.Before(startAt) || !item.CreatedAt.Before(endAt) {
+			continue
+		}
+		total += int64(item.TotalTokens)
+	}
+	return total, nil
+}
+
+func (r *fakeListAICallLogRepo) SumPlatformTotalTokensByConversationBetween(ctx context.Context, conversationID uint64, startAt time.Time, endAt time.Time) (int64, error) {
+	var total int64
+	for _, item := range r.logs {
+		if item.ConversationID != conversationID {
+			continue
+		}
+		if item.BotID != 100000 {
+			continue
+		}
+		if item.CreatedAt.Before(startAt) || !item.CreatedAt.Before(endAt) {
+			continue
+		}
+		total += int64(item.TotalTokens)
+	}
+	return total, nil
+}
+
+func (r *fakeListAICallLogRepo) SumTotalTokensByConversationAndModelBetween(ctx context.Context, conversationID uint64, modelName string, startAt time.Time, endAt time.Time) (int64, error) {
+	var total int64
+	for _, item := range r.logs {
+		if item.ConversationID != conversationID {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(item.ModelName), strings.TrimSpace(modelName)) {
+			continue
+		}
+		if item.CreatedAt.Before(startAt) || !item.CreatedAt.Before(endAt) {
+			continue
+		}
+		total += int64(item.TotalTokens)
+	}
+	return total, nil
+}
+
+func (r *fakeListAICallLogRepo) SumTotalTokensByConversationAndProviderModelBetween(ctx context.Context, conversationID uint64, providerName string, modelName string, startAt time.Time, endAt time.Time) (int64, error) {
+	var total int64
+	for _, item := range r.logs {
+		if item.ConversationID != conversationID {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(item.ModelName), strings.TrimSpace(modelName)) {
 			continue
 		}
 		if item.CreatedAt.Before(startAt) || !item.CreatedAt.Before(endAt) {

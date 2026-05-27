@@ -263,6 +263,7 @@ struct AICallLogInfo {
   13: string status
   14: string error_message
   15: i64 created_at
+  16: bool is_platform_bot
 }
 
 struct AICallLogQuotaInfo {
@@ -429,6 +430,37 @@ struct CreateCustomBotResponse {
   1: BotInfo bot
 }
 
+struct ListCustomBotsRequest {
+  1: i64 operator_id
+}
+
+struct ListCustomBotsResponse {
+  1: list<BotInfo> bots
+}
+
+struct UpdateCustomBotRequest {
+  1: i64 operator_id
+  2: i64 bot_id
+  3: string name
+  4: string mention_name
+  5: list<string> aliases
+  6: string description
+  7: optional string api_base_url
+  8: optional string api_key
+  9: string model_name
+  10: list<string> supported_models
+  11: optional string system_prompt
+}
+
+struct UpdateCustomBotResponse {
+  1: BotInfo bot
+}
+
+struct DeleteCustomBotRequest {
+  1: i64 operator_id
+  2: i64 bot_id
+}
+
 struct RemoveConversationBotRequest {
   1: i64 operator_id
   2: string conversation_id
@@ -578,6 +610,9 @@ service ChatService {
   MessageRecalledEventResponse RecallMessage(1: RecallMessageRequest req)
   ListBotsResponse ListBots(1: ListBotsRequest req)
   CreateCustomBotResponse CreateCustomBot(1: CreateCustomBotRequest req)
+  ListCustomBotsResponse ListCustomBots(1: ListCustomBotsRequest req)
+  UpdateCustomBotResponse UpdateCustomBot(1: UpdateCustomBotRequest req)
+  CommonResponse DeleteCustomBot(1: DeleteCustomBotRequest req)
   ListConversationBotsResponse ListConversationBots(1: ListConversationBotsRequest req)
   AddConversationBotResponse AddConversationBot(1: AddConversationBotRequest req)
   CommonResponse RemoveConversationBot(1: RemoveConversationBotRequest req)

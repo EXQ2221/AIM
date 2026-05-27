@@ -23,6 +23,7 @@ var (
 	ErrBotConflict               = errors.New("bad_request: bot mentionName or aliases conflict in conversation")
 	ErrBotPermissionScopeInvalid = errors.New("bad_request: permission_scope must be CONVERSATION_ONLY / KNOWLEDGE_BASE_ONLY / CONVERSATION_AND_KB")
 	ErrBotOwnerRequired          = errors.New("forbidden: only bot owner can add this custom bot")
+	ErrBotCustomRequired         = errors.New("forbidden: only custom bot can be managed")
 )
 
 var reservedBotNames = map[string]struct{}{
@@ -50,6 +51,28 @@ func (s *ChatService) ListBots(ctx context.Context, operatorID uint64) ([]BotVie
 		view, err := buildAvailableBotView(botModel)
 		if err != nil {
 			return nil, err
+		}
+		result = append(result, view)
+	}
+	return result, nil
+}
+
+func (s *ChatService) ListCustomBots(ctx context.Context, operatorID uint64) ([]BotView, error) {
+	if operatorID == 0 {
+		return nil, ErrBadRequest
+	}
+	if s.BotRepo == nil {
+		return nil, ErrBotManagementUnavailable
+	}
+	bots, err := s.BotRepo.ListCustomByOwner(ctx, operatorID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]BotView, 0, len(bots))
+	for _, botModel := range bots {
+		view, viewErr := buildAvailableBotView(botModel)
+		if viewErr != nil {
+			return nil, viewErr
 		}
 		result = append(result, view)
 	}
@@ -255,6 +278,81 @@ func (s *ChatService) CreateCustomBot(ctx context.Context, input CreateCustomBot
 	return &view, nil
 }
 
+func (s *ChatService) UpdateCustomBot(ctx context.Context, input UpdateCustomBotInput) (*BotView, error) {
+	if input.OperatorID == 0 || input.BotID == 0 {
+		return nil, ErrBadRequest
+	}
+	if s.BotRepo == nil {
+		return nil, ErrBotManagementUnavailable
+	}
+	botModel, err := s.BotRepo.GetByID(ctx, input.BotID)
+	if err != nil {
+		return nil, err
+	}
+	if botModel.CreatedBy == 0 {
+		return nil, ErrBotCustomRequired
+	}
+	if botModel.CreatedBy != input.OperatorID {
+		return nil, ErrBotOwnerRequired
+	}
+
+	name := strings.TrimSpace(input.Name)
+	mentionName := normalizeOptionalName(input.MentionName)
+	modelName := strings.TrimSpace(input.ModelName)
+	if name == "" || mentionName == "" || modelName == "" {
+		return nil, ErrBadRequest
+	}
+	if err := validateMentionToken(mentionName, ErrBotMentionNameInvalid); err != nil {
+		return nil, err
+	}
+	if err := validateOverrideNames("", input.Aliases); err != nil {
+		return nil, err
+	}
+	aliasesText, err := marshalAliases(input.Aliases)
+	if err != nil {
+		return nil, err
+	}
+	supportedModels := input.SupportedModels
+	if len(supportedModels) == 0 {
+		supportedModels = []string{modelName}
+	}
+	supportedModelsText, err := marshalAliases(supportedModels)
+	if err != nil {
+		return nil, err
+	}
+
+	botModel.Name = name
+	botModel.MentionName = mentionName
+	botModel.Aliases = aliasesText
+	botModel.Description = strings.TrimSpace(input.Description)
+	botModel.ModelName = modelName
+	botModel.SupportedModels = supportedModelsText
+	if input.APIBaseURL != nil {
+		if baseURL := normalizeOpenAIBaseURL(*input.APIBaseURL); baseURL != "" {
+			botModel.APIBaseURL = baseURL
+		}
+	}
+	if input.APIKey != nil {
+		if apiKey := strings.TrimSpace(*input.APIKey); apiKey != "" {
+			botModel.APIKeyEncrypted = apiKey
+		}
+	}
+	if input.SystemPrompt != nil {
+		botModel.SystemPrompt = strings.TrimSpace(*input.SystemPrompt)
+	}
+	if strings.TrimSpace(botModel.SystemPrompt) == "" {
+		botModel.SystemPrompt = bot.DefaultSystemPrompt
+	}
+	if err := s.BotRepo.Update(ctx, botModel); err != nil {
+		return nil, err
+	}
+	view, err := buildAvailableBotView(*botModel)
+	if err != nil {
+		return nil, err
+	}
+	return &view, nil
+}
+
 func normalizeOpenAIBaseURL(raw string) string {
 	value := strings.TrimSpace(raw)
 	if value == "" {
@@ -287,6 +385,49 @@ func (s *ChatService) RemoveConversationBot(ctx context.Context, operatorID uint
 		return ErrAdminRequired
 	}
 	return s.BotMembershipService.RemoveBotFromConversation(ctx, conversation.ID, botID)
+}
+
+func (s *ChatService) DeleteCustomBot(ctx context.Context, operatorID uint64, botID uint64) error {
+	if operatorID == 0 || botID == 0 {
+		return ErrBadRequest
+	}
+	if s.BotRepo == nil {
+		return ErrBotManagementUnavailable
+	}
+	botModel, err := s.BotRepo.GetByID(ctx, botID)
+	if err != nil {
+		return err
+	}
+	if botModel.CreatedBy == 0 {
+		return ErrBotCustomRequired
+	}
+	if botModel.CreatedBy != operatorID {
+		return ErrBotOwnerRequired
+	}
+
+	if s.TxManager == nil {
+		return ErrBotManagementUnavailable
+	}
+	return s.TxManager.WithinTransaction(ctx, func(tx *gorm.DB) error {
+		botCopy := *botModel
+		botCopy.Status = model.BotStatusDisabled
+		if err := s.BotRepo.WithTx(tx).Update(ctx, &botCopy); err != nil {
+			return err
+		}
+		if err := tx.WithContext(ctx).
+			Model(&model.ConversationBot{}).
+			Where("bot_id = ?", botID).
+			Update("enabled", false).Error; err != nil {
+			return err
+		}
+		if err := tx.WithContext(ctx).
+			Model(&model.ConversationMember{}).
+			Where("member_type = ? AND member_id = ?", model.MemberTypeBot, botID).
+			Update("status", model.MemberStatusRemoved).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func buildConversationBotView(botModel model.Bot, conversationBot model.ConversationBot, member model.ConversationMember) (BotView, error) {

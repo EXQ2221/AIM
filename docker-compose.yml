@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: ${DOCKER_HUB_MIRROR:-docker.io}/library/postgres:16
+    image: ${DOCKER_HUB_MIRROR:-docker.io}/pgvector/pgvector:pg16
     container_name: aim-postgres
     restart: unless-stopped
     environment:
@@ -119,6 +119,7 @@ services:
       USER_SERVICE_ADDR: "user-service:9001"
       RAG_SERVICE_ADDR: "rag-service:9004"
       REDIS_ADDR: "redis:6379"
+      BOT_DEBUG_LLM_REQUEST: "1"
       BOT_ID: "${BOT_ID:-1}"
       BOT2_ID: "${BOT2_ID:-100001}"
       LLM_BASE_URL: "${LLM_BASE_URL:-}"

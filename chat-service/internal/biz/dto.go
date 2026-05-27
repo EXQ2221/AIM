@@ -193,6 +193,20 @@ type CreateCustomBotInput struct {
 	SystemPrompt    string
 }
 
+type UpdateCustomBotInput struct {
+	OperatorID      uint64
+	BotID           uint64
+	Name            string
+	MentionName     string
+	Aliases         []string
+	Description     string
+	APIBaseURL      *string
+	APIKey          *string
+	ModelName       string
+	SupportedModels []string
+	SystemPrompt    *string
+}
+
 type BotView struct {
 	BotID           uint64
 	MemberType      string

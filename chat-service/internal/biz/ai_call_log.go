@@ -8,7 +8,7 @@ import (
 	"example.com/aim/chat-service/internal/dal/model"
 )
 
-const dailyAICallTokenLimit int64 = 1_000_000
+const dailyAICallTokenLimit int64 = 50_000
 
 func (s *ChatService) ListAICallLogs(
 	ctx context.Context,
@@ -67,7 +67,12 @@ func (s *ChatService) ListAICallLogs(
 				botNames[item.BotID] = ""
 				continue
 			}
-			botNames[item.BotID] = strings.TrimSpace(botModel.Name)
+			name := strings.TrimSpace(botModel.Name)
+			// Keep logs complete but mark custom bots, so clients can exclude them from platform quota stats.
+			if botModel.CreatedBy > 0 {
+				name = "[自建] " + name
+			}
+			botNames[item.BotID] = name
 		}
 	}
 
@@ -99,7 +104,7 @@ func (s *ChatService) ListAICallLogs(
 
 func (s *ChatService) buildAICallLogQuota(ctx context.Context, conversationID uint64) (AICallLogQuotaView, error) {
 	startAt, endAt := currentDayWindow()
-	total, err := s.AICallLogRepo.SumTotalTokensByConversationBetween(ctx, conversationID, startAt, endAt)
+	total, err := s.AICallLogRepo.SumPlatformTotalTokensByConversationBetween(ctx, conversationID, startAt, endAt)
 	if err != nil {
 		return AICallLogQuotaView{}, err
 	}

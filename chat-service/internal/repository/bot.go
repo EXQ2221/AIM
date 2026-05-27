@@ -12,6 +12,8 @@ type BotRepository interface {
 	Create(ctx context.Context, bot *model.Bot) error
 	GetByID(ctx context.Context, id uint64) (*model.Bot, error)
 	ListEnabledByOwner(ctx context.Context, ownerID uint64) ([]model.Bot, error)
+	ListCustomByOwner(ctx context.Context, ownerID uint64) ([]model.Bot, error)
+	Update(ctx context.Context, bot *model.Bot) error
 }
 
 type ConversationBotRepository interface {
@@ -58,6 +60,19 @@ func (r *GormBotRepository) ListEnabledByOwner(ctx context.Context, ownerID uint
 		Order("id ASC").
 		Find(&bots).Error
 	return bots, err
+}
+
+func (r *GormBotRepository) ListCustomByOwner(ctx context.Context, ownerID uint64) ([]model.Bot, error) {
+	var bots []model.Bot
+	err := r.db.WithContext(ctx).
+		Where("created_by = ? AND status = ?", ownerID, model.BotStatusEnabled).
+		Order("id DESC").
+		Find(&bots).Error
+	return bots, err
+}
+
+func (r *GormBotRepository) Update(ctx context.Context, bot *model.Bot) error {
+	return r.db.WithContext(ctx).Save(bot).Error
 }
 
 type GormConversationBotRepository struct {

@@ -132,6 +132,18 @@ type CreateCustomBotRequest struct {
 	SystemPrompt    string   `json:"systemPrompt"`
 }
 
+type UpdateCustomBotRequest struct {
+	Name            string   `json:"name"`
+	MentionName     string   `json:"mentionName"`
+	Aliases         []string `json:"aliases"`
+	Description     string   `json:"description"`
+	APIBaseURL      *string  `json:"apiBaseUrl,omitempty"`
+	APIKey          *string  `json:"apiKey,omitempty"`
+	ModelName       string   `json:"modelName"`
+	SupportedModels []string `json:"supportedModels"`
+	SystemPrompt    *string  `json:"systemPrompt,omitempty"`
+}
+
 type InviteMemberRequest struct {
 	TargetUserID int64 `json:"targetUserId"`
 }

@@ -167,6 +167,27 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"ListCustomBots": kitex.NewMethodInfo(
+		listCustomBotsHandler,
+		newChatServiceListCustomBotsArgs,
+		newChatServiceListCustomBotsResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"UpdateCustomBot": kitex.NewMethodInfo(
+		updateCustomBotHandler,
+		newChatServiceUpdateCustomBotArgs,
+		newChatServiceUpdateCustomBotResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"DeleteCustomBot": kitex.NewMethodInfo(
+		deleteCustomBotHandler,
+		newChatServiceDeleteCustomBotArgs,
+		newChatServiceDeleteCustomBotResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"ListConversationBots": kitex.NewMethodInfo(
 		listConversationBotsHandler,
 		newChatServiceListConversationBotsArgs,
@@ -776,6 +797,60 @@ func newChatServiceCreateCustomBotResult() interface{} {
 	return chat.NewChatServiceCreateCustomBotResult()
 }
 
+func listCustomBotsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceListCustomBotsArgs)
+	realResult := result.(*chat.ChatServiceListCustomBotsResult)
+	success, err := handler.(chat.ChatService).ListCustomBots(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceListCustomBotsArgs() interface{} {
+	return chat.NewChatServiceListCustomBotsArgs()
+}
+
+func newChatServiceListCustomBotsResult() interface{} {
+	return chat.NewChatServiceListCustomBotsResult()
+}
+
+func updateCustomBotHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceUpdateCustomBotArgs)
+	realResult := result.(*chat.ChatServiceUpdateCustomBotResult)
+	success, err := handler.(chat.ChatService).UpdateCustomBot(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceUpdateCustomBotArgs() interface{} {
+	return chat.NewChatServiceUpdateCustomBotArgs()
+}
+
+func newChatServiceUpdateCustomBotResult() interface{} {
+	return chat.NewChatServiceUpdateCustomBotResult()
+}
+
+func deleteCustomBotHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceDeleteCustomBotArgs)
+	realResult := result.(*chat.ChatServiceDeleteCustomBotResult)
+	success, err := handler.(chat.ChatService).DeleteCustomBot(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceDeleteCustomBotArgs() interface{} {
+	return chat.NewChatServiceDeleteCustomBotArgs()
+}
+
+func newChatServiceDeleteCustomBotResult() interface{} {
+	return chat.NewChatServiceDeleteCustomBotResult()
+}
+
 func listConversationBotsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	realArg := arg.(*chat.ChatServiceListConversationBotsArgs)
 	realResult := result.(*chat.ChatServiceListConversationBotsResult)
@@ -1379,6 +1454,36 @@ func (p *kClient) CreateCustomBot(ctx context.Context, req *chat.CreateCustomBot
 	_args.Req = req
 	var _result chat.ChatServiceCreateCustomBotResult
 	if err = p.c.Call(ctx, "CreateCustomBot", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListCustomBots(ctx context.Context, req *chat.ListCustomBotsRequest) (r *chat.ListCustomBotsResponse, err error) {
+	var _args chat.ChatServiceListCustomBotsArgs
+	_args.Req = req
+	var _result chat.ChatServiceListCustomBotsResult
+	if err = p.c.Call(ctx, "ListCustomBots", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) UpdateCustomBot(ctx context.Context, req *chat.UpdateCustomBotRequest) (r *chat.UpdateCustomBotResponse, err error) {
+	var _args chat.ChatServiceUpdateCustomBotArgs
+	_args.Req = req
+	var _result chat.ChatServiceUpdateCustomBotResult
+	if err = p.c.Call(ctx, "UpdateCustomBot", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) DeleteCustomBot(ctx context.Context, req *chat.DeleteCustomBotRequest) (r *chat.CommonResponse, err error) {
+	var _args chat.ChatServiceDeleteCustomBotArgs
+	_args.Req = req
+	var _result chat.ChatServiceDeleteCustomBotResult
+	if err = p.c.Call(ctx, "DeleteCustomBot", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

@@ -295,6 +295,45 @@ func (h *ChatServiceImpl) CreateCustomBot(ctx context.Context, req *chatpb.Creat
 	return &chatpb.CreateCustomBotResponse{Bot: toBotPB(*item)}, nil
 }
 
+func (h *ChatServiceImpl) ListCustomBots(ctx context.Context, req *chatpb.ListCustomBotsRequest) (*chatpb.ListCustomBotsResponse, error) {
+	bots, err := h.Service.ListCustomBots(ctx, uint64(req.OperatorId))
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*chatpb.BotInfo, 0, len(bots))
+	for _, item := range bots {
+		result = append(result, toBotPB(item))
+	}
+	return &chatpb.ListCustomBotsResponse{Bots: result}, nil
+}
+
+func (h *ChatServiceImpl) UpdateCustomBot(ctx context.Context, req *chatpb.UpdateCustomBotRequest) (*chatpb.UpdateCustomBotResponse, error) {
+	item, err := h.Service.UpdateCustomBot(ctx, biz.UpdateCustomBotInput{
+		OperatorID:      uint64(req.OperatorId),
+		BotID:           uint64(req.BotId),
+		Name:            req.Name,
+		MentionName:     req.MentionName,
+		Aliases:         req.Aliases,
+		Description:     req.Description,
+		APIBaseURL:      req.ApiBaseUrl,
+		APIKey:          req.ApiKey,
+		ModelName:       req.ModelName,
+		SupportedModels: req.SupportedModels,
+		SystemPrompt:    req.SystemPrompt,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &chatpb.UpdateCustomBotResponse{Bot: toBotPB(*item)}, nil
+}
+
+func (h *ChatServiceImpl) DeleteCustomBot(ctx context.Context, req *chatpb.DeleteCustomBotRequest) (*chatpb.CommonResponse, error) {
+	if err := h.Service.DeleteCustomBot(ctx, uint64(req.OperatorId), uint64(req.BotId)); err != nil {
+		return &chatpb.CommonResponse{Success: false, Message: err.Error()}, nil
+	}
+	return &chatpb.CommonResponse{Success: true, Message: "ok"}, nil
+}
+
 func (h *ChatServiceImpl) ListConversationBots(ctx context.Context, req *chatpb.ListConversationBotsRequest) (*chatpb.ListConversationBotsResponse, error) {
 	bots, err := h.Service.ListConversationBots(ctx, uint64(req.OperatorId), req.ConversationId)
 	if err != nil {

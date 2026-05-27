@@ -49,13 +49,13 @@ func TestBuildPromptFormatsSenders(t *testing.T) {
 		{SenderID: 1, SenderType: model.SenderTypeBot, MessageType: model.MessageTypeBotReply, Content: datatypes.JSON(`{"text":"bot text"}`)},
 	}, "@AIM next", 20, map[uint64]string{10001: "Alice"}, 10001)
 
-	if !strings.Contains(prompt, "[Alice]: user text") {
+	if !strings.Contains(prompt, "Alice: user text") {
 		t.Fatalf("missing user line: %q", prompt)
 	}
-	if !strings.Contains(prompt, "[\u7528\u623710002]: [\u56fe\u7247]") {
+	if !strings.Contains(prompt, "\u7528\u623710002: [\u56fe\u7247]") {
 		t.Fatalf("missing image placeholder line: %q", prompt)
 	}
-	if !strings.Contains(prompt, "[AIM]: bot text") {
+	if !strings.Contains(prompt, "BOT#1: bot text") {
 		t.Fatalf("missing bot line: %q", prompt)
 	}
 	if !strings.Contains(prompt, "\u3010\u5f53\u524d\u63d0\u95ee\u7528\u6237\u3011Alice") {
