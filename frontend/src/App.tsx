@@ -169,12 +169,13 @@ function App() {
   const [mobilePane, setMobilePane] = useState<MobilePane>("conversations");
   const [detailTab, setDetailTab] = useState<DetailTab>("friends");
   const [availableBots, setAvailableBots] = useState<BotInfo[]>([]);
+  const [customBots, setCustomBots] = useState<BotInfo[]>([]);
   const [conversationBots, setConversationBots] = useState<BotInfo[]>([]);
   const [aiCallLogs, setAICallLogs] = useState<AICallLogInfo[]>([]);
   const [aiCallLogQuota, setAICallLogQuota] = useState<AICallLogQuotaInfo>({
     dailyTotalTokens: 0,
-    dailyTokenLimit: 1_000_000,
-    remainingTokens: 1_000_000
+    dailyTokenLimit: 50_000,
+    remainingTokens: 50_000
   });
   const [loadingAICallLogs, setLoadingAICallLogs] = useState(false);
   const [aiCallLogStatus, setAICallLogStatus] = useState<"" | "SUCCESS" | "FAILED">("");
@@ -907,6 +908,7 @@ function App() {
         aiCallLogStatus,
         setBusyAction,
         setAvailableBots,
+        setCustomBots,
         setConversationBots,
         setAICallLogs,
         setAICallLogQuota,
@@ -1070,12 +1072,20 @@ function App() {
     await refreshNotifications();
   };
 
-  const { refreshAICallLogs, handleAddBot, handleRemoveBot, handleCreateCustomBot } = useBotPanelDomain({
+  const {
+    refreshAICallLogs,
+    handleAddBot,
+    handleRemoveBot,
+    handleCreateCustomBot,
+    handleUpdateCustomBot,
+    handleDeleteCustomBot
+  } = useBotPanelDomain({
     detailTab,
     selectedConversationId,
     selectedConversationType: selectedConversation?.type ?? null,
     botDomainDeps,
     setAvailableBots,
+    setCustomBots,
     setConversationBots,
     setAICallLogs,
     setAICallLogQuota,
@@ -1422,6 +1432,7 @@ function App() {
         selectedGroupInfo={selectedGroupInfo}
         currentMember={currentMember}
         availableBots={availableBots}
+        customBots={customBots}
         conversationBots={conversationBots}
         aiCallLogs={aiCallLogs}
         aiCallLogQuota={aiCallLogQuota}
@@ -1461,6 +1472,8 @@ function App() {
         onAddBot={handleAddBot}
         onRemoveBot={handleRemoveBot}
         onCreateCustomBot={handleCreateCustomBot}
+        onUpdateCustomBot={handleUpdateCustomBot}
+        onDeleteCustomBot={handleDeleteCustomBot}
         onAICallLogStatusChange={setAICallLogStatus}
         onRefreshAICallLogs={refreshAICallLogs}
         onSelectKnowledgeBase={setSelectedKnowledgeBaseId}

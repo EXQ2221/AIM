@@ -5,12 +5,16 @@ import { errorMessage } from "../utils";
 import {
   addBotToConversationAction,
   createCustomBotAction,
+  deleteCustomBotAction,
   type BotDomainDeps,
   type CreateCustomBotInput,
+  type UpdateCustomBotInput,
   refreshAICallLogsAction,
   refreshAvailableBotsAction,
+  refreshCustomBotsAction,
   refreshConversationBotsAction,
-  removeBotFromConversationAction
+  removeBotFromConversationAction,
+  updateCustomBotAction
 } from "./bot-domain";
 
 type UseBotPanelDomainDeps = {
@@ -19,6 +23,7 @@ type UseBotPanelDomainDeps = {
   selectedConversationType: string | null;
   botDomainDeps: BotDomainDeps;
   setAvailableBots: (value: BotInfo[]) => void;
+  setCustomBots: (value: BotInfo[]) => void;
   setConversationBots: (value: BotInfo[]) => void;
   setAICallLogs: (value: AICallLogInfo[]) => void;
   setAICallLogQuota: (value: AICallLogQuotaInfo) => void;
@@ -33,6 +38,7 @@ export function useBotPanelDomain(deps: UseBotPanelDomainDeps) {
     selectedConversationType,
     botDomainDeps,
     setAvailableBots,
+    setCustomBots,
     setConversationBots,
     setAICallLogs,
     setAICallLogQuota,
@@ -47,6 +53,11 @@ export function useBotPanelDomain(deps: UseBotPanelDomainDeps) {
 
   const refreshConversationBots = useCallback(
     async () => refreshConversationBotsAction(botDomainDeps),
+    [botDomainDeps]
+  );
+
+  const refreshCustomBots = useCallback(
+    async () => refreshCustomBotsAction(botDomainDeps),
     [botDomainDeps]
   );
 
@@ -77,11 +88,21 @@ export function useBotPanelDomain(deps: UseBotPanelDomainDeps) {
     [botDomainDeps]
   );
 
+  const handleUpdateCustomBot = useCallback(
+    async (input: UpdateCustomBotInput) => updateCustomBotAction(input, botDomainDeps),
+    [botDomainDeps]
+  );
+
+  const handleDeleteCustomBot = useCallback(
+    async (botId: number) => deleteCustomBotAction(botId, botDomainDeps),
+    [botDomainDeps]
+  );
+
   useEffect(() => {
     if (detailTab === "bots" && selectedConversationId && selectedConversationType === "GROUP") {
       void (async () => {
         try {
-          await Promise.all([refreshAvailableBots(), refreshConversationBots()]);
+          await Promise.all([refreshAvailableBots(), refreshConversationBots(), refreshCustomBots()]);
         } catch (error) {
           showToast(errorMessage(error), "error");
         }
@@ -90,9 +111,10 @@ export function useBotPanelDomain(deps: UseBotPanelDomainDeps) {
     }
     if (detailTab === "bots") {
       setAvailableBots([]);
+      setCustomBots([]);
       setConversationBots([]);
     }
-  }, [detailTab, refreshAvailableBots, refreshConversationBots, selectedConversationId, selectedConversationType, setAvailableBots, setConversationBots, showToast]);
+  }, [detailTab, refreshAvailableBots, refreshConversationBots, refreshCustomBots, selectedConversationId, selectedConversationType, setAvailableBots, setCustomBots, setConversationBots, showToast]);
 
   useEffect(() => {
     if (detailTab === "logs" && selectedConversationId) {
@@ -115,8 +137,8 @@ export function useBotPanelDomain(deps: UseBotPanelDomainDeps) {
       setAICallLogs([]);
       setAICallLogQuota({
         dailyTotalTokens: 0,
-        dailyTokenLimit: 1_000_000,
-        remainingTokens: 1_000_000
+        dailyTokenLimit: 50_000,
+        remainingTokens: 50_000
       });
     }
   }, [selectedConversationId, setAICallLogs, setAICallLogQuota]);
@@ -125,6 +147,8 @@ export function useBotPanelDomain(deps: UseBotPanelDomainDeps) {
     refreshAICallLogs,
     handleAddBot,
     handleRemoveBot,
-    handleCreateCustomBot
+    handleCreateCustomBot,
+    handleUpdateCustomBot,
+    handleDeleteCustomBot
   };
 }

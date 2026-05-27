@@ -94,6 +94,7 @@ export function createBotDomainDeps(params: {
   aiCallLogStatus: "" | "SUCCESS" | "FAILED";
   setBusyAction: (value: boolean) => void;
   setAvailableBots: Dispatch<SetStateAction<BotInfo[]>>;
+  setCustomBots: Dispatch<SetStateAction<BotInfo[]>>;
   setConversationBots: Dispatch<SetStateAction<BotInfo[]>>;
   setAICallLogs: Dispatch<SetStateAction<AICallLogInfo[]>>;
   setAICallLogQuota: Dispatch<SetStateAction<AICallLogQuotaInfo>>;
@@ -105,6 +106,7 @@ export function createBotDomainDeps(params: {
     aiCallLogStatus: params.aiCallLogStatus,
     setBusyAction: params.setBusyAction,
     setAvailableBots: (value) => params.setAvailableBots(value),
+    setCustomBots: (value) => params.setCustomBots(value),
     setConversationBots: (value) => params.setConversationBots(value),
     setAICallLogs: (value) => params.setAICallLogs(value),
     setAICallLogQuota: (value) => params.setAICallLogQuota(value),

@@ -399,6 +399,9 @@ export const api = {
   bots() {
     return request<BotInfo[]>("/api/v1/bots");
   },
+  customBots() {
+    return request<BotInfo[]>("/api/v1/bots/custom");
+  },
   createCustomBot(input: {
     name: string;
     mentionName: string;
@@ -413,6 +416,30 @@ export const api = {
     return request<BotInfo>("/api/v1/bots", {
       method: "POST",
       body: JSON.stringify(input)
+    });
+  },
+  updateCustomBot(
+    botId: number,
+    input: {
+      name: string;
+      mentionName: string;
+      aliases?: string[];
+      description?: string;
+      apiBaseUrl?: string;
+      apiKey?: string;
+      modelName: string;
+      supportedModels?: string[];
+      systemPrompt?: string;
+    }
+  ) {
+    return request<BotInfo>(`/api/v1/bots/${encodeURIComponent(String(botId))}`, {
+      method: "PUT",
+      body: JSON.stringify(input)
+    });
+  },
+  deleteCustomBot(botId: number) {
+    return request<void>(`/api/v1/bots/${encodeURIComponent(String(botId))}`, {
+      method: "DELETE"
     });
   },
   conversationBots(conversationId: string) {

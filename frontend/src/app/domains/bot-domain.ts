@@ -7,6 +7,7 @@ export type BotDomainDeps = {
   aiCallLogStatus: "" | "SUCCESS" | "FAILED";
   setBusyAction: (value: boolean) => void;
   setAvailableBots: (value: BotInfo[]) => void;
+  setCustomBots: (value: BotInfo[]) => void;
   setConversationBots: (value: BotInfo[]) => void;
   setAICallLogs: (value: AICallLogInfo[]) => void;
   setAICallLogQuota: (value: AICallLogQuotaInfo) => void;
@@ -26,9 +27,27 @@ export type CreateCustomBotInput = {
   systemPrompt?: string;
 };
 
+export type UpdateCustomBotInput = {
+  botId: number;
+  name: string;
+  mentionName: string;
+  aliases?: string[];
+  description?: string;
+  apiBaseUrl?: string;
+  apiKey?: string;
+  modelName: string;
+  supportedModels?: string[];
+  systemPrompt?: string;
+};
+
 export async function refreshAvailableBotsAction(deps: BotDomainDeps) {
   const data = await api.bots();
   deps.setAvailableBots(data);
+}
+
+export async function refreshCustomBotsAction(deps: BotDomainDeps) {
+  const data = await api.customBots();
+  deps.setCustomBots(data);
 }
 
 export async function refreshConversationBotsAction(deps: BotDomainDeps) {
@@ -40,7 +59,7 @@ export async function refreshConversationBotsAction(deps: BotDomainDeps) {
 export async function refreshAICallLogsAction(deps: BotDomainDeps) {
   if (!deps.selectedConversationId) {
     deps.setAICallLogs([]);
-    deps.setAICallLogQuota({ dailyTotalTokens: 0, dailyTokenLimit: 1_000_000, remainingTokens: 1_000_000 });
+    deps.setAICallLogQuota({ dailyTotalTokens: 0, dailyTokenLimit: 50_000, remainingTokens: 50_000 });
     return;
   }
   deps.setLoadingAICallLogs(true);
@@ -84,8 +103,54 @@ export async function createCustomBotAction(input: CreateCustomBotInput, deps: B
   deps.setBusyAction(true);
   try {
     await api.createCustomBot(input);
-    await refreshAvailableBotsAction(deps);
+    await Promise.all([refreshAvailableBotsAction(deps), refreshCustomBotsAction(deps)]);
     deps.showToast("自定义 Bot 已创建", "success");
+  } catch (error) {
+    deps.showToast(errorMessage(error), "error");
+    throw error;
+  } finally {
+    deps.setBusyAction(false);
+  }
+}
+
+export async function updateCustomBotAction(input: UpdateCustomBotInput, deps: BotDomainDeps) {
+  deps.setBusyAction(true);
+  try {
+    await api.updateCustomBot(input.botId, {
+      name: input.name,
+      mentionName: input.mentionName,
+      aliases: input.aliases ?? [],
+      description: input.description ?? "",
+      apiBaseUrl: input.apiBaseUrl,
+      apiKey: input.apiKey,
+      modelName: input.modelName,
+      supportedModels: input.supportedModels ?? [],
+      systemPrompt: input.systemPrompt
+    });
+    await Promise.all([
+      refreshAvailableBotsAction(deps),
+      refreshCustomBotsAction(deps),
+      refreshConversationBotsAction(deps)
+    ]);
+    deps.showToast("自定义 Bot 已更新", "success");
+  } catch (error) {
+    deps.showToast(errorMessage(error), "error");
+    throw error;
+  } finally {
+    deps.setBusyAction(false);
+  }
+}
+
+export async function deleteCustomBotAction(botId: number, deps: BotDomainDeps) {
+  deps.setBusyAction(true);
+  try {
+    await api.deleteCustomBot(botId);
+    await Promise.all([
+      refreshAvailableBotsAction(deps),
+      refreshCustomBotsAction(deps),
+      refreshConversationBotsAction(deps)
+    ]);
+    deps.showToast("自定义 Bot 已删除", "success");
   } catch (error) {
     deps.showToast(errorMessage(error), "error");
     throw error;

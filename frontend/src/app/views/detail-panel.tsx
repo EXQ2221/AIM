@@ -90,6 +90,7 @@ export function DetailPanel({
   selectedGroupInfo,
   currentMember,
   availableBots,
+  customBots,
   conversationBots,
   aiCallLogs,
   aiCallLogQuota,
@@ -129,6 +130,8 @@ export function DetailPanel({
   onAddBot,
   onRemoveBot,
   onCreateCustomBot,
+  onUpdateCustomBot,
+  onDeleteCustomBot,
   onAICallLogStatusChange,
   onRefreshAICallLogs,
   onSelectKnowledgeBase,
@@ -165,6 +168,7 @@ export function DetailPanel({
   selectedGroupInfo: GroupInfo | null;
   currentMember: MemberInfo | null;
   availableBots: BotInfo[];
+  customBots: BotInfo[];
   conversationBots: BotInfo[];
   aiCallLogs: AICallLogInfo[];
   aiCallLogQuota: AICallLogQuotaInfo;
@@ -221,6 +225,19 @@ export function DetailPanel({
     supportedModels?: string[];
     systemPrompt?: string;
   }) => Promise<void>;
+  onUpdateCustomBot: (input: {
+    botId: number;
+    name: string;
+    mentionName: string;
+    aliases?: string[];
+    description?: string;
+    apiBaseUrl?: string;
+    apiKey?: string;
+    modelName: string;
+    supportedModels?: string[];
+    systemPrompt?: string;
+  }) => Promise<void>;
+  onDeleteCustomBot: (botId: number) => Promise<void>;
   onAICallLogStatusChange: (status: "" | "SUCCESS" | "FAILED") => void;
   onRefreshAICallLogs: () => Promise<void>;
   onSelectKnowledgeBase: (knowledgeBaseId: number | null) => void;
@@ -307,11 +324,14 @@ export function DetailPanel({
           selectedConversationType={selectedConversationType}
           currentMember={currentMember}
           availableBots={availableBots}
+          customBots={customBots}
           conversationBots={conversationBots}
           busy={busy}
           onAddBot={onAddBot}
           onRemoveBot={onRemoveBot}
           onCreateCustomBot={onCreateCustomBot}
+          onUpdateCustomBot={onUpdateCustomBot}
+          onDeleteCustomBot={onDeleteCustomBot}
           onMention={onMention}
         />
       ) : tab === "logs" ? (
@@ -1094,7 +1114,34 @@ function AICallLogsPanel({
   onStatusFilterChange: (status: "" | "SUCCESS" | "FAILED") => void;
   onRefresh: () => Promise<void>;
 }) {
-  const usagePercent = quota.dailyTokenLimit > 0 ? Math.min(100, Math.round((quota.dailyTotalTokens / quota.dailyTokenLimit) * 100)) : 0;
+  const todayLogs = useMemo(() => logs.filter((item) => isSameLocalDay(item.createdAt)), [logs]);
+  const quotaItems = useMemo(() => {
+    const usageMap = new Map<string, { provider: string; model: string; used: number; limit: number }>();
+    for (const item of todayLogs) {
+      const model = (item.modelName || "unknown").trim() || "unknown";
+      const provider = resolveProviderNameFromModel(model);
+      const key = `${provider}::${model}`;
+      const current = usageMap.get(key) ?? {
+        provider,
+        model,
+        used: 0,
+        limit: dailyLimitByModelName(model)
+      };
+      current.used += Math.max(0, Number(item.totalTokens) || 0);
+      usageMap.set(key, current);
+    }
+    return Array.from(usageMap.values())
+      .map((entry) => {
+        const remaining = Math.max(0, entry.limit - entry.used);
+        const percent = entry.limit > 0 ? Math.min(100, Math.round((entry.used / entry.limit) * 100)) : 0;
+        return { ...entry, remaining, percent };
+      })
+      .sort((a, b) => b.used - a.used);
+  }, [todayLogs]);
+  const quotaDailyLimit = useMemo(() => quotaItems.reduce((sum, item) => sum + item.limit, 0), [quotaItems]);
+  const quotaDailyUsed = useMemo(() => quotaItems.reduce((sum, item) => sum + item.used, 0), [quotaItems]);
+  const quotaRemaining = Math.max(0, quotaDailyLimit - quotaDailyUsed);
+  const usagePercent = quotaDailyLimit > 0 ? Math.min(100, Math.round((quotaDailyUsed / quotaDailyLimit) * 100)) : 0;
 
   if (!selectedConversationId) {
     return (
@@ -1120,15 +1167,41 @@ function AICallLogsPanel({
       <section className="quota-card">
         <div className="quota-card-head">
           <strong>今日额度</strong>
-          <span>{quota.dailyTotalTokens.toLocaleString()} / {quota.dailyTokenLimit.toLocaleString()} tokens</span>
+          <span>{quotaDailyUsed.toLocaleString()} / {quotaDailyLimit.toLocaleString()} tokens</span>
         </div>
         <div aria-hidden="true" className="quota-bar">
           <span className="quota-bar-fill" style={{ width: `${usagePercent}%` }} />
         </div>
         <div className="quota-card-meta">
-          <span>剩余 {quota.remainingTokens.toLocaleString()} tokens</span>
+          <span>剩余 {quotaRemaining.toLocaleString()} tokens</span>
           <span>{usagePercent}%</span>
         </div>
+        <details className="quota-breakdown" open>
+          <summary>按厂家 / 模型查看额度明细</summary>
+          {quotaItems.length === 0 ? (
+            <p className="quota-empty">暂无可统计的模型调用记录</p>
+          ) : (
+            <div className="quota-breakdown-list">
+              {quotaItems.map((item) => (
+                <article className="quota-breakdown-item" key={`${item.provider}-${item.model}`}>
+                  <div className="quota-breakdown-head">
+                    <strong>{item.model}</strong>
+                    <span>{item.provider}</span>
+                  </div>
+                  <div className="quota-breakdown-meta">
+                    <span>
+                      {item.used.toLocaleString()} / {item.limit.toLocaleString()} tokens
+                    </span>
+                    <span>剩余 {item.remaining.toLocaleString()}</span>
+                  </div>
+                  <div aria-hidden="true" className="quota-bar quota-bar-small">
+                    <span className="quota-bar-fill" style={{ width: `${item.percent}%` }} />
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </details>
       </section>
 
       <div className="log-filter-list">
@@ -1570,17 +1643,21 @@ function BotPanelClean({
   selectedConversationType,
   currentMember,
   availableBots,
+  customBots,
   conversationBots,
   busy,
   onAddBot,
   onRemoveBot,
   onCreateCustomBot,
+  onUpdateCustomBot,
+  onDeleteCustomBot,
   onMention
 }: {
   selectedConversationId: string | null;
   selectedConversationType: ConversationInfo["type"] | null;
   currentMember: MemberInfo | null;
   availableBots: BotInfo[];
+  customBots: BotInfo[];
   conversationBots: BotInfo[];
   busy: boolean;
   onAddBot: (input: {
@@ -1603,8 +1680,29 @@ function BotPanelClean({
     supportedModels?: string[];
     systemPrompt?: string;
   }) => Promise<void>;
+  onUpdateCustomBot: (input: {
+    botId: number;
+    name: string;
+    mentionName: string;
+    aliases?: string[];
+    description?: string;
+    apiBaseUrl?: string;
+    apiKey?: string;
+    modelName: string;
+    supportedModels?: string[];
+    systemPrompt?: string;
+  }) => Promise<void>;
+  onDeleteCustomBot: (botId: number) => Promise<void>;
   onMention: (mentionTarget: string) => void;
 }) {
+  const providerByModel = (modelName?: string) => {
+    const value = (modelName || "").trim().toLowerCase();
+    if (!value) return "其他";
+    if (value.startsWith("deepseek")) return "DeepSeek";
+    if (value.startsWith("qwen") || value.includes("tongyi")) return "通义";
+    return "其他";
+  };
+
   const [addOpen, setAddOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedBotId, setSelectedBotId] = useState<number | "">("");
@@ -1625,6 +1723,13 @@ function BotPanelClean({
   const canManage = currentMember?.role === "OWNER" || currentMember?.role === "ADMIN";
   const addedBotIds = new Set(conversationBots.map((item) => item.botId));
   const candidateBots = availableBots.filter((item) => !addedBotIds.has(item.botId));
+  const candidateBotGroups = candidateBots.reduce<Record<string, BotInfo[]>>((acc, item) => {
+    const key = providerByModel(item.modelName);
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(item);
+    return acc;
+  }, {});
+  const candidateBotGroupOrder = ["DeepSeek", "通义", "其他"];
   const selectedBot =
     typeof selectedBotId === "number" ? candidateBots.find((item) => item.botId === selectedBotId) ?? null : null;
 
@@ -1736,11 +1841,17 @@ function BotPanelClean({
                     <span>选择 Bot</span>
                     <select value={selectedBotId} onChange={(event) => setSelectedBotId(event.target.value ? Number(event.target.value) : "")}>
                       <option value="">请选择</option>
-                      {candidateBots.map((item) => (
-                        <option key={item.botId} value={item.botId}>
-                          {item.displayName || item.name}
-                        </option>
-                      ))}
+                      {candidateBotGroupOrder.map((groupName) =>
+                        (candidateBotGroups[groupName] || []).length > 0 ? (
+                          <optgroup key={groupName} label={groupName}>
+                            {(candidateBotGroups[groupName] || []).map((item) => (
+                              <option key={item.botId} value={item.botId}>
+                                {(item.displayName || item.name) + " · " + (item.modelName || "-")}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null
+                      )}
                     </select>
                   </label>
 
@@ -1908,7 +2019,192 @@ function BotPanelClean({
               </div>
             )}
           </div>
+
+          <div className="section-title">
+            <span>我的自建 Bot</span>
+            <strong>{customBots.length}</strong>
+          </div>
+          <div className="bot-list">
+            {customBots.map((item) => (
+              <CustomBotManageCard
+                key={`custom-${item.botId}`}
+                bot={item}
+                canManage={canManage}
+                busy={busy}
+                onMention={onMention}
+                onUpdate={onUpdateCustomBot}
+                onDelete={onDeleteCustomBot}
+              />
+            ))}
+            {customBots.length === 0 && (
+              <div className="empty-block compact-empty">
+                <Bot size={24} />
+                <strong>暂无自建 Bot</strong>
+              </div>
+            )}
+          </div>
         </>
+      )}
+    </div>
+  );
+}
+
+function CustomBotManageCard({
+  bot,
+  canManage,
+  busy,
+  onMention,
+  onUpdate,
+  onDelete
+}: {
+  bot: BotInfo;
+  canManage: boolean;
+  busy: boolean;
+  onMention: (mentionTarget: string) => void;
+  onUpdate: (input: {
+    botId: number;
+    name: string;
+    mentionName: string;
+    aliases?: string[];
+    description?: string;
+    apiBaseUrl?: string;
+    apiKey?: string;
+    modelName: string;
+    supportedModels?: string[];
+    systemPrompt?: string;
+  }) => Promise<void>;
+  onDelete: (botId: number) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(bot.name || "");
+  const [mentionName, setMentionName] = useState(bot.mentionName || "");
+  const [aliases, setAliases] = useState((bot.aliases ?? []).join(", "));
+  const [description, setDescription] = useState(bot.description || "");
+  const [modelName, setModelName] = useState(bot.modelName || "");
+  const [supportedModels, setSupportedModels] = useState((bot.supportedModels ?? []).join(", "));
+  const [apiBaseUrl, setAPIBaseURL] = useState("");
+  const [apiKey, setAPIKey] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState("");
+
+  useEffect(() => {
+    setName(bot.name || "");
+    setMentionName(bot.mentionName || "");
+    setAliases((bot.aliases ?? []).join(", "));
+    setDescription(bot.description || "");
+    setModelName(bot.modelName || "");
+    setSupportedModels((bot.supportedModels ?? []).join(", "));
+    setAPIBaseURL("");
+    setAPIKey("");
+    setSystemPrompt("");
+  }, [bot.aliases, bot.description, bot.mentionName, bot.modelName, bot.name, bot.supportedModels]);
+
+  const parseCSVValues = (raw: string) =>
+    raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  const handleSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedName = name.trim();
+    const trimmedMentionName = mentionName.trim();
+    const trimmedModelName = modelName.trim();
+    if (!trimmedName || !trimmedMentionName || !trimmedModelName) {
+      return;
+    }
+    await onUpdate({
+      botId: bot.botId,
+      name: trimmedName,
+      mentionName: trimmedMentionName,
+      aliases: parseCSVValues(aliases),
+      description: description.trim(),
+      apiBaseUrl: apiBaseUrl.trim() || undefined,
+      apiKey: apiKey.trim() || undefined,
+      modelName: trimmedModelName,
+      supportedModels: parseCSVValues(supportedModels),
+      systemPrompt: systemPrompt.trim() || undefined
+    });
+    setEditing(false);
+  };
+
+  return (
+    <div className="friend-card bot-card">
+      <div className="friend-card-head">
+        <Avatar
+          name={bot.displayName || bot.name}
+          src={bot.avatar}
+          onContextMenu={(event) => handleAvatarMention(event, bot.mentionName, onMention)}
+        />
+        <div className="friend-card-meta">
+          <strong>{bot.displayName || bot.name}</strong>
+          <span>@{bot.mentionName} {" · "} {bot.modelName || "-"}</span>
+        </div>
+        <StatusPill label="自建" />
+      </div>
+      {bot.description && <p className="request-remark">{bot.description}</p>}
+      {canManage && (
+        <div className="friend-row-actions">
+          <button className="secondary-button" disabled={busy} type="button" onClick={() => setEditing((value) => !value)}>
+            {editing ? "取消编辑" : "编辑"}
+          </button>
+          <button
+            className="danger-button"
+            disabled={busy}
+            type="button"
+            onClick={() => {
+              if (window.confirm(`确认删除自建 Bot「${bot.name}」吗？删除后将从会话中失效。`)) {
+                void onDelete(bot.botId);
+              }
+            }}
+          >
+            <Trash2 size={16} />
+            删除
+          </button>
+        </div>
+      )}
+      {canManage && editing && (
+        <form className="drawer-form" onSubmit={handleSave}>
+          <label className="field">
+            <span>Bot 名称</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} required />
+          </label>
+          <label className="field">
+            <span>提及名（不带 @）</span>
+            <input value={mentionName} onChange={(event) => setMentionName(event.target.value)} required />
+          </label>
+          <label className="field">
+            <span>别名（逗号分隔）</span>
+            <input value={aliases} onChange={(event) => setAliases(event.target.value)} />
+          </label>
+          <label className="field">
+            <span>描述</span>
+            <input value={description} onChange={(event) => setDescription(event.target.value)} />
+          </label>
+          <label className="field">
+            <span>模型名</span>
+            <input value={modelName} onChange={(event) => setModelName(event.target.value)} required />
+          </label>
+          <label className="field">
+            <span>支持模型（逗号分隔）</span>
+            <input value={supportedModels} onChange={(event) => setSupportedModels(event.target.value)} />
+          </label>
+          <label className="field">
+            <span>API Base URL（留空不改）</span>
+            <input value={apiBaseUrl} onChange={(event) => setAPIBaseURL(event.target.value)} placeholder="例如：https://xxx/v1" />
+          </label>
+          <label className="field">
+            <span>API Key（留空不改）</span>
+            <input value={apiKey} onChange={(event) => setAPIKey(event.target.value)} placeholder="sk-***" />
+          </label>
+          <label className="field">
+            <span>系统提示词（留空不改）</span>
+            <textarea value={systemPrompt} onChange={(event) => setSystemPrompt(event.target.value)} rows={3} />
+          </label>
+          <button disabled={busy || !name.trim() || !mentionName.trim() || !modelName.trim()} type="submit">
+            {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
+            保存自建 Bot
+          </button>
+        </form>
       )}
     </div>
   );
@@ -2065,6 +2361,35 @@ function BotCardClean({
       )}
     </div>
   );
+}
+
+function isSameLocalDay(unixSeconds: number) {
+  const now = new Date();
+  const value = new Date(unixSeconds * 1000);
+  return (
+    now.getFullYear() === value.getFullYear() &&
+    now.getMonth() === value.getMonth() &&
+    now.getDate() === value.getDate()
+  );
+}
+
+function dailyLimitByModelName(modelName: string) {
+  const value = modelName.toLowerCase();
+  if (value.includes("vl") || value.includes("vision")) {
+    return 25_000;
+  }
+  return 50_000;
+}
+
+function resolveProviderNameFromModel(modelName: string) {
+  const value = modelName.toLowerCase();
+  if (value.includes("qwen") || value.includes("tongyi")) {
+    return "aliyun";
+  }
+  if (value.includes("deepseek") || value.includes("dsv4")) {
+    return "deepseek";
+  }
+  return "other";
 }
 
 function toPermissionScopeLabel(scope: string) {
