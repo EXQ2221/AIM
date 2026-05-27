@@ -1,161 +1,172 @@
 # AIM
 
-AIM 是一个基于 Go 微服务实现的 AI 原生协作聊天平台，当前重点是稳定的聊天主链路与可扩展的鉴权/权限模型。
+AIM 是一个 AI 原生多人协作聊天平台，采用 Go 微服务架构。  
+当前仓库已经具备稳定的聊天主链路，并集成了 Bot、知识库（RAG）、历史搜索、群聊总结、在线状态与可观测能力。
 
-## 技术栈与服务
+## 当前实现状态
 
-- 微服务：`gateway`、`auth-service`、`user-service`、`chat-service`、`rag-service`
-- 数据存储：PostgreSQL + Redis
-- 通信：HTTP + WebSocket + Kitex RPC
-- 部署：Docker Compose
+- 已完成：注册登录、JWT 鉴权、好友关系、单聊/群聊、消息持久化、WebSocket 实时推送。
+- 已完成：群成员角色与禁言管理、消息撤回（5 分钟窗口）、历史消息检索（会话/时间/关键词）。
+- 已完成：内置 Bot + 用户自建 Bot（创建、列表、更新、删除、绑定会话、权限范围控制）。
+- 已完成：知识库创建、文档导入（文本/文件）、切分、向量化、检索、会话绑定。
+- 已完成：群聊总结接口（异步友好调用）、用户长期记忆写入/查询/修改。
+- 已接入：Prometheus + Grafana 监控。
+
+## 架构总览
+
+### 服务划分
+
+- `gateway`：HTTP API、JWT 中间件、WebSocket 接入、统一响应与聚合。
+- `auth-service`：注册/登录、token 刷新、会话管理、登出、登出所有设备。
+- `user-service`：用户资料、好友关系、分组、在线状态设置（含隐身）。
+- `chat-service`：会话、群组、成员角色、消息、Bot 触发与 AI 调用编排。
+- `rag-service`：知识库与检索能力（向量/全文混合检索）。
+- `parser-service`：文档解析、图文提取、可选 LLM chunking。
+- `shared`：配置、错误码、通用响应、日志、基础组件。
+- `idl`：Thrift 接口定义（Kitex RPC）。
+
+### 基础设施
+
+- PostgreSQL（含 `pgvector`）
+- Redis
+- Docker Compose
+- Prometheus / Grafana
+
+## 鉴权与权限模型（重点）
+
+### 1) 双层鉴权
+
+- 第一层：`gateway` 校验 JWT（身份、过期、格式）。
+- 第二层：业务服务二次校验权限（会话成员关系、群角色、禁言状态、资源归属）。
+
+结论：前端参数永远不被直接信任，关键权限由服务端业务层最终裁决。
+
+### 2) Token 与会话失效
+
+- 使用 `token_version` 机制支持主动失效。
+- 典型触发：修改密码、登出所有设备、管理员强制下线、账号状态变化。
+
+### 3) 群聊权限
+
+- 角色：`OWNER` / `ADMIN` / `MEMBER` / `BOT`。
+- 群管理动作（转让群主、管理员设置、全员禁言、成员禁言/移除）均在 `chat-service` 做角色校验。
+- 消息撤回默认限制在 5 分钟内，采用状态变更而不是物理删除。
+
+### 4) Bot 与知识库权限边界
+
+- 知识库是用户资源，不是 Bot 资源。
+- 知识库绑定到 `conversation` 后，是否可被 Bot 使用由 `conversation_bots.permission_scope` 控制。
+- 仅当前会话中已绑定且启用的知识库，对权限允许的 Bot 可见。
+
+## 主要能力与接口
+
+以下为核心 API 分组（统一前缀 `/api/v1`）：
+
+- 认证：`/auth/register` `/auth/login` `/auth/refresh` `/auth/logout` `/auth/logout-all` `/auth/sessions`
+- 用户：`/users/me` `/users/me/avatar` `/users/memory`（GET/POST/PUT）
+- 好友：`/friends`、`/friends/requests`、`/friends/groups`、`/friends/presence/settings`
+- 会话与群组：`/conversations`（列表、单聊定位、建群、成员管理、管理员、禁言、公告、已读、撤回）
+- 消息：`/conversations/:id/messages`、`/conversations/history/search`
+- Bot：`/bots`、`/bots/custom`、`/bots/:botId`（PUT/DELETE）、`/conversations/:id/bots`
+- 知识库：`/knowledge-bases`、文档导入（text/file）、搜索、会话绑定
+- 总结：`/conversations/:id/summary`
+- 通知：`/notifications`
 
 ## 快速启动
 
-### 1）准备环境变量
+### 1) 准备环境变量
 
-复制 `.env.example` 为 `.env` 并填写配置：
-
-```powershell
-Copy-Item .env.example .env
+```bash
+cp .env.example .env
 ```
 
-至少需要：
+最少请配置：
 
-- `POSTGRES_USER`
 - `POSTGRES_PASSWORD`
-- `POSTGRES_DATABASE`
 - `JWT_SECRET`
+- `LLM_BASE_URL`
+- `LLM_API_KEY`
+- `LLM_MODEL`
 
-如启用 RAG，还需配置：
+如需知识库与检索，请同时配置：
 
 - `EMBEDDING_BASE_URL`
 - `EMBEDDING_API_KEY`
 - `EMBEDDING_MODEL`
 - `EMBEDDING_DIMENSION`
-- `EMBEDDING_TIMEOUT_SECONDS`
 
-### 2）构建并启动
+如需重排（推荐）：
 
-```powershell
+- `RERANK_ENABLED=true`
+- `RERANK_BASE_URL`
+- `RERANK_API_KEY`
+- `RERANK_MODEL`
+
+### 2) 启动
+
+```bash
 docker compose up -d --build
 ```
 
-### 3）检查服务
+### 3) 健康检查
 
-```powershell
+```bash
 docker compose ps
 curl http://127.0.0.1:8080/healthz
 ```
 
-## 认证与鉴权（重点）
+## 关键环境变量说明
 
-本项目采用“Gateway 统一接入鉴权 + 业务服务二次权限校验”的双层模型。
+### LLM / Bot
 
-### 1）认证边界
+- `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`
+- `LLM_TIMEOUT_SECONDS`
+- `BOT_CONTEXT_MESSAGES`
+- `BOT_TASK_TIMEOUT_SECONDS`
 
-- `auth-service` 负责：注册、登录、Token 刷新、会话管理、登出、登出全部设备
-- `gateway` 负责：对外请求接入、JWT 中间件校验、身份透传
-- `chat-service` / `user-service` 负责：在业务动作层再次校验操作权限
+### Summary（群聊总结）
 
-原则：前端传入参数不能被直接信任，关键权限必须在业务服务内校验。
+- `SUMMARY_LLM_BASE_URL`
+- `SUMMARY_LLM_API_KEY`
+- `SUMMARY_LLM_MODEL`
 
-### 2）JWT 机制
+> 默认可复用主 LLM 配置。
 
-Token 中至少包含：
+### Embedding / RAG
 
-- `user_id`
-- `aim_id`
-- `role`
-- `token_version`
-- `expire_time`
+- `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL`
+- `EMBEDDING_TIMEOUT_SECONDS` / `EMBEDDING_MAX_RETRIES`
+- `RAG_SEARCH_TIMEOUT_SECONDS`
 
-Gateway 每次请求会校验：
+### Rerank
 
-- Token 是否过期
-- Token 结构是否合法
-- 身份上下文是否可解析
+- `RERANK_ENABLED`
+- `RERANK_BASE_URL`
+- `RERANK_API_KEY`
+- `RERANK_MODEL`
+- `RERANK_SCORE_THRESHOLD`
 
-业务服务继续校验：
+### Chunker（parser-service）
 
-- 用户状态是否合法（如禁用用户不可操作）
-- 会话成员关系是否满足
-- 具体动作权限是否满足（如群管理动作）
+- `CHUNKER_BASE_URL` / `CHUNKER_API_KEY` / `CHUNKER_MODEL`
+- `CHUNKER_TIMEOUT_SECONDS`
+- `PARSER_ENABLE_LLM_CHUNKING`
 
-### 3）TokenVersion 失效模型
+## 前端与联调
 
-项目通过 `token_version` 实现“主动令牌失效”：
+- 前端目录：`frontend/`
+- 默认通过 `gateway` API 与 `ws/chat` 进行联调。
+- 已支持：聊天主界面、历史搜索、Bot 管理、知识库操作、群聊总结入口、在线状态设置。
 
-- 修改密码后旧 Token 失效
-- 全设备登出后旧 Token 失效
-- 账号封禁后旧 Token 失效
-- 管理员强制下线后旧 Token 失效
+## 可观测性
 
-这可以避免仅依赖 JWT 过期时间带来的安全窗口。
+- Prometheus：`http://127.0.0.1:9090`
+- Grafana：`http://127.0.0.1:3000`
+- Gateway 暴露：`/metrics`
 
-### 4）会话与消息权限
+## 开发建议
 
-`chat-service` 在消息创建时会校验：
-
-- 会话是否存在
-- 操作者是否在会话内
-- 是否被禁言 / 是否触发全员禁言限制
-- 消息类型与内容是否合法
-
-消息撤回采用状态变更（`RECALLED`），不是物理删除。
-
-### 5）WebSocket 鉴权
-
-- 连接建立时必须携带 JWT
-- Gateway 解析并绑定 `user_id -> 连接`
-- 在线状态写入 Redis
-- 断开连接后清理映射
-
-WebSocket 仅负责连接与推送，不直接承载复杂业务权限逻辑。
-
-### 6）Bot 与知识库权限
-
-- Bot 是会话中的执行者，不是知识库资源本体
-- 知识库是用户资源，可绑定到会话
-- Bot 是否可用知识库由 `conversation_bots.permission_scope` 决定
-- 规则：当前会话中已绑定且启用的知识库，仅对权限允许的 Bot 可见
-
-## 历史消息搜索
-
-已支持“会话 + 时间范围 + 关键词”的历史消息搜索。
-
-### API
-
-- `GET /api/v1/conversations/history/search`
-
-查询参数：
-
-- `startAt`（必填）：Unix 秒级时间戳
-- `endAt`（必填）：Unix 秒级时间戳
-- `conversationId`（可选）：限制为单个会话
-- `keyword`（可选）：关键词匹配
-
-### 前端能力
-
-- 聊天头部 `Search` 按钮打开搜索弹窗
-- 支持筛选：开始时间、结束时间、关键词、仅当前会话
-- 结果显示发送者
-- 点击结果可跳转并高亮对应消息
-
-## PostgreSQL 说明
-
-当前使用单实例多数据库隔离：
-
-- `aim_auth`
-- `aim_user`
-- `aim_chat`
-
-消息内容字段为 `jsonb`（`messages.content`），并建立消息搜索相关索引（FTS + trigram）。
-
-## RAG 最小流程
-
-1. 创建知识库：`POST /api/v1/knowledge-bases`
-2. 导入文档：`POST /api/v1/knowledge-bases/{knowledgeBaseId}/documents/text`
-3. 查看状态：`GET /api/v1/knowledge-bases/{knowledgeBaseId}/documents`
-4. 分片检索：`POST /api/v1/knowledge-bases/{knowledgeBaseId}/search`
-5. 绑定会话：`POST /api/v1/conversations/{conversationId}/knowledge-bases`
+- 修改接口优先改 `idl/*.thrift`，再生成 Kitex 代码。
+- 业务逻辑尽量放 `service/biz`，`handler` 只做参数与编排。
+- 统一使用 `shared/errno` 与统一响应结构返回错误。
 
