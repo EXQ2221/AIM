@@ -16,3 +16,5 @@ coverage.out
 uploads/
 output/
 scripts/
+tmp_skill_pack/
+output_*.md
