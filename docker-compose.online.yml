@@ -1,0 +1,394 @@
+services:
+  postgres:
+    image: ${DOCKER_HUB_MIRROR:-docker.io}/pgvector/pgvector:pg16
+    container_name: aim-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aim}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DATABASE:-aim}
+      TZ: Asia/Shanghai
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-aim} -d ${POSTGRES_DATABASE:-aim}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  db-init:
+    image: ${DOCKER_HUB_MIRROR:-docker.io}/pgvector/pgvector:pg16
+    container_name: aim-db-init
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aim}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_HOST: postgres
+      TZ: Asia/Shanghai
+    command:
+      - sh
+      - -ec
+      - |
+        psql -h "$$POSTGRES_HOST" -U "$$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+        SELECT 'CREATE DATABASE aim_auth'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'aim_auth')\gexec
+        SELECT 'CREATE DATABASE aim_user'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'aim_user')\gexec
+        SELECT 'CREATE DATABASE aim_chat'
+        WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'aim_chat')\gexec
+        SQL
+        psql -h "$$POSTGRES_HOST" -U "$$POSTGRES_USER" -d aim_chat -v ON_ERROR_STOP=1 \
+          -c "CREATE EXTENSION IF NOT EXISTS vector;"
+    networks:
+      - aim-net
+
+  redis:
+    image: ${DOCKER_HUB_MIRROR:-docker.io}/library/redis:7-alpine
+    container_name: aim-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  user-service:
+    image: ${USER_SERVICE_IMAGE:-aim-user-service:latest}
+    container_name: aim-user-service
+    pull_policy: ${SERVICE_PULL_POLICY:-always}
+    restart: unless-stopped
+    environment:
+      PORT: "9001"
+      HEALTH_PORT: "19001"
+      USER_POSTGRES_DSN: "${USER_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_user port=5432 sslmode=disable TimeZone=UTC}"
+      REDIS_ADDR: "redis:6379"
+      CHAT_SERVICE_ADDR: "chat-service:9003"
+      TZ: Asia/Shanghai
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    ports:
+      - "${USER_SERVICE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:19001/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  auth-service:
+    image: ${AUTH_SERVICE_IMAGE:-aim-auth-service:latest}
+    container_name: aim-auth-service
+    pull_policy: ${SERVICE_PULL_POLICY:-always}
+    restart: unless-stopped
+    environment:
+      PORT: "9002"
+      HEALTH_PORT: "19002"
+      AUTH_POSTGRES_DSN: "${AUTH_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_auth port=5432 sslmode=disable TimeZone=UTC}"
+      REDIS_ADDR: "redis:6379"
+      USER_SERVICE_ADDR: "user-service:9001"
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      TZ: Asia/Shanghai
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    ports:
+      - "${AUTH_SERVICE_PORT:-9002}:9002"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:19002/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  chat-service:
+    image: ${CHAT_SERVICE_IMAGE:-aim-chat-service:latest}
+    container_name: aim-chat-service
+    pull_policy: ${SERVICE_PULL_POLICY:-always}
+    restart: unless-stopped
+    environment:
+      PORT: "9003"
+      HEALTH_PORT: "19003"
+      CHAT_POSTGRES_DSN: "${CHAT_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_chat port=5432 sslmode=disable TimeZone=UTC}"
+      USER_SERVICE_ADDR: "user-service:9001"
+      RAG_SERVICE_ADDR: "rag-service:9004"
+      REDIS_ADDR: "redis:6379"
+      BOT_DEBUG_LLM_REQUEST: "${BOT_DEBUG_LLM_REQUEST:-0}"
+      BOT_ID: "${BOT_ID:-1}"
+      BOT2_ID: "${BOT2_ID:-100001}"
+      LLM_BASE_URL: "${LLM_BASE_URL:-}"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+      LLM_MODEL: "${LLM_MODEL:-}"
+      LLM_TIMEOUT_SECONDS: "${LLM_TIMEOUT_SECONDS:-30}"
+      LLM_INSECURE_SKIP_VERIFY: "${LLM_INSECURE_SKIP_VERIFY:-false}"
+      LLM_ENABLE_SEARCH: "${LLM_ENABLE_SEARCH:-false}"
+      LLM_FORCE_SEARCH: "${LLM_FORCE_SEARCH:-false}"
+      LLM_SEARCH_STRATEGY: "${LLM_SEARCH_STRATEGY:-}"
+      LLM_ENABLE_THINKING: "${LLM_ENABLE_THINKING:-}"
+      LLM2_BASE_URL: "${LLM2_BASE_URL:-}"
+      LLM2_API_KEY: "${LLM2_API_KEY:-}"
+      LLM2_MODEL: "${LLM2_MODEL:-}"
+      LLM2_TIMEOUT_SECONDS: "${LLM2_TIMEOUT_SECONDS:-30}"
+      LLM2_INSECURE_SKIP_VERIFY: "${LLM2_INSECURE_SKIP_VERIFY:-false}"
+      LLM2_ENABLE_SEARCH: "${LLM2_ENABLE_SEARCH:-true}"
+      LLM2_FORCE_SEARCH: "${LLM2_FORCE_SEARCH:-true}"
+      LLM2_SEARCH_STRATEGY: "${LLM2_SEARCH_STRATEGY:-turbo}"
+      LLM2_ENABLE_THINKING: "${LLM2_ENABLE_THINKING:-false}"
+      LLM_PROVIDER: "${LLM_PROVIDER:-primary}"
+      BOT_CONTEXT_MESSAGES: "${BOT_CONTEXT_MESSAGES:-20}"
+      BOT_LLM_TIMEOUT_SECONDS: "${BOT_LLM_TIMEOUT_SECONDS:-30}"
+      BOT_TASK_TIMEOUT_SECONDS: "${BOT_TASK_TIMEOUT_SECONDS:-120}"
+      EMBEDDING_BASE_URL: "${EMBEDDING_BASE_URL:-}"
+      EMBEDDING_API_KEY: "${EMBEDDING_API_KEY:-}"
+      EMBEDDING_PROVIDER: "${EMBEDDING_PROVIDER:-}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-text-embedding-3-small}"
+      EMBEDDING_DIMENSION: "${EMBEDDING_DIMENSION:-1536}"
+      EMBEDDING_TIMEOUT_SECONDS: "${EMBEDDING_TIMEOUT_SECONDS:-60}"
+      EMBEDDING_MAX_RETRIES: "${EMBEDDING_MAX_RETRIES:-2}"
+      EMBEDDING_RETRY_BACKOFF_MS: "${EMBEDDING_RETRY_BACKOFF_MS:-1200}"
+      EMBEDDING_INSECURE_SKIP_VERIFY: "${EMBEDDING_INSECURE_SKIP_VERIFY:-false}"
+      RAG_CHUNK_SIZE: "${RAG_CHUNK_SIZE:-1000}"
+      RAG_CHUNK_OVERLAP: "${RAG_CHUNK_OVERLAP:-150}"
+      RAG_TOP_K: "${RAG_TOP_K:-5}"
+      RAG_SEARCH_TIMEOUT_SECONDS: "${RAG_SEARCH_TIMEOUT_SECONDS:-80}"
+      RERANK_ENABLED: "${RERANK_ENABLED:-true}"
+      RERANK_BASE_URL: "${RERANK_BASE_URL:-https://dashscope.aliyuncs.com/compatible-api/v1}"
+      RERANK_API_KEY: "${RERANK_API_KEY:-${EMBEDDING_API_KEY:-}}"
+      RERANK_MODEL: "${RERANK_MODEL:-qwen3-rerank}"
+      RERANK_TIMEOUT_SECONDS: "${RERANK_TIMEOUT_SECONDS:-15}"
+      RERANK_SCORE_THRESHOLD: "${RERANK_SCORE_THRESHOLD:-0.25}"
+      RERANK_RECALL_TOP_K: "${RERANK_RECALL_TOP_K:-30}"
+      RERANK_INSECURE_SKIP_VERIFY: "${RERANK_INSECURE_SKIP_VERIFY:-false}"
+      RAG_DOCUMENT_PROCESS_TIMEOUT_SECONDS: "${RAG_DOCUMENT_PROCESS_TIMEOUT_SECONDS:-900}"
+      TZ: Asia/Shanghai
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    ports:
+      - "${CHAT_SERVICE_PORT:-9003}:9003"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:19003/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  rag-service:
+    image: ${RAG_SERVICE_IMAGE:-aim-rag-service:latest}
+    container_name: aim-rag-service
+    pull_policy: ${SERVICE_PULL_POLICY:-always}
+    restart: unless-stopped
+    environment:
+      PORT: "9004"
+      HEALTH_PORT: "19004"
+      RAG_POSTGRES_DSN: "${RAG_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_chat port=5432 sslmode=disable TimeZone=UTC}"
+      EMBEDDING_BASE_URL: "${EMBEDDING_BASE_URL:-}"
+      EMBEDDING_API_KEY: "${EMBEDDING_API_KEY:-}"
+      EMBEDDING_PROVIDER: "${EMBEDDING_PROVIDER:-}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-text-embedding-3-small}"
+      EMBEDDING_DIMENSION: "${EMBEDDING_DIMENSION:-1536}"
+      EMBEDDING_TIMEOUT_SECONDS: "${EMBEDDING_TIMEOUT_SECONDS:-60}"
+      EMBEDDING_MAX_RETRIES: "${EMBEDDING_MAX_RETRIES:-2}"
+      EMBEDDING_RETRY_BACKOFF_MS: "${EMBEDDING_RETRY_BACKOFF_MS:-1200}"
+      EMBEDDING_INSECURE_SKIP_VERIFY: "${EMBEDDING_INSECURE_SKIP_VERIFY:-false}"
+      RAG_CHUNK_SIZE: "${RAG_CHUNK_SIZE:-1000}"
+      RAG_CHUNK_OVERLAP: "${RAG_CHUNK_OVERLAP:-150}"
+      RAG_TOP_K: "${RAG_TOP_K:-5}"
+      RAG_SEARCH_TIMEOUT_SECONDS: "${RAG_SEARCH_TIMEOUT_SECONDS:-80}"
+      TZ: Asia/Shanghai
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    ports:
+      - "${RAG_SERVICE_PORT:-9004}:9004"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:19004/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  parser-service:
+    image: ${PARSER_SERVICE_IMAGE:-aim-parser-service:latest}
+    container_name: aim-parser-service
+    pull_policy: ${SERVICE_PULL_POLICY:-always}
+    restart: unless-stopped
+    environment:
+      VISION_BASE_URL: "${VISION_BASE_URL:-${LLM2_BASE_URL:-}}"
+      VISION_API_KEY: "${VISION_API_KEY:-${LLM2_API_KEY:-}}"
+      VISION_MODEL: "${VISION_MODEL:-qwen3.6-plus}"
+      VISION_TIMEOUT_SECONDS: "${VISION_TIMEOUT_SECONDS:-90}"
+      PARSER_MAX_DESCRIBE_IMAGES: "${PARSER_MAX_DESCRIBE_IMAGES:-8}"
+      PARSER_IMAGE_HEAVY_MIN_IMAGES: "${PARSER_IMAGE_HEAVY_MIN_IMAGES:-4}"
+      PARSER_IMAGE_HEAVY_TEXT_CHARS_PER_IMAGE: "${PARSER_IMAGE_HEAVY_TEXT_CHARS_PER_IMAGE:-800}"
+      PARSER_ENABLE_LLM_CHUNKING: "${PARSER_ENABLE_LLM_CHUNKING:-true}"
+      CHUNKER_BASE_URL: "${CHUNKER_BASE_URL:-${LLM_BASE_URL:-}}"
+      CHUNKER_API_KEY: "${CHUNKER_API_KEY:-${LLM_API_KEY:-}}"
+      CHUNKER_MODEL: "${CHUNKER_MODEL:-deepseek-v4-flash}"
+      CHUNKER_TIMEOUT_SECONDS: "${CHUNKER_TIMEOUT_SECONDS:-90}"
+      CHUNKER_MAX_CONTENT_CHARS: "${CHUNKER_MAX_CONTENT_CHARS:-120000}"
+      CHUNKER_FALLBACK_CHARS: "${CHUNKER_FALLBACK_CHARS:-1200}"
+      TZ: Asia/Shanghai
+    ports:
+      - "${PARSER_SERVICE_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  gateway:
+    image: ${GATEWAY_IMAGE:-aim-gateway:latest}
+    container_name: aim-gateway
+    pull_policy: ${SERVICE_PULL_POLICY:-always}
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      AUTH_SERVICE_ADDR: "auth-service:9002"
+      USER_SERVICE_ADDR: "user-service:9001"
+      CHAT_SERVICE_ADDR: "chat-service:9003"
+      RAG_SERVICE_ADDR: "rag-service:9004"
+      PARSER_SERVICE_URL: "http://parser-service:8000"
+      REDIS_ADDR: "redis:6379"
+      LLM_BASE_URL: "${LLM_BASE_URL:-}"
+      LLM_API_KEY: "${LLM_API_KEY:-}"
+      LLM_MODEL: "${LLM_MODEL:-deepseek-v4-flash}"
+      LLM_INSECURE_SKIP_VERIFY: "${LLM_INSECURE_SKIP_VERIFY:-false}"
+      SUMMARY_LLM_BASE_URL: "${SUMMARY_LLM_BASE_URL:-${LLM_BASE_URL:-}}"
+      SUMMARY_LLM_API_KEY: "${SUMMARY_LLM_API_KEY:-${LLM_API_KEY:-}}"
+      SUMMARY_LLM_MODEL: "${SUMMARY_LLM_MODEL:-deepseek-v4-flash}"
+      SUMMARY_LLM_TIMEOUT: "${SUMMARY_LLM_TIMEOUT:-35s}"
+      SUMMARY_LLM_INSECURE_SKIP_VERIFY: "${SUMMARY_LLM_INSECURE_SKIP_VERIFY:-${LLM_INSECURE_SKIP_VERIFY:-false}}"
+      UPLOAD_DIR: "/app/uploads"
+      UPLOAD_PUBLIC_PREFIX: "/uploads"
+      UPLOAD_MAX_BYTES: "${UPLOAD_MAX_BYTES:-629145600}"
+      TZ: Asia/Shanghai
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      chat-service:
+        condition: service_healthy
+      rag-service:
+        condition: service_healthy
+      parser-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    volumes:
+      - gateway_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-aim-frontend:latest}
+    container_name: aim-frontend
+    pull_policy: ${SERVICE_PULL_POLICY:-always}
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  prometheus:
+    image: ${PROMETHEUS_IMAGE:-${DOCKER_HUB_MIRROR:-docker.io}/prom/prometheus:v2.55.1}
+    container_name: aim-prometheus
+    pull_policy: ${SERVICE_PULL_POLICY:-always}
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - prometheus_data:/prometheus
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - aim-net
+
+  grafana:
+    image: ${GRAFANA_IMAGE:-${DOCKER_HUB_MIRROR:-docker.io}/grafana/grafana:11.2.2}
+    container_name: aim-grafana
+    pull_policy: ${SERVICE_PULL_POLICY:-always}
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_DEFAULT_TIMEZONE: "Asia/Shanghai"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+    networks:
+      - aim-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  gateway_uploads:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  aim-net:
+    driver: bridge
