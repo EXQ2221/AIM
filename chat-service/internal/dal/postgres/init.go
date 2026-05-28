@@ -38,12 +38,14 @@ func Init(dsn string) (*gorm.DB, error) {
 		&model.Conversation{},
 		&model.GroupInfo{},
 		&model.ConversationMember{},
+		&model.GroupJoinRequest{},
 		&model.Message{},
 		&model.Bot{},
 		&model.ConversationBot{},
 		&model.AICallLog{},
 		&model.Notification{},
 		&model.UserMemory{},
+		&model.UserMemorySetting{},
 	); err != nil {
 		return nil, err
 	}

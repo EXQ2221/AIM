@@ -163,8 +163,123 @@ func JoinGroup(ctx *gin.Context) {
 		return
 	}
 	broadcastConversationEvent(ctx.Request.Context(), client, resp)
+	message := strings.TrimSpace(resp.Message)
+	if message == "" {
+		message = "ok"
+	}
+	writeJSON(ctx, 200, dto.APIResponse{
+		Code:    0,
+		Message: "success",
+		Data: dto.JoinGroupResponse{
+			Message: message,
+			Pending: strings.Contains(message, "等待管理员审核") || strings.Contains(message, "等待审核"),
+		},
+	})
+}
 
-	writeJSON(ctx, 200, dto.APIResponse{Code: 0, Message: "success"})
+func ListGroupJoinRequests(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	limit := int32(50)
+	if raw := strings.TrimSpace(ctx.Query("limit")); raw != "" {
+		value, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil || value <= 0 {
+			writeError(ctx, 400, "invalid limit")
+			return
+		}
+		limit = int32(value)
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.ListGroupJoinRequests(ctx.Request.Context(), &chatpb.ListGroupJoinRequestsRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+		Limit:          &limit,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+
+	items := make([]dto.GroupJoinRequestInfo, 0, len(resp.Requests))
+	for _, item := range resp.Requests {
+		items = append(items, toGroupJoinRequestModel(item))
+	}
+	writeJSON(ctx, 200, dto.APIResponse{Code: 0, Message: "success", Data: items})
+}
+
+func ReviewGroupJoinRequest(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	requestIDRaw := strings.TrimSpace(ctx.Param("requestId"))
+	requestID, err := strconv.ParseInt(requestIDRaw, 10, 64)
+	if err != nil || requestID <= 0 {
+		writeError(ctx, 400, "invalid requestId")
+		return
+	}
+
+	var req dto.ReviewGroupJoinRequestRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, 400, "invalid request body")
+		return
+	}
+
+	action := strings.ToUpper(strings.TrimSpace(req.Action))
+	if action != "APPROVE" && action != "REJECT" {
+		writeError(ctx, 400, "action must be APPROVE or REJECT")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.ReviewGroupJoinRequest(ctx.Request.Context(), &chatpb.ReviewGroupJoinRequestRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+		RequestId:      requestID,
+		Action:         action,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	broadcastConversationEvent(ctx.Request.Context(), client, resp)
+
+	message := strings.TrimSpace(resp.Message)
+	if message == "" {
+		message = "ok"
+	}
+	writeJSON(ctx, 200, dto.APIResponse{Code: 0, Message: "success", Data: map[string]any{"message": message}})
 }
 
 func InviteMember(ctx *gin.Context) {
@@ -547,6 +662,83 @@ func UpdateGroupAnnouncement(ctx *gin.Context) {
 		OperatorId:     authCtx.UserID,
 		ConversationId: conversationID,
 		Announcement:   req.Announcement,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	broadcastConversationEvent(ctx.Request.Context(), client, resp)
+
+	writeJSON(ctx, 200, dto.APIResponse{Code: 0, Message: "success"})
+}
+
+func UpdateGroupAvatar(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	var req dto.UpdateGroupAvatarRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		writeError(ctx, 400, "invalid request body")
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.UpdateGroupAvatar(ctx.Request.Context(), &chatpb.UpdateGroupAvatarRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
+		Avatar:         req.Avatar,
+	})
+	if err != nil {
+		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))
+		return
+	}
+	if !resp.Success {
+		writeError(ctx, statusFromMessage(resp.Message), presentableMessage(resp.Message))
+		return
+	}
+	broadcastConversationEvent(ctx.Request.Context(), client, resp)
+
+	writeJSON(ctx, 200, dto.APIResponse{Code: 0, Message: "success"})
+}
+
+func DisbandGroup(ctx *gin.Context) {
+	authCtx, ok := middleware.GetAuthContext(ctx)
+	if !ok {
+		writeError(ctx, 401, "missing auth context")
+		return
+	}
+
+	conversationID, ok := conversationIDParam(ctx)
+	if !ok {
+		return
+	}
+
+	client, err := rpc.ChatClient()
+	if err != nil {
+		writeError(ctx, 500, err.Error())
+		return
+	}
+
+	resp, err := client.DisbandGroup(ctx.Request.Context(), &chatpb.DisbandGroupRequest{
+		OperatorId:     authCtx.UserID,
+		ConversationId: conversationID,
 	})
 	if err != nil {
 		writeError(ctx, statusFromMessage(err.Error()), presentableMessage(err.Error()))

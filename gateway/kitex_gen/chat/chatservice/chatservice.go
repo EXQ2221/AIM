@@ -55,6 +55,20 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"ListGroupJoinRequests": kitex.NewMethodInfo(
+		listGroupJoinRequestsHandler,
+		newChatServiceListGroupJoinRequestsArgs,
+		newChatServiceListGroupJoinRequestsResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"ReviewGroupJoinRequest": kitex.NewMethodInfo(
+		reviewGroupJoinRequestHandler,
+		newChatServiceReviewGroupJoinRequestArgs,
+		newChatServiceReviewGroupJoinRequestResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"InviteMember": kitex.NewMethodInfo(
 		inviteMemberHandler,
 		newChatServiceInviteMemberArgs,
@@ -122,6 +136,20 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		updateGroupAnnouncementHandler,
 		newChatServiceUpdateGroupAnnouncementArgs,
 		newChatServiceUpdateGroupAnnouncementResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"UpdateGroupAvatar": kitex.NewMethodInfo(
+		updateGroupAvatarHandler,
+		newChatServiceUpdateGroupAvatarArgs,
+		newChatServiceUpdateGroupAvatarResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"DisbandGroup": kitex.NewMethodInfo(
+		disbandGroupHandler,
+		newChatServiceDisbandGroupArgs,
+		newChatServiceDisbandGroupResult,
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
@@ -335,6 +363,20 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"GetUserMemorySetting": kitex.NewMethodInfo(
+		getUserMemorySettingHandler,
+		newChatServiceGetUserMemorySettingArgs,
+		newChatServiceGetUserMemorySettingResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
+	"UpdateUserMemorySetting": kitex.NewMethodInfo(
+		updateUserMemorySettingHandler,
+		newChatServiceUpdateUserMemorySettingArgs,
+		newChatServiceUpdateUserMemorySettingResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 }
 
 var (
@@ -507,6 +549,42 @@ func newChatServiceJoinGroupArgs() interface{} {
 
 func newChatServiceJoinGroupResult() interface{} {
 	return chat.NewChatServiceJoinGroupResult()
+}
+
+func listGroupJoinRequestsHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceListGroupJoinRequestsArgs)
+	realResult := result.(*chat.ChatServiceListGroupJoinRequestsResult)
+	success, err := handler.(chat.ChatService).ListGroupJoinRequests(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceListGroupJoinRequestsArgs() interface{} {
+	return chat.NewChatServiceListGroupJoinRequestsArgs()
+}
+
+func newChatServiceListGroupJoinRequestsResult() interface{} {
+	return chat.NewChatServiceListGroupJoinRequestsResult()
+}
+
+func reviewGroupJoinRequestHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceReviewGroupJoinRequestArgs)
+	realResult := result.(*chat.ChatServiceReviewGroupJoinRequestResult)
+	success, err := handler.(chat.ChatService).ReviewGroupJoinRequest(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceReviewGroupJoinRequestArgs() interface{} {
+	return chat.NewChatServiceReviewGroupJoinRequestArgs()
+}
+
+func newChatServiceReviewGroupJoinRequestResult() interface{} {
+	return chat.NewChatServiceReviewGroupJoinRequestResult()
 }
 
 func inviteMemberHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -687,6 +765,42 @@ func newChatServiceUpdateGroupAnnouncementArgs() interface{} {
 
 func newChatServiceUpdateGroupAnnouncementResult() interface{} {
 	return chat.NewChatServiceUpdateGroupAnnouncementResult()
+}
+
+func updateGroupAvatarHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceUpdateGroupAvatarArgs)
+	realResult := result.(*chat.ChatServiceUpdateGroupAvatarResult)
+	success, err := handler.(chat.ChatService).UpdateGroupAvatar(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceUpdateGroupAvatarArgs() interface{} {
+	return chat.NewChatServiceUpdateGroupAvatarArgs()
+}
+
+func newChatServiceUpdateGroupAvatarResult() interface{} {
+	return chat.NewChatServiceUpdateGroupAvatarResult()
+}
+
+func disbandGroupHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceDisbandGroupArgs)
+	realResult := result.(*chat.ChatServiceDisbandGroupResult)
+	success, err := handler.(chat.ChatService).DisbandGroup(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceDisbandGroupArgs() interface{} {
+	return chat.NewChatServiceDisbandGroupArgs()
+}
+
+func newChatServiceDisbandGroupResult() interface{} {
+	return chat.NewChatServiceDisbandGroupResult()
 }
 
 func listMembersHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
@@ -1229,6 +1343,42 @@ func newChatServiceUpdateUserMemoryResult() interface{} {
 	return chat.NewChatServiceUpdateUserMemoryResult()
 }
 
+func getUserMemorySettingHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceGetUserMemorySettingArgs)
+	realResult := result.(*chat.ChatServiceGetUserMemorySettingResult)
+	success, err := handler.(chat.ChatService).GetUserMemorySetting(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceGetUserMemorySettingArgs() interface{} {
+	return chat.NewChatServiceGetUserMemorySettingArgs()
+}
+
+func newChatServiceGetUserMemorySettingResult() interface{} {
+	return chat.NewChatServiceGetUserMemorySettingResult()
+}
+
+func updateUserMemorySettingHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*chat.ChatServiceUpdateUserMemorySettingArgs)
+	realResult := result.(*chat.ChatServiceUpdateUserMemorySettingResult)
+	success, err := handler.(chat.ChatService).UpdateUserMemorySetting(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newChatServiceUpdateUserMemorySettingArgs() interface{} {
+	return chat.NewChatServiceUpdateUserMemorySettingArgs()
+}
+
+func newChatServiceUpdateUserMemorySettingResult() interface{} {
+	return chat.NewChatServiceUpdateUserMemorySettingResult()
+}
+
 type kClient struct {
 	c client.Client
 }
@@ -1294,6 +1444,26 @@ func (p *kClient) JoinGroup(ctx context.Context, req *chat.JoinGroupRequest) (r 
 	_args.Req = req
 	var _result chat.ChatServiceJoinGroupResult
 	if err = p.c.Call(ctx, "JoinGroup", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListGroupJoinRequests(ctx context.Context, req *chat.ListGroupJoinRequestsRequest) (r *chat.ListGroupJoinRequestsResponse, err error) {
+	var _args chat.ChatServiceListGroupJoinRequestsArgs
+	_args.Req = req
+	var _result chat.ChatServiceListGroupJoinRequestsResult
+	if err = p.c.Call(ctx, "ListGroupJoinRequests", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ReviewGroupJoinRequest(ctx context.Context, req *chat.ReviewGroupJoinRequestRequest) (r *chat.ConversationEventResponse, err error) {
+	var _args chat.ChatServiceReviewGroupJoinRequestArgs
+	_args.Req = req
+	var _result chat.ChatServiceReviewGroupJoinRequestResult
+	if err = p.c.Call(ctx, "ReviewGroupJoinRequest", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil
@@ -1394,6 +1564,26 @@ func (p *kClient) UpdateGroupAnnouncement(ctx context.Context, req *chat.UpdateG
 	_args.Req = req
 	var _result chat.ChatServiceUpdateGroupAnnouncementResult
 	if err = p.c.Call(ctx, "UpdateGroupAnnouncement", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) UpdateGroupAvatar(ctx context.Context, req *chat.UpdateGroupAvatarRequest) (r *chat.ConversationEventResponse, err error) {
+	var _args chat.ChatServiceUpdateGroupAvatarArgs
+	_args.Req = req
+	var _result chat.ChatServiceUpdateGroupAvatarResult
+	if err = p.c.Call(ctx, "UpdateGroupAvatar", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) DisbandGroup(ctx context.Context, req *chat.DisbandGroupRequest) (r *chat.ConversationEventResponse, err error) {
+	var _args chat.ChatServiceDisbandGroupArgs
+	_args.Req = req
+	var _result chat.ChatServiceDisbandGroupResult
+	if err = p.c.Call(ctx, "DisbandGroup", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil
@@ -1694,6 +1884,26 @@ func (p *kClient) UpdateUserMemory(ctx context.Context, req *chat.UpdateUserMemo
 	_args.Req = req
 	var _result chat.ChatServiceUpdateUserMemoryResult
 	if err = p.c.Call(ctx, "UpdateUserMemory", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) GetUserMemorySetting(ctx context.Context, req *chat.GetUserMemorySettingRequest) (r *chat.GetUserMemorySettingResponse, err error) {
+	var _args chat.ChatServiceGetUserMemorySettingArgs
+	_args.Req = req
+	var _result chat.ChatServiceGetUserMemorySettingResult
+	if err = p.c.Call(ctx, "GetUserMemorySetting", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) UpdateUserMemorySetting(ctx context.Context, req *chat.UpdateUserMemorySettingRequest) (r *chat.UpdateUserMemorySettingResponse, err error) {
+	var _args chat.ChatServiceUpdateUserMemorySettingArgs
+	_args.Req = req
+	var _result chat.ChatServiceUpdateUserMemorySettingResult
+	if err = p.c.Call(ctx, "UpdateUserMemorySetting", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

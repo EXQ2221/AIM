@@ -64,6 +64,32 @@ func toGroupModel(group *chatpb.GroupInfo) dto.GroupInfo {
 	return info
 }
 
+func toGroupJoinRequestModel(item *chatpb.GroupJoinRequestInfo) dto.GroupJoinRequestInfo {
+	if item == nil {
+		return dto.GroupJoinRequestInfo{}
+	}
+	info := dto.GroupJoinRequestInfo{
+		RequestID:       item.RequestId,
+		ConversationID:  item.ConversationId,
+		ApplicantUserID: item.ApplicantUserId,
+		ApplicantName:   item.ApplicantName,
+		ApplicantAvatar: item.ApplicantAvatar,
+		Reason:          item.Reason,
+		Status:          item.Status,
+		CreatedAt:       item.CreatedAt,
+		UpdatedAt:       item.UpdatedAt,
+	}
+	if item.ReviewedBy != nil {
+		value := *item.ReviewedBy
+		info.ReviewedBy = &value
+	}
+	if item.ReviewedAt != nil {
+		value := *item.ReviewedAt
+		info.ReviewedAt = &value
+	}
+	return info
+}
+
 func toConversationModel(conversation *chatpb.ConversationInfo) dto.ConversationInfo {
 	if conversation == nil {
 		return dto.ConversationInfo{}
@@ -199,4 +225,27 @@ func toUserMemoryModel(item *chatpb.UserMemoryInfo) dto.UserMemoryInfo {
 		info.SourceMessageID = &value
 	}
 	return info
+}
+
+func toUserMemorySettingModel(item *chatpb.UserMemorySettingInfo) dto.UserMemorySettingInfo {
+	if item == nil {
+		return dto.UserMemorySettingInfo{
+			Enabled:         true,
+			Scope:           "ALL_GROUPS",
+			ConversationIDs: []string{},
+			UpdatedAt:       0,
+		}
+	}
+	ids := make([]string, 0, len(item.ConversationIds))
+	for _, id := range item.ConversationIds {
+		if value := strings.TrimSpace(id); value != "" {
+			ids = append(ids, value)
+		}
+	}
+	return dto.UserMemorySettingInfo{
+		Enabled:         item.Enabled,
+		Scope:           item.Scope,
+		ConversationIDs: ids,
+		UpdatedAt:       item.UpdatedAt,
+	}
 }

@@ -17,6 +17,8 @@ type Client interface {
 	CreateSingleConversation(ctx context.Context, req *chat.CreateSingleConversationRequest, callOptions ...callopt.Option) (r *chat.CreateSingleConversationResponse, err error)
 	ListConversations(ctx context.Context, req *chat.ListConversationsRequest, callOptions ...callopt.Option) (r *chat.ListConversationsResponse, err error)
 	JoinGroup(ctx context.Context, req *chat.JoinGroupRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	ListGroupJoinRequests(ctx context.Context, req *chat.ListGroupJoinRequestsRequest, callOptions ...callopt.Option) (r *chat.ListGroupJoinRequestsResponse, err error)
+	ReviewGroupJoinRequest(ctx context.Context, req *chat.ReviewGroupJoinRequestRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
 	InviteMember(ctx context.Context, req *chat.InviteMemberRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
 	LeaveGroup(ctx context.Context, req *chat.LeaveGroupRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
 	TransferOwner(ctx context.Context, req *chat.TransferOwnerRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
@@ -27,6 +29,8 @@ type Client interface {
 	RemoveMember(ctx context.Context, req *chat.RemoveMemberRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
 	SetGroupMuteAll(ctx context.Context, req *chat.SetGroupMuteAllRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
 	UpdateGroupAnnouncement(ctx context.Context, req *chat.UpdateGroupAnnouncementRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	UpdateGroupAvatar(ctx context.Context, req *chat.UpdateGroupAvatarRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
+	DisbandGroup(ctx context.Context, req *chat.DisbandGroupRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error)
 	ListMembers(ctx context.Context, req *chat.ListMembersRequest, callOptions ...callopt.Option) (r *chat.ListMembersResponse, err error)
 	ListMessages(ctx context.Context, req *chat.ListMessagesRequest, callOptions ...callopt.Option) (r *chat.ListMessagesResponse, err error)
 	MarkConversationRead(ctx context.Context, req *chat.MarkConversationReadRequest, callOptions ...callopt.Option) (r *chat.CommonResponse, err error)
@@ -57,6 +61,8 @@ type Client interface {
 	WriteUserMemory(ctx context.Context, req *chat.WriteUserMemoryRequest, callOptions ...callopt.Option) (r *chat.WriteUserMemoryResponse, err error)
 	ListUserMemories(ctx context.Context, req *chat.ListUserMemoriesRequest, callOptions ...callopt.Option) (r *chat.ListUserMemoriesResponse, err error)
 	UpdateUserMemory(ctx context.Context, req *chat.UpdateUserMemoryRequest, callOptions ...callopt.Option) (r *chat.UpdateUserMemoryResponse, err error)
+	GetUserMemorySetting(ctx context.Context, req *chat.GetUserMemorySettingRequest, callOptions ...callopt.Option) (r *chat.GetUserMemorySettingResponse, err error)
+	UpdateUserMemorySetting(ctx context.Context, req *chat.UpdateUserMemorySettingRequest, callOptions ...callopt.Option) (r *chat.UpdateUserMemorySettingResponse, err error)
 }
 
 // NewClient creates a client for the service defined in IDL.
@@ -118,6 +124,16 @@ func (p *kChatServiceClient) JoinGroup(ctx context.Context, req *chat.JoinGroupR
 	return p.kClient.JoinGroup(ctx, req)
 }
 
+func (p *kChatServiceClient) ListGroupJoinRequests(ctx context.Context, req *chat.ListGroupJoinRequestsRequest, callOptions ...callopt.Option) (r *chat.ListGroupJoinRequestsResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListGroupJoinRequests(ctx, req)
+}
+
+func (p *kChatServiceClient) ReviewGroupJoinRequest(ctx context.Context, req *chat.ReviewGroupJoinRequestRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ReviewGroupJoinRequest(ctx, req)
+}
+
 func (p *kChatServiceClient) InviteMember(ctx context.Context, req *chat.InviteMemberRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.InviteMember(ctx, req)
@@ -166,6 +182,16 @@ func (p *kChatServiceClient) SetGroupMuteAll(ctx context.Context, req *chat.SetG
 func (p *kChatServiceClient) UpdateGroupAnnouncement(ctx context.Context, req *chat.UpdateGroupAnnouncementRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.UpdateGroupAnnouncement(ctx, req)
+}
+
+func (p *kChatServiceClient) UpdateGroupAvatar(ctx context.Context, req *chat.UpdateGroupAvatarRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.UpdateGroupAvatar(ctx, req)
+}
+
+func (p *kChatServiceClient) DisbandGroup(ctx context.Context, req *chat.DisbandGroupRequest, callOptions ...callopt.Option) (r *chat.ConversationEventResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.DisbandGroup(ctx, req)
 }
 
 func (p *kChatServiceClient) ListMembers(ctx context.Context, req *chat.ListMembersRequest, callOptions ...callopt.Option) (r *chat.ListMembersResponse, err error) {
@@ -316,4 +342,14 @@ func (p *kChatServiceClient) ListUserMemories(ctx context.Context, req *chat.Lis
 func (p *kChatServiceClient) UpdateUserMemory(ctx context.Context, req *chat.UpdateUserMemoryRequest, callOptions ...callopt.Option) (r *chat.UpdateUserMemoryResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.UpdateUserMemory(ctx, req)
+}
+
+func (p *kChatServiceClient) GetUserMemorySetting(ctx context.Context, req *chat.GetUserMemorySettingRequest, callOptions ...callopt.Option) (r *chat.GetUserMemorySettingResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.GetUserMemorySetting(ctx, req)
+}
+
+func (p *kChatServiceClient) UpdateUserMemorySetting(ctx context.Context, req *chat.UpdateUserMemorySettingRequest, callOptions ...callopt.Option) (r *chat.UpdateUserMemorySettingResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.UpdateUserMemorySetting(ctx, req)
 }

@@ -17,6 +17,7 @@ import (
 const (
 	historySearchBatchLimit = int32(100)
 	historySearchMaxFetch   = 1500
+	historySearchTypeAll    = "ALL"
 )
 
 func SearchHistoryMessages(ctx *gin.Context) {
@@ -31,6 +32,11 @@ func SearchHistoryMessages(ctx *gin.Context) {
 		return
 	}
 	keyword := strings.TrimSpace(ctx.Query("keyword"))
+	conversationType, ok := normalizeHistorySearchConversationType(ctx.Query("conversationType"))
+	if !ok {
+		writeError(ctx, 400, "invalid conversationType")
+		return
+	}
 
 	conversationID := strings.TrimSpace(ctx.Query("conversationId"))
 	client, err := rpc.ChatClient()
@@ -54,19 +60,18 @@ func SearchHistoryMessages(ctx *gin.Context) {
 	}
 
 	if conversationID != "" {
-		target, exists := conversationMap[conversationID]
+		_, exists := conversationMap[conversationID]
 		if !exists {
 			writeError(ctx, 404, "conversation not found")
-			return
-		}
-		if target.Type != "GROUP" {
-			writeError(ctx, 400, "history search currently supports group conversations only")
 			return
 		}
 		targetConversationIDs = append(targetConversationIDs, conversationID)
 	} else {
 		for _, item := range conversationsResp.Conversations {
-			if item.Type == "GROUP" {
+			if !isHistorySearchConversationTypeSupported(item.Type) {
+				continue
+			}
+			if conversationType == historySearchTypeAll || item.Type == conversationType {
 				targetConversationIDs = append(targetConversationIDs, item.ConversationId)
 			}
 		}
@@ -95,6 +100,27 @@ func SearchHistoryMessages(ctx *gin.Context) {
 		Message: "success",
 		Data:    results,
 	})
+}
+
+func normalizeHistorySearchConversationType(raw string) (string, bool) {
+	value := strings.ToUpper(strings.TrimSpace(raw))
+	switch value {
+	case "", historySearchTypeAll:
+		return historySearchTypeAll, true
+	case "GROUP", "SINGLE":
+		return value, true
+	default:
+		return "", false
+	}
+}
+
+func isHistorySearchConversationTypeSupported(conversationType string) bool {
+	switch strings.ToUpper(strings.TrimSpace(conversationType)) {
+	case "GROUP", "SINGLE":
+		return true
+	default:
+		return false
+	}
 }
 
 func parseHistoryTimeRange(ctx *gin.Context) (int64, int64, bool) {

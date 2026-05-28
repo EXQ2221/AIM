@@ -62,7 +62,9 @@ func main() {
 	messageRepo := repository.NewMessageRepository(db)
 	aiCallLogRepo := repository.NewAICallLogRepository(db)
 	notificationRepo := repository.NewNotificationRepository(db)
+	groupJoinRequestRepo := repository.NewGroupJoinRequestRepository(db)
 	userMemoryRepo := repository.NewUserMemoryRepository(db)
+	userMemorySettingRepo := repository.NewUserMemorySettingRepository(db)
 	redisClient := newRedisClient(context.Background(), strings.TrimSpace(os.Getenv("REDIS_ADDR")))
 	if redisClient != nil {
 		defer redisClient.Close()
@@ -78,14 +80,16 @@ func main() {
 	)
 	chatService.SetAICallLogRepository(aiCallLogRepo)
 	chatService.SetNotificationRepository(notificationRepo)
+	chatService.SetGroupJoinRequestRepository(groupJoinRequestRepo)
 	chatService.SetUserMemoryRepository(userMemoryRepo)
+	chatService.SetUserMemorySettingRepository(userMemorySettingRepo)
 	chatService.SetBotTaskTimeout(botconf.BotTaskTimeoutFromEnv())
 	chatService.SetBotManagement(
 		botRepo,
 		conversationBotRepo,
 		botrepo.NewMembershipService(repository.NewTxManager(db), conversationRepo, memberRepo, botRepo, conversationBotRepo),
 	)
-	if botService := newBotServiceFromEnv(messageRepo, conversationRepo, memberRepo, botRepo, conversationBotRepo, userMemoryRepo, ragClient, aiCallLogRepo, redisClient, userClient); botService != nil {
+	if botService := newBotServiceFromEnv(messageRepo, conversationRepo, memberRepo, botRepo, conversationBotRepo, userMemoryRepo, userMemorySettingRepo, ragClient, aiCallLogRepo, redisClient, userClient); botService != nil {
 		chatService.SetBotService(botService)
 	}
 
@@ -139,6 +143,7 @@ func newBotServiceFromEnv(
 	botRepo repository.BotRepository,
 	conversationBotRepo repository.ConversationBotRepository,
 	userMemoryRepo repository.UserMemoryRepository,
+	userMemorySettingRepo repository.UserMemorySettingRepository,
 	ragClient ragservice.Client,
 	aiCallLogRepo repository.AICallLogRepository,
 	redisClient *redisv9.Client,
@@ -205,6 +210,7 @@ func newBotServiceFromEnv(
 	botService.SetConversationBotRepository(conversationBotRepo)
 	botService.SetUserClient(userClient)
 	botService.SetUserMemoryRepository(userMemoryRepo)
+	botService.SetUserMemorySettingRepository(userMemorySettingRepo)
 	botService.SetMemoryExtractTimeout(botconf.MemoryExtractTimeoutFromEnv())
 	botService.SetMemoryCandidateLimit(botconf.MemoryCandidateLimitFromEnv())
 	botService.SetMemoryMaxRecall(botconf.MemoryMaxRecallFromEnv())

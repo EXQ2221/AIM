@@ -207,6 +207,8 @@ const (
 	SystemEventMemberUnmuted       = "MEMBER_UNMUTED"
 	SystemEventGroupMuted          = "GROUP_MUTED"
 	SystemEventGroupUnmuted        = "GROUP_UNMUTED"
+	SystemEventGroupAvatarUpdated  = "GROUP_AVATAR_UPDATED"
+	SystemEventGroupDisbanded      = "GROUP_DISBANDED"
 	SystemEventAdminAdded          = "ADMIN_ADDED"
 	SystemEventAdminRemoved        = "ADMIN_REMOVED"
 	SystemEventOwnerTransferred    = "OWNER_TRANSFERRED"

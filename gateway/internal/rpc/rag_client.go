@@ -9,7 +9,11 @@ import (
 var ragRPCClient ragservice.Client
 
 func InitRAGClient(endpoint string) error {
-	c, err := ragservice.NewClient("rag-service", client.WithHostPorts(endpoint))
+	normalized, err := normalizeHostPort(endpoint)
+	if err != nil {
+		return err
+	}
+	c, err := ragservice.NewClient("rag-service", client.WithHostPorts(normalized))
 	if err != nil {
 		return err
 	}

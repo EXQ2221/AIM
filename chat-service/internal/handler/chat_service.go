@@ -93,6 +93,35 @@ func (h *ChatServiceImpl) JoinGroup(ctx context.Context, req *chatpb.JoinGroupRe
 	return toConversationEventPB(event), nil
 }
 
+func (h *ChatServiceImpl) ListGroupJoinRequests(ctx context.Context, req *chatpb.ListGroupJoinRequestsRequest) (*chatpb.ListGroupJoinRequestsResponse, error) {
+	var limit int
+	if req.Limit != nil {
+		limit = int(*req.Limit)
+	}
+	items, err := h.Service.ListGroupJoinRequests(ctx, uint64(req.OperatorId), req.ConversationId, limit)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*chatpb.GroupJoinRequestInfo, 0, len(items))
+	for _, item := range items {
+		result = append(result, toGroupJoinRequestPB(item))
+	}
+	return &chatpb.ListGroupJoinRequestsResponse{Requests: result}, nil
+}
+
+func (h *ChatServiceImpl) ReviewGroupJoinRequest(ctx context.Context, req *chatpb.ReviewGroupJoinRequestRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.ReviewGroupJoinRequest(ctx, biz.ReviewGroupJoinRequestInput{
+		OperatorID:     uint64(req.OperatorId),
+		ConversationID: req.ConversationId,
+		RequestID:      uint64(req.RequestId),
+		Action:         req.Action,
+	})
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
+	}
+	return toConversationEventPB(event), nil
+}
+
 func (h *ChatServiceImpl) InviteMember(ctx context.Context, req *chatpb.InviteMemberRequest) (*chatpb.ConversationEventResponse, error) {
 	event, err := h.Service.InviteMember(ctx, biz.InviteMemberInput{
 		OperatorID:   uint64(req.OperatorId),
@@ -202,6 +231,29 @@ func (h *ChatServiceImpl) UpdateGroupAnnouncement(ctx context.Context, req *chat
 		OperatorID:     uint64(req.OperatorId),
 		ConversationID: req.ConversationId,
 		Announcement:   req.Announcement,
+	})
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
+	}
+	return toConversationEventPB(event), nil
+}
+
+func (h *ChatServiceImpl) UpdateGroupAvatar(ctx context.Context, req *chatpb.UpdateGroupAvatarRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.UpdateGroupAvatar(ctx, biz.UpdateGroupAvatarInput{
+		OperatorID:     uint64(req.OperatorId),
+		ConversationID: req.ConversationId,
+		Avatar:         req.Avatar,
+	})
+	if err != nil {
+		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
+	}
+	return toConversationEventPB(event), nil
+}
+
+func (h *ChatServiceImpl) DisbandGroup(ctx context.Context, req *chatpb.DisbandGroupRequest) (*chatpb.ConversationEventResponse, error) {
+	event, err := h.Service.DisbandGroup(ctx, biz.DisbandGroupInput{
+		OperatorID:     uint64(req.OperatorId),
+		ConversationID: req.ConversationId,
 	})
 	if err != nil {
 		return &chatpb.ConversationEventResponse{Success: false, Message: err.Error()}, nil
@@ -726,6 +778,28 @@ func (h *ChatServiceImpl) UpdateUserMemory(ctx context.Context, req *chatpb.Upda
 	return &chatpb.UpdateUserMemoryResponse{Memory: toUserMemoryPB(item)}, nil
 }
 
+func (h *ChatServiceImpl) GetUserMemorySetting(ctx context.Context, req *chatpb.GetUserMemorySettingRequest) (*chatpb.GetUserMemorySettingResponse, error) {
+	item, err := h.Service.GetUserMemorySetting(ctx, uint64(req.OperatorId))
+	if err != nil {
+		return nil, err
+	}
+	return &chatpb.GetUserMemorySettingResponse{Setting: toUserMemorySettingPB(item)}, nil
+}
+
+func (h *ChatServiceImpl) UpdateUserMemorySetting(ctx context.Context, req *chatpb.UpdateUserMemorySettingRequest) (*chatpb.UpdateUserMemorySettingResponse, error) {
+	item, err := h.Service.UpdateUserMemorySetting(
+		ctx,
+		uint64(req.OperatorId),
+		req.Enabled,
+		req.Scope,
+		req.ConversationIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &chatpb.UpdateUserMemorySettingResponse{Setting: toUserMemorySettingPB(item)}, nil
+}
+
 func toGroupPB(group *biz.GroupView) *chatpb.GroupInfo {
 	if group == nil {
 		return nil
@@ -923,6 +997,9 @@ func toConversationEventPB(event *biz.ConversationEventView) *chatpb.Conversatio
 	if event == nil {
 		return resp
 	}
+	if event.Notice != "" {
+		resp.Message = event.Notice
+	}
 	if event.Message != nil {
 		resp.EventMessage = toMessagePB(*event.Message)
 	}
@@ -934,6 +1011,29 @@ func toConversationEventPB(event *biz.ConversationEventView) *chatpb.Conversatio
 		resp.RecipientUserIds = recipients
 	}
 	return resp
+}
+
+func toGroupJoinRequestPB(item biz.GroupJoinRequestView) *chatpb.GroupJoinRequestInfo {
+	pb := &chatpb.GroupJoinRequestInfo{
+		RequestId:       int64(item.RequestID),
+		ConversationId:  item.ConversationID,
+		ApplicantUserId: int64(item.ApplicantUserID),
+		ApplicantName:   item.ApplicantName,
+		ApplicantAvatar: item.ApplicantAvatar,
+		Reason:          item.Reason,
+		Status:          item.Status,
+		CreatedAt:       item.CreatedAt,
+		UpdatedAt:       item.UpdatedAt,
+	}
+	if item.ReviewedBy != nil {
+		value := int64(*item.ReviewedBy)
+		pb.ReviewedBy = &value
+	}
+	if item.ReviewedAt != nil {
+		value := *item.ReviewedAt
+		pb.ReviewedAt = &value
+	}
+	return pb
 }
 
 func toMessageRecalledEventPB(event *biz.MessageRecalledEventView) *chatpb.MessageRecalledEventResponse {
@@ -976,4 +1076,21 @@ func toUserMemoryPB(item *biz.UserMemoryView) *chatpb.UserMemoryInfo {
 		pb.SourceMessageId = &value
 	}
 	return pb
+}
+
+func toUserMemorySettingPB(item *biz.UserMemorySettingView) *chatpb.UserMemorySettingInfo {
+	if item == nil {
+		return &chatpb.UserMemorySettingInfo{
+			Enabled:         true,
+			Scope:           "ALL_GROUPS",
+			ConversationIds: []string{},
+			UpdatedAt:       0,
+		}
+	}
+	return &chatpb.UserMemorySettingInfo{
+		Enabled:         item.Enabled,
+		Scope:           item.Scope,
+		ConversationIds: item.ConversationIDs,
+		UpdatedAt:       item.UpdatedAt,
+	}
 }

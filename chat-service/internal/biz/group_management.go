@@ -520,6 +520,88 @@ func (s *ChatService) SetGroupMuteAll(ctx context.Context, input SetGroupMuteAll
 	return event, nil
 }
 
+func (s *ChatService) DisbandGroup(ctx context.Context, input DisbandGroupInput) (*ConversationEventView, error) {
+	if input.OperatorID == 0 {
+		return nil, ErrBadRequest
+	}
+
+	conversation, err := s.requireGroupConversation(ctx, input.ConversationID)
+	if err != nil {
+		return nil, err
+	}
+	member, err := s.requireMember(ctx, conversation.ID, input.OperatorID)
+	if err != nil {
+		return nil, err
+	}
+	if member.Role != model.MemberRoleOwner {
+		return nil, ErrGroupOwnerRequired
+	}
+
+	var event *ConversationEventView
+	err = s.TxManager.WithinTransaction(ctx, func(tx *gorm.DB) error {
+		memberRepo := s.MemberRepo.WithTx(tx)
+		groupRepo := s.GroupRepo.WithTx(tx)
+		messageRepo := s.MessageRepo.WithTx(tx)
+		conversationRepo := s.ConversationRepo.WithTx(tx)
+
+		currentOperator, group, loadErr := s.loadOperatorAndGroupTx(ctx, memberRepo, groupRepo, conversation.ID, input.OperatorID)
+		if loadErr != nil {
+			return loadErr
+		}
+		if currentOperator.Role != model.MemberRoleOwner || group.OwnerID != input.OperatorID {
+			return ErrGroupOwnerRequired
+		}
+
+		now := time.Now()
+		activeMembers, err := memberRepo.ListUserMembers(ctx, conversation.ID)
+		if err != nil {
+			return err
+		}
+		targetUserIDs := make([]uint64, 0, len(activeMembers))
+		for index := range activeMembers {
+			targetUserIDs = append(targetUserIDs, activeMembers[index].MemberID)
+		}
+
+		conversation.DeletedAt = gorm.DeletedAt{Time: now, Valid: true}
+		systemMessage, recipientUserIDs, eventErr := s.createSystemMessageTx(
+			ctx,
+			conversation,
+			conversationRepo,
+			memberRepo,
+			messageRepo,
+			s.notificationRepoWithTx(tx),
+			model.SystemEventGroupDisbanded,
+			input.OperatorID,
+			targetUserIDs,
+		)
+		if eventErr != nil {
+			return eventErr
+		}
+		view := messageToView(systemMessage, conversation.ConversationID)
+		event = &ConversationEventView{Message: &view, RecipientUserIDs: recipientUserIDs}
+
+		for index := range activeMembers {
+			activeMembers[index].Status = model.MemberStatusRemoved
+			activeMembers[index].MuteUntil = nil
+			if err := memberRepo.Update(ctx, &activeMembers[index]); err != nil {
+				return err
+			}
+		}
+
+		if err := tx.WithContext(ctx).Unscoped().
+			Model(&model.Conversation{}).
+			Where("id = ?", conversation.ID).
+			Update("deleted_at", now).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
 func canTransferOwner(actor *model.ConversationMember, target *model.ConversationMember) bool {
 	if actor == nil || target == nil {
 		return false

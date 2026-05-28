@@ -20,6 +20,29 @@ type GroupInfo struct {
 	CreatedAt             int64  `json:"createdAt"`
 }
 
+type JoinGroupResponse struct {
+	Message string `json:"message"`
+	Pending bool   `json:"pending"`
+}
+
+type GroupJoinRequestInfo struct {
+	RequestID       int64  `json:"requestId"`
+	ConversationID  string `json:"conversationId"`
+	ApplicantUserID int64  `json:"applicantUserId"`
+	ApplicantName   string `json:"applicantName"`
+	ApplicantAvatar string `json:"applicantAvatar"`
+	Reason          string `json:"reason"`
+	Status          string `json:"status"`
+	ReviewedBy      *int64 `json:"reviewedBy,omitempty"`
+	ReviewedAt      *int64 `json:"reviewedAt,omitempty"`
+	CreatedAt       int64  `json:"createdAt"`
+	UpdatedAt       int64  `json:"updatedAt"`
+}
+
+type ReviewGroupJoinRequestRequest struct {
+	Action string `json:"action"`
+}
+
 type ConversationInfo struct {
 	ConversationID        string `json:"conversationId"`
 	Type                  string `json:"type"`
@@ -106,6 +129,19 @@ type UserMemoryInfo struct {
 	UpdatedAt            int64  `json:"updatedAt"`
 }
 
+type UserMemorySettingInfo struct {
+	Enabled         bool     `json:"enabled"`
+	Scope           string   `json:"scope"`
+	ConversationIDs []string `json:"conversationIds"`
+	UpdatedAt       int64    `json:"updatedAt"`
+}
+
+type UpdateUserMemorySettingRequest struct {
+	Enabled         *bool    `json:"enabled,omitempty"`
+	Scope           *string  `json:"scope,omitempty"`
+	ConversationIDs []string `json:"conversationIds,omitempty"`
+}
+
 type MessageRecalledEventInfo struct {
 	MessageID      int64  `json:"messageId"`
 	ConversationID string `json:"conversationId"`
@@ -162,6 +198,10 @@ type MuteMemberRequest struct {
 
 type UpdateGroupAnnouncementRequest struct {
 	Announcement string `json:"announcement"`
+}
+
+type UpdateGroupAvatarRequest struct {
+	Avatar string `json:"avatar"`
 }
 
 type BotInfo struct {

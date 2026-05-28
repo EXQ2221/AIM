@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	"example.com/aim/chat-service/internal/dal/model"
 	llm "example.com/aim/chat-service/llm-internal/client"
+	"gorm.io/gorm"
 )
 
 type MemoryCandidate struct {
@@ -116,6 +118,9 @@ func parseMemoryExtractResult(raw string) (UserMemoryExtractResult, error) {
 
 func (s *Service) collectLongTermMemories(ctx context.Context, req HandleMentionRequest, question string) []string {
 	if s == nil || s.UserMemoryRepo == nil || s.UserMemoryExtractor == nil {
+		return nil
+	}
+	if !s.shouldUseLongTermMemoryForConversation(ctx, req.UserID, req.ConversationID) {
 		return nil
 	}
 	question = strings.TrimSpace(question)
@@ -228,6 +233,62 @@ func (s *Service) collectLongTermMemories(ctx context.Context, req HandleMention
 	}
 
 	return selected
+}
+
+func (s *Service) shouldUseLongTermMemoryForConversation(ctx context.Context, userID uint64, conversationID uint64) bool {
+	if s == nil || userID == 0 || conversationID == 0 {
+		return false
+	}
+	if s.ConversationRepo == nil {
+		return true
+	}
+	conversation, err := s.ConversationRepo.GetByID(ctx, conversationID)
+	if err != nil || conversation == nil {
+		return false
+	}
+	if conversation.Type != model.ConversationTypeGroup {
+		return false
+	}
+
+	if s.UserMemorySettingRepo == nil {
+		return true
+	}
+	setting, err := s.UserMemorySettingRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return true
+		}
+		return false
+	}
+	if setting == nil {
+		return true
+	}
+	if !setting.Enabled {
+		return false
+	}
+
+	scope := strings.ToUpper(strings.TrimSpace(setting.Scope))
+	switch scope {
+	case "", model.MemoryScopeAllGroups:
+		return true
+	case model.MemoryScopeSelectedGroups:
+		var selected []string
+		if unmarshalErr := json.Unmarshal([]byte(strings.TrimSpace(setting.ConversationIDs)), &selected); unmarshalErr != nil {
+			return false
+		}
+		target := strings.TrimSpace(conversation.ConversationID)
+		if target == "" {
+			return false
+		}
+		for _, id := range selected {
+			if strings.TrimSpace(id) == target {
+				return true
+			}
+		}
+		return false
+	default:
+		return true
+	}
 }
 
 func hashMemoryContent(content string) string {

@@ -19,9 +19,27 @@ type UpdateGroupAnnouncementInput struct {
 	Announcement   string
 }
 
+type UpdateGroupAvatarInput struct {
+	OperatorID     uint64
+	ConversationID string
+	Avatar         string
+}
+
+type DisbandGroupInput struct {
+	OperatorID     uint64
+	ConversationID string
+}
+
 type InviteMemberInput struct {
 	OperatorID   uint64
 	TargetUserID uint64
+}
+
+type ReviewGroupJoinRequestInput struct {
+	OperatorID     uint64
+	ConversationID string
+	RequestID      uint64
+	Action         string
 }
 
 type TransferOwnerInput struct {
@@ -135,6 +153,20 @@ type MemberListView struct {
 	MuteUntil       *int64
 }
 
+type GroupJoinRequestView struct {
+	RequestID       uint64
+	ConversationID  string
+	ApplicantUserID uint64
+	ApplicantName   string
+	ApplicantAvatar string
+	Reason          string
+	Status          string
+	ReviewedBy      *uint64
+	ReviewedAt      *int64
+	CreatedAt       int64
+	UpdatedAt       int64
+}
+
 type MessageView struct {
 	ID             uint64
 	ConversationID string
@@ -159,6 +191,7 @@ type ReplyPreviewView struct {
 }
 
 type ConversationEventView struct {
+	Notice           string
 	Message          *MessageView
 	RecipientUserIDs []uint64
 }
@@ -288,4 +321,11 @@ type UserMemoryView struct {
 	LastUsedAt           int64
 	CreatedAt            int64
 	UpdatedAt            int64
+}
+
+type UserMemorySettingView struct {
+	Enabled         bool
+	Scope           string
+	ConversationIDs []string
+	UpdatedAt       int64
 }

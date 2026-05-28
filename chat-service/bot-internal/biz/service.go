@@ -60,6 +60,7 @@ type Service struct {
 	RAGSearcher          RAGSearcher
 	RAGTopK              int
 	UserMemoryRepo       repository.UserMemoryRepository
+	UserMemorySettingRepo repository.UserMemorySettingRepository
 	UserMemoryExtractor  UserMemoryExtractor
 	MemoryExtractTimeout time.Duration
 	MemoryCandidateLimit int
@@ -178,6 +179,10 @@ func (s *Service) SetRAGTopK(topK int) {
 
 func (s *Service) SetUserMemoryRepository(repo repository.UserMemoryRepository) {
 	s.UserMemoryRepo = repo
+}
+
+func (s *Service) SetUserMemorySettingRepository(repo repository.UserMemorySettingRepository) {
+	s.UserMemorySettingRepo = repo
 }
 
 func (s *Service) SetUserMemoryExtractor(extractor UserMemoryExtractor) {
@@ -934,7 +939,7 @@ func (s *Service) checkDailyTokenLimit(ctx context.Context, req HandleMentionReq
 		return err
 	}
 	if total >= dailyLimit {
-		return errno.Forbidden("daily ai token limit reached")
+		return errno.Forbidden("已到达限额，请等待或者切换Bot")
 	}
 	return nil
 }

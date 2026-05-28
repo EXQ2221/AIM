@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,27 +22,32 @@ import (
 )
 
 var (
-	ErrBadRequest           = errors.New("bad_request: invalid request")
-	ErrConversationNotFound = errors.New("not_found: conversation not found")
-	ErrGroupNotFound        = errors.New("not_found: group not found")
-	ErrMessageNotFound      = errors.New("not_found: message not found")
-	ErrNotMember            = errors.New("forbidden: user is not a member of this conversation")
-	ErrOwnerCannotLeave     = errors.New("forbidden: owner cannot leave group before ownership transfer")
-	ErrSingleSelfChat       = errors.New("bad_request: cannot create single conversation with yourself")
-	ErrSingleTargetInvalid  = errors.New("forbidden: target user is not available")
-	ErrSingleFriendRequired = errors.New("forbidden: single conversation requires active friendship")
-	ErrMessageEmpty         = errors.New("bad_request: message content is empty")
-	ErrMessageUnsupported   = errors.New("bad_request: unsupported message type")
-	ErrMessageInvalid       = errors.New("bad_request: invalid message content")
-	ErrReplyTargetInvalid   = errors.New("bad_request: invalid reply target")
-	ErrMessageRecallDenied  = errors.New("forbidden: only the sender can recall this message")
-	ErrMessageRecallExpired = errors.New("forbidden: message can only be recalled within 5 minutes")
-	ErrGroupAdminRequired   = errors.New("forbidden: only owner or admin can perform this action")
-	ErrMemberMuted          = errors.New("forbidden: member is muted")
-	ErrGroupMutedAll        = errors.New("forbidden: group is muted for members")
-	ErrUserMemoryEmpty      = errors.New("bad_request: memory content is empty")
-	ErrUserMemoryTooLong    = errors.New("bad_request: memory content cannot exceed 512 characters")
-	ErrUserMemoryNotFound   = errors.New("not_found: user memory not found")
+	ErrBadRequest             = errors.New("bad_request: invalid request")
+	ErrConversationNotFound   = errors.New("not_found: conversation not found")
+	ErrGroupNotFound          = errors.New("not_found: group not found")
+	ErrMessageNotFound        = errors.New("not_found: message not found")
+	ErrNotMember              = errors.New("forbidden: user is not a member of this conversation")
+	ErrOwnerCannotLeave       = errors.New("forbidden: owner cannot leave group before ownership transfer")
+	ErrSingleSelfChat         = errors.New("bad_request: cannot create single conversation with yourself")
+	ErrSingleTargetInvalid    = errors.New("forbidden: target user is not available")
+	ErrSingleFriendRequired   = errors.New("forbidden: single conversation requires active friendship")
+	ErrMessageEmpty           = errors.New("bad_request: message content is empty")
+	ErrMessageUnsupported     = errors.New("bad_request: unsupported message type")
+	ErrMessageInvalid         = errors.New("bad_request: invalid message content")
+	ErrReplyTargetInvalid     = errors.New("bad_request: invalid reply target")
+	ErrMessageRecallDenied    = errors.New("forbidden: only the sender can recall this message")
+	ErrMessageRecallExpired   = errors.New("forbidden: message can only be recalled within 5 minutes")
+	ErrGroupAdminRequired     = errors.New("forbidden: only owner or admin can perform this action")
+	ErrJoinRequestPending     = errors.New("conflict: join request is pending")
+	ErrJoinRequestNotFound    = errors.New("not_found: join request not found")
+	ErrJoinActionInvalid      = errors.New("bad_request: review action must be APPROVE or REJECT")
+	ErrJoinPolicyInviteOnly   = errors.New("forbidden: group only accepts invited members")
+	ErrMemberMuted            = errors.New("forbidden: member is muted")
+	ErrGroupMutedAll          = errors.New("forbidden: group is muted for members")
+	ErrUserMemoryEmpty        = errors.New("bad_request: memory content is empty")
+	ErrUserMemoryTooLong      = errors.New("bad_request: memory content cannot exceed 512 characters")
+	ErrUserMemoryNotFound     = errors.New("not_found: user memory not found")
+	ErrUserMemoryScopeInvalid = errors.New("bad_request: memory scope must be ALL_GROUPS or SELECTED_GROUPS")
 )
 
 const (
@@ -50,20 +56,22 @@ const (
 )
 
 type ChatService struct {
-	ConversationRepo     repository.ConversationRepository
-	GroupRepo            repository.GroupRepository
-	MemberRepo           repository.MemberRepository
-	BotRepo              repository.BotRepository
-	ConversationBotRepo  repository.ConversationBotRepository
-	MessageRepo          repository.MessageRepository
-	AICallLogRepo        repository.AICallLogRepository
-	NotificationRepo     repository.NotificationRepository
-	UserMemoryRepo       repository.UserMemoryRepository
-	TxManager            repository.TxManager
-	UserClient           rpc.UserClient
-	BotService           bot.MentionHandler
-	BotMembershipService botrepo.MembershipManager
-	BotTaskTimeout       time.Duration
+	ConversationRepo      repository.ConversationRepository
+	GroupRepo             repository.GroupRepository
+	MemberRepo            repository.MemberRepository
+	BotRepo               repository.BotRepository
+	ConversationBotRepo   repository.ConversationBotRepository
+	MessageRepo           repository.MessageRepository
+	AICallLogRepo         repository.AICallLogRepository
+	NotificationRepo      repository.NotificationRepository
+	GroupJoinRequestRepo  repository.GroupJoinRequestRepository
+	UserMemoryRepo        repository.UserMemoryRepository
+	UserMemorySettingRepo repository.UserMemorySettingRepository
+	TxManager             repository.TxManager
+	UserClient            rpc.UserClient
+	BotService            bot.MentionHandler
+	BotMembershipService  botrepo.MembershipManager
+	BotTaskTimeout        time.Duration
 }
 
 func NewChatService(
@@ -103,8 +111,16 @@ func (s *ChatService) SetNotificationRepository(notificationRepo repository.Noti
 	s.NotificationRepo = notificationRepo
 }
 
+func (s *ChatService) SetGroupJoinRequestRepository(groupJoinRequestRepo repository.GroupJoinRequestRepository) {
+	s.GroupJoinRequestRepo = groupJoinRequestRepo
+}
+
 func (s *ChatService) SetUserMemoryRepository(userMemoryRepo repository.UserMemoryRepository) {
 	s.UserMemoryRepo = userMemoryRepo
+}
+
+func (s *ChatService) SetUserMemorySettingRepository(userMemorySettingRepo repository.UserMemorySettingRepository) {
+	s.UserMemorySettingRepo = userMemorySettingRepo
 }
 
 func (s *ChatService) SetBotManagement(botRepo repository.BotRepository, conversationBotRepo repository.ConversationBotRepository, membershipService botrepo.MembershipManager) {
@@ -221,6 +237,82 @@ func (s *ChatService) UpdateUserMemory(ctx context.Context, operatorID uint64, m
 	existing.LastUsedAt = now
 	existing.UpdatedAt = now
 	return toUserMemoryView(existing), nil
+}
+
+func (s *ChatService) GetUserMemorySetting(ctx context.Context, operatorID uint64) (*UserMemorySettingView, error) {
+	if operatorID == 0 {
+		return nil, ErrBadRequest
+	}
+	if s.UserMemorySettingRepo == nil {
+		return defaultUserMemorySettingView(), nil
+	}
+	setting, err := s.UserMemorySettingRepo.GetByUserID(ctx, operatorID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			defaultSetting := defaultUserMemorySettingModel(operatorID)
+			if upsertErr := s.UserMemorySettingRepo.Upsert(ctx, defaultSetting); upsertErr != nil {
+				return nil, upsertErr
+			}
+			return toUserMemorySettingView(defaultSetting), nil
+		}
+		return nil, err
+	}
+	return toUserMemorySettingView(setting), nil
+}
+
+func (s *ChatService) UpdateUserMemorySetting(ctx context.Context, operatorID uint64, enabled *bool, scope *string, conversationIDs []string) (*UserMemorySettingView, error) {
+	if operatorID == 0 {
+		return nil, ErrBadRequest
+	}
+	if s.UserMemorySettingRepo == nil {
+		return nil, errors.New("internal_error: user memory setting repository is not configured")
+	}
+
+	setting, err := s.UserMemorySettingRepo.GetByUserID(ctx, operatorID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			setting = defaultUserMemorySettingModel(operatorID)
+		} else {
+			return nil, err
+		}
+	}
+	if setting == nil {
+		setting = defaultUserMemorySettingModel(operatorID)
+	}
+
+	if enabled != nil {
+		setting.Enabled = *enabled
+	}
+	if scope != nil {
+		normalizedScope := strings.ToUpper(strings.TrimSpace(*scope))
+		if normalizedScope == "" {
+			normalizedScope = model.MemoryScopeAllGroups
+		}
+		if normalizedScope != model.MemoryScopeAllGroups && normalizedScope != model.MemoryScopeSelectedGroups {
+			return nil, ErrUserMemoryScopeInvalid
+		}
+		setting.Scope = normalizedScope
+	}
+
+	existingIDs := parseMemoryConversationIDs(setting.ConversationIDs)
+	if conversationIDs != nil {
+		existingIDs = normalizeMemoryConversationIDs(conversationIDs)
+	}
+	setting.ConversationIDs = marshalMemoryConversationIDs(existingIDs)
+	if strings.TrimSpace(setting.Scope) == "" {
+		setting.Scope = model.MemoryScopeAllGroups
+	}
+	if setting.Scope == model.MemoryScopeAllGroups {
+		setting.ConversationIDs = "[]"
+	}
+	if setting.Scope == model.MemoryScopeSelectedGroups && conversationIDs == nil {
+		setting.ConversationIDs = "[]"
+	}
+
+	if err := s.UserMemorySettingRepo.Upsert(ctx, setting); err != nil {
+		return nil, err
+	}
+	return toUserMemorySettingView(setting), nil
 }
 
 func (s *ChatService) CreateGroup(ctx context.Context, input CreateGroupInput) (*GroupView, error) {
@@ -464,39 +556,85 @@ func (s *ChatService) JoinGroup(ctx context.Context, operatorID uint64, conversa
 	if operatorID == 0 {
 		return nil, ErrBadRequest
 	}
+	group, err := s.GroupRepo.GetByConversationID(ctx, conversation.ID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrGroupNotFound
+		}
+		return nil, err
+	}
+	joinPolicy := normalizeJoinPolicy(string(group.JoinPolicy))
 
 	var event *ConversationEventView
 	err = s.TxManager.WithinTransaction(ctx, func(tx *gorm.DB) error {
 		memberRepo := s.MemberRepo.WithTx(tx)
 		messageRepo := s.MessageRepo.WithTx(tx)
 		conversationRepo := s.ConversationRepo.WithTx(tx)
+		joinRequestRepo := s.groupJoinRequestRepoWithTx(tx)
 
 		member, getErr := memberRepo.GetUserMember(ctx, conversation.ID, operatorID)
 		if getErr == nil {
 			if member.Status != model.MemberStatusRemoved {
 				return nil
 			}
-			member.Status = model.MemberStatusNormal
-			member.Role = model.MemberRoleMember
-			member.JoinedAt = time.Now()
-			if updateErr := memberRepo.Update(ctx, member); updateErr != nil {
+			if joinPolicy == model.GroupJoinApproval {
+				if joinRequestRepo == nil {
+					return errors.New("internal_error: group join request repository is not configured")
+				}
+				if _, pendingErr := joinRequestRepo.GetPendingByConversationAndApplicant(ctx, conversation.ID, operatorID); pendingErr == nil {
+					return ErrJoinRequestPending
+				} else if !errors.Is(pendingErr, gorm.ErrRecordNotFound) {
+					return pendingErr
+				}
+				if createErr := joinRequestRepo.Create(ctx, &model.GroupJoinRequest{
+					ConversationID:  conversation.ID,
+					ApplicantUserID: operatorID,
+					Status:          model.GroupJoinRequestPending,
+				}); createErr != nil {
+					return createErr
+				}
+				event = &ConversationEventView{Notice: "已提交入群申请，等待管理员审核"}
+				return nil
+			}
+			if joinPolicy == model.GroupJoinInviteOnly {
+				return ErrJoinPolicyInviteOnly
+			}
+			if updateErr := s.addOrRestoreUserMemberTx(ctx, memberRepo, conversation.ID, operatorID); updateErr != nil {
 				return updateErr
 			}
 		} else if !errors.Is(getErr, gorm.ErrRecordNotFound) {
 			return getErr
 		} else {
-			if createErr := memberRepo.Create(ctx, &model.ConversationMember{
-				ConversationID: conversation.ID,
-				MemberType:     model.MemberTypeUser,
-				MemberID:       operatorID,
-				Role:           model.MemberRoleMember,
-				Status:         model.MemberStatusNormal,
-				JoinedAt:       time.Now(),
-			}); createErr != nil {
+			if joinPolicy == model.GroupJoinApproval {
+				if joinRequestRepo == nil {
+					return errors.New("internal_error: group join request repository is not configured")
+				}
+				if _, pendingErr := joinRequestRepo.GetPendingByConversationAndApplicant(ctx, conversation.ID, operatorID); pendingErr == nil {
+					return ErrJoinRequestPending
+				} else if !errors.Is(pendingErr, gorm.ErrRecordNotFound) {
+					return pendingErr
+				}
+				if createErr := joinRequestRepo.Create(ctx, &model.GroupJoinRequest{
+					ConversationID:  conversation.ID,
+					ApplicantUserID: operatorID,
+					Status:          model.GroupJoinRequestPending,
+				}); createErr != nil {
+					return createErr
+				}
+				event = &ConversationEventView{Notice: "已提交入群申请，等待管理员审核"}
+				return nil
+			}
+			if joinPolicy == model.GroupJoinInviteOnly {
+				return ErrJoinPolicyInviteOnly
+			}
+			if createErr := s.addOrRestoreUserMemberTx(ctx, memberRepo, conversation.ID, operatorID); createErr != nil {
 				return createErr
 			}
 		}
 
+		if joinPolicy == model.GroupJoinApproval {
+			return nil
+		}
 		systemMessage, recipientUserIDs, eventErr := s.createSystemMessageTx(
 			ctx,
 			conversation,
@@ -519,6 +657,177 @@ func (s *ChatService) JoinGroup(ctx context.Context, operatorID uint64, conversa
 		return nil, err
 	}
 	return event, nil
+}
+
+func (s *ChatService) ListGroupJoinRequests(ctx context.Context, operatorID uint64, conversationID string, limit int) ([]GroupJoinRequestView, error) {
+	if operatorID == 0 {
+		return nil, ErrBadRequest
+	}
+	if s.GroupJoinRequestRepo == nil {
+		return nil, errors.New("internal_error: group join request repository is not configured")
+	}
+	conversation, err := s.requireGroupConversation(ctx, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	member, err := s.requireMember(ctx, conversation.ID, operatorID)
+	if err != nil {
+		return nil, err
+	}
+	if member.Role != model.MemberRoleOwner && member.Role != model.MemberRoleAdmin {
+		return nil, ErrGroupAdminRequired
+	}
+
+	rows, err := s.GroupJoinRequestRepo.ListPendingByConversationID(ctx, conversation.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]GroupJoinRequestView, 0, len(rows))
+	for i := range rows {
+		item := rows[i]
+		view := GroupJoinRequestView{
+			RequestID:       item.ID,
+			ConversationID:  conversation.ConversationID,
+			ApplicantUserID: item.ApplicantUserID,
+			Reason:          item.Reason,
+			Status:          string(item.Status),
+			CreatedAt:       item.CreatedAt.Unix(),
+			UpdatedAt:       item.UpdatedAt.Unix(),
+		}
+		if item.ReviewedBy != nil {
+			value := *item.ReviewedBy
+			view.ReviewedBy = &value
+		}
+		if item.ReviewedAt != nil {
+			value := item.ReviewedAt.Unix()
+			view.ReviewedAt = &value
+		}
+		if s.UserClient != nil {
+			user, userErr := s.UserClient.GetUser(ctx, item.ApplicantUserID)
+			if userErr == nil && user != nil {
+				view.ApplicantName = user.Nickname
+				view.ApplicantAvatar = user.Avatar
+			}
+		}
+		result = append(result, view)
+	}
+	return result, nil
+}
+
+func (s *ChatService) ReviewGroupJoinRequest(ctx context.Context, input ReviewGroupJoinRequestInput) (*ConversationEventView, error) {
+	if input.OperatorID == 0 || input.RequestID == 0 || strings.TrimSpace(input.ConversationID) == "" {
+		return nil, ErrBadRequest
+	}
+	action := strings.ToUpper(strings.TrimSpace(input.Action))
+	if action != "APPROVE" && action != "REJECT" {
+		return nil, ErrJoinActionInvalid
+	}
+	if s.GroupJoinRequestRepo == nil {
+		return nil, errors.New("internal_error: group join request repository is not configured")
+	}
+
+	conversation, err := s.requireGroupConversation(ctx, input.ConversationID)
+	if err != nil {
+		return nil, err
+	}
+	member, err := s.requireMember(ctx, conversation.ID, input.OperatorID)
+	if err != nil {
+		return nil, err
+	}
+	if member.Role != model.MemberRoleOwner && member.Role != model.MemberRoleAdmin {
+		return nil, ErrGroupAdminRequired
+	}
+
+	var event *ConversationEventView
+	err = s.TxManager.WithinTransaction(ctx, func(tx *gorm.DB) error {
+		memberRepo := s.MemberRepo.WithTx(tx)
+		messageRepo := s.MessageRepo.WithTx(tx)
+		conversationRepo := s.ConversationRepo.WithTx(tx)
+		joinRequestRepo := s.groupJoinRequestRepoWithTx(tx)
+		if joinRequestRepo == nil {
+			return errors.New("internal_error: group join request repository is not configured")
+		}
+
+		item, getErr := joinRequestRepo.GetByID(ctx, input.RequestID)
+		if getErr != nil {
+			if errors.Is(getErr, gorm.ErrRecordNotFound) {
+				return ErrJoinRequestNotFound
+			}
+			return getErr
+		}
+		if item.ConversationID != conversation.ID {
+			return ErrJoinRequestNotFound
+		}
+		if item.Status != model.GroupJoinRequestPending {
+			return ErrBadRequest
+		}
+
+		now := time.Now()
+		reviewer := input.OperatorID
+		item.ReviewedBy = &reviewer
+		item.ReviewedAt = &now
+
+		if action == "REJECT" {
+			item.Status = model.GroupJoinRequestRejected
+			if updateErr := joinRequestRepo.Update(ctx, item); updateErr != nil {
+				return updateErr
+			}
+			event = &ConversationEventView{Notice: "已拒绝入群申请"}
+			return nil
+		}
+
+		item.Status = model.GroupJoinRequestApproved
+		if updateErr := joinRequestRepo.Update(ctx, item); updateErr != nil {
+			return updateErr
+		}
+		if addErr := s.addOrRestoreUserMemberTx(ctx, memberRepo, conversation.ID, item.ApplicantUserID); addErr != nil {
+			return addErr
+		}
+
+		systemMessage, recipientUserIDs, eventErr := s.createSystemMessageTx(
+			ctx,
+			conversation,
+			conversationRepo,
+			memberRepo,
+			messageRepo,
+			s.notificationRepoWithTx(tx),
+			model.SystemEventMemberJoined,
+			item.ApplicantUserID,
+			[]uint64{item.ApplicantUserID},
+		)
+		if eventErr != nil {
+			return eventErr
+		}
+		view := messageToView(systemMessage, conversation.ConversationID)
+		event = &ConversationEventView{Message: &view, RecipientUserIDs: recipientUserIDs}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+func (s *ChatService) addOrRestoreUserMemberTx(ctx context.Context, memberRepo repository.MemberRepository, conversationID, userID uint64) error {
+	member, err := memberRepo.GetUserMember(ctx, conversationID, userID)
+	if err == nil {
+		member.Status = model.MemberStatusNormal
+		member.Role = model.MemberRoleMember
+		member.JoinedAt = time.Now()
+		member.MuteUntil = nil
+		return memberRepo.Update(ctx, member)
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	return memberRepo.Create(ctx, &model.ConversationMember{
+		ConversationID: conversationID,
+		MemberType:     model.MemberTypeUser,
+		MemberID:       userID,
+		Role:           model.MemberRoleMember,
+		Status:         model.MemberStatusNormal,
+		JoinedAt:       time.Now(),
+	})
 }
 
 func (s *ChatService) InviteMember(ctx context.Context, input InviteMemberInput, conversationID string) (*ConversationEventView, error) {
@@ -984,6 +1293,96 @@ func toUserMemoryView(item *model.UserMemory) *UserMemoryView {
 		LastUsedAt:           item.LastUsedAt.UnixMilli(),
 		CreatedAt:            item.CreatedAt.UnixMilli(),
 		UpdatedAt:            item.UpdatedAt.UnixMilli(),
+	}
+}
+
+func defaultUserMemorySettingModel(userID uint64) *model.UserMemorySetting {
+	return &model.UserMemorySetting{
+		UserID:          userID,
+		Enabled:         true,
+		Scope:           model.MemoryScopeAllGroups,
+		ConversationIDs: "[]",
+	}
+}
+
+func defaultUserMemorySettingView() *UserMemorySettingView {
+	return &UserMemorySettingView{
+		Enabled:         true,
+		Scope:           model.MemoryScopeAllGroups,
+		ConversationIDs: []string{},
+		UpdatedAt:       0,
+	}
+}
+
+func parseMemoryConversationIDs(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []string{}
+	}
+	var ids []string
+	if err := json.Unmarshal([]byte(raw), &ids); err != nil {
+		return []string{}
+	}
+	return normalizeMemoryConversationIDs(ids)
+}
+
+func normalizeMemoryConversationIDs(items []string) []string {
+	if len(items) == 0 {
+		return []string{}
+	}
+	seen := make(map[string]struct{}, len(items))
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		value := strings.TrimSpace(item)
+		if value == "" {
+			continue
+		}
+		if !strings.HasPrefix(value, "c_") {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		ids = append(ids, value)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func marshalMemoryConversationIDs(items []string) string {
+	ids := normalizeMemoryConversationIDs(items)
+	bytes, err := json.Marshal(ids)
+	if err != nil {
+		return "[]"
+	}
+	return string(bytes)
+}
+
+func toUserMemorySettingView(item *model.UserMemorySetting) *UserMemorySettingView {
+	if item == nil {
+		return defaultUserMemorySettingView()
+	}
+	scope := strings.ToUpper(strings.TrimSpace(item.Scope))
+	if scope == "" {
+		scope = model.MemoryScopeAllGroups
+	}
+	if scope != model.MemoryScopeAllGroups && scope != model.MemoryScopeSelectedGroups {
+		scope = model.MemoryScopeAllGroups
+	}
+	ids := parseMemoryConversationIDs(item.ConversationIDs)
+	if scope == model.MemoryScopeAllGroups {
+		ids = []string{}
+	}
+	updatedAt := int64(0)
+	if !item.UpdatedAt.IsZero() {
+		updatedAt = item.UpdatedAt.UnixMilli()
+	}
+	return &UserMemorySettingView{
+		Enabled:         item.Enabled,
+		Scope:           scope,
+		ConversationIDs: ids,
+		UpdatedAt:       updatedAt,
 	}
 }
 
@@ -1501,6 +1900,10 @@ func (s *ChatService) renderSystemMessageText(ctx context.Context, eventType str
 		return fmt.Sprintf("%s enabled mute all", actorName)
 	case model.SystemEventGroupUnmuted:
 		return fmt.Sprintf("%s disabled mute all", actorName)
+	case model.SystemEventGroupAvatarUpdated:
+		return fmt.Sprintf("%s updated the group avatar", actorName)
+	case model.SystemEventGroupDisbanded:
+		return fmt.Sprintf("%s disbanded this group", actorName)
 	case model.SystemEventAdminAdded:
 		if targetText == "" {
 			return fmt.Sprintf("%s set a new admin", actorName)
@@ -1558,6 +1961,10 @@ func (s *ChatService) renderSystemMessageTextV2(ctx context.Context, eventType s
 		return fmt.Sprintf("%s 开启了全员禁言", actorName)
 	case model.SystemEventGroupUnmuted:
 		return fmt.Sprintf("%s 关闭了全员禁言", actorName)
+	case model.SystemEventGroupAvatarUpdated:
+		return fmt.Sprintf("%s 更新了群头像", actorName)
+	case model.SystemEventGroupDisbanded:
+		return fmt.Sprintf("%s 解散了群聊", actorName)
 	case model.SystemEventAdminAdded:
 		if targetText == "" {
 			return fmt.Sprintf("%s 设置了新管理员", actorName)

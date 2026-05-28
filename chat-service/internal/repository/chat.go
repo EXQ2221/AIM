@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"example.com/aim/chat-service/internal/dal/model"
@@ -90,6 +92,15 @@ type NotificationRepository interface {
 	MarkAllRead(ctx context.Context, userID uint64) error
 }
 
+type GroupJoinRequestRepository interface {
+	WithTx(tx *gorm.DB) GroupJoinRequestRepository
+	Create(ctx context.Context, req *model.GroupJoinRequest) error
+	GetPendingByConversationAndApplicant(ctx context.Context, conversationID, applicantUserID uint64) (*model.GroupJoinRequest, error)
+	GetByID(ctx context.Context, id uint64) (*model.GroupJoinRequest, error)
+	ListPendingByConversationID(ctx context.Context, conversationID uint64, limit int) ([]model.GroupJoinRequest, error)
+	Update(ctx context.Context, req *model.GroupJoinRequest) error
+}
+
 type UserMemoryRepository interface {
 	ListRecentByUserID(ctx context.Context, userID uint64, limit int) ([]model.UserMemory, error)
 	UpsertByHash(ctx context.Context, memory *model.UserMemory) error
@@ -97,6 +108,11 @@ type UserMemoryRepository interface {
 	GetByID(ctx context.Context, userID uint64, memoryID uint64) (*model.UserMemory, error)
 	UpdateContentByID(ctx context.Context, userID uint64, memoryID uint64, content string, memoryHash string, lastUsedAt time.Time) error
 	TouchByIDs(ctx context.Context, userID uint64, ids []uint64, usedAt time.Time) error
+}
+
+type UserMemorySettingRepository interface {
+	GetByUserID(ctx context.Context, userID uint64) (*model.UserMemorySetting, error)
+	Upsert(ctx context.Context, setting *model.UserMemorySetting) error
 }
 
 type GormConversationRepository struct {
@@ -511,6 +527,63 @@ func (r *GormNotificationRepository) MarkAllRead(ctx context.Context, userID uin
 		}).Error
 }
 
+type GormGroupJoinRequestRepository struct {
+	db *gorm.DB
+}
+
+func NewGroupJoinRequestRepository(db *gorm.DB) *GormGroupJoinRequestRepository {
+	return &GormGroupJoinRequestRepository{db: db}
+}
+
+func (r *GormGroupJoinRequestRepository) WithTx(tx *gorm.DB) GroupJoinRequestRepository {
+	return &GormGroupJoinRequestRepository{db: tx}
+}
+
+func (r *GormGroupJoinRequestRepository) Create(ctx context.Context, req *model.GroupJoinRequest) error {
+	return r.db.WithContext(ctx).Create(req).Error
+}
+
+func (r *GormGroupJoinRequestRepository) GetPendingByConversationAndApplicant(ctx context.Context, conversationID, applicantUserID uint64) (*model.GroupJoinRequest, error) {
+	var item model.GroupJoinRequest
+	if err := r.db.WithContext(ctx).
+		Where("conversation_id = ? AND applicant_user_id = ? AND status = ?", conversationID, applicantUserID, model.GroupJoinRequestPending).
+		Order("id DESC").
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *GormGroupJoinRequestRepository) GetByID(ctx context.Context, id uint64) (*model.GroupJoinRequest, error) {
+	var item model.GroupJoinRequest
+	if err := r.db.WithContext(ctx).First(&item, id).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *GormGroupJoinRequestRepository) ListPendingByConversationID(ctx context.Context, conversationID uint64, limit int) ([]model.GroupJoinRequest, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	var items []model.GroupJoinRequest
+	if err := r.db.WithContext(ctx).
+		Where("conversation_id = ? AND status = ?", conversationID, model.GroupJoinRequestPending).
+		Order("id DESC").
+		Limit(limit).
+		Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (r *GormGroupJoinRequestRepository) Update(ctx context.Context, req *model.GroupJoinRequest) error {
+	return r.db.WithContext(ctx).Save(req).Error
+}
+
 type GormUserMemoryRepository struct {
 	db *gorm.DB
 }
@@ -600,3 +673,68 @@ func (r *GormUserMemoryRepository) TouchByIDs(ctx context.Context, userID uint64
 			"updated_at":   time.Now(),
 		}).Error
 }
+
+type GormUserMemorySettingRepository struct {
+	db *gorm.DB
+}
+
+func NewUserMemorySettingRepository(db *gorm.DB) *GormUserMemorySettingRepository {
+	return &GormUserMemorySettingRepository{db: db}
+}
+
+func (r *GormUserMemorySettingRepository) GetByUserID(ctx context.Context, userID uint64) (*model.UserMemorySetting, error) {
+	var item model.UserMemorySetting
+	if err := r.db.WithContext(ctx).
+		Where("user_id = ?", userID).
+		First(&item).Error; err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+func (r *GormUserMemorySettingRepository) Upsert(ctx context.Context, setting *model.UserMemorySetting) error {
+	if setting == nil {
+		return nil
+	}
+	if strings.TrimSpace(setting.Scope) == "" {
+		setting.Scope = model.MemoryScopeAllGroups
+	}
+	if strings.TrimSpace(setting.ConversationIDs) == "" {
+		setting.ConversationIDs = "[]"
+	}
+
+	rawIDs := make([]string, 0)
+	if err := json.Unmarshal([]byte(setting.ConversationIDs), &rawIDs); err == nil {
+		normalized := make([]string, 0, len(rawIDs))
+		seen := make(map[string]struct{}, len(rawIDs))
+		for _, id := range rawIDs {
+			value := strings.TrimSpace(id)
+			if value == "" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			normalized = append(normalized, value)
+		}
+		bytes, marshalErr := json.Marshal(normalized)
+		if marshalErr == nil {
+			setting.ConversationIDs = string(bytes)
+		}
+	}
+
+	return r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "user_id"}},
+			DoUpdates: clause.Assignments(map[string]any{
+				"enabled":          setting.Enabled,
+				"scope":            setting.Scope,
+				"conversation_ids": setting.ConversationIDs,
+				"updated_at":       time.Now(),
+			}),
+		}).
+		Create(setting).Error
+}
+
+var _ UserMemorySettingRepository = (*GormUserMemorySettingRepository)(nil)

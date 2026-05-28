@@ -84,6 +84,37 @@ struct JoinGroupRequest {
   2: string conversation_id
 }
 
+struct GroupJoinRequestInfo {
+  1: i64 request_id
+  2: string conversation_id
+  3: i64 applicant_user_id
+  4: string applicant_name
+  5: string applicant_avatar
+  6: string reason
+  7: string status
+  8: optional i64 reviewed_by
+  9: optional i64 reviewed_at
+  10: i64 created_at
+  11: i64 updated_at
+}
+
+struct ListGroupJoinRequestsRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: optional i32 limit
+}
+
+struct ListGroupJoinRequestsResponse {
+  1: list<GroupJoinRequestInfo> requests
+}
+
+struct ReviewGroupJoinRequestRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: i64 request_id
+  4: string action
+}
+
 struct InviteMemberRequest {
   1: i64 operator_id
   2: string conversation_id
@@ -228,6 +259,17 @@ struct UpdateGroupAnnouncementRequest {
   1: i64 operator_id
   2: string conversation_id
   3: string announcement
+}
+
+struct UpdateGroupAvatarRequest {
+  1: i64 operator_id
+  2: string conversation_id
+  3: string avatar
+}
+
+struct DisbandGroupRequest {
+  1: i64 operator_id
+  2: string conversation_id
 }
 
 struct BotInfo {
@@ -564,6 +606,13 @@ struct UserMemoryInfo {
   8: i64 updated_at
 }
 
+struct UserMemorySettingInfo {
+  1: bool enabled
+  2: string scope
+  3: list<string> conversation_ids
+  4: i64 updated_at
+}
+
 struct WriteUserMemoryResponse {
   1: UserMemoryInfo memory
 }
@@ -587,6 +636,25 @@ struct UpdateUserMemoryResponse {
   1: UserMemoryInfo memory
 }
 
+struct GetUserMemorySettingRequest {
+  1: i64 operator_id
+}
+
+struct GetUserMemorySettingResponse {
+  1: UserMemorySettingInfo setting
+}
+
+struct UpdateUserMemorySettingRequest {
+  1: i64 operator_id
+  2: optional bool enabled
+  3: optional string scope
+  4: optional list<string> conversation_ids
+}
+
+struct UpdateUserMemorySettingResponse {
+  1: UserMemorySettingInfo setting
+}
+
 service ChatService {
   HealthResponse Health(1: HealthRequest req)
   CreateGroupResponse CreateGroup(1: CreateGroupRequest req)
@@ -594,6 +662,8 @@ service ChatService {
   CreateSingleConversationResponse CreateSingleConversation(1: CreateSingleConversationRequest req)
   ListConversationsResponse ListConversations(1: ListConversationsRequest req)
   ConversationEventResponse JoinGroup(1: JoinGroupRequest req)
+  ListGroupJoinRequestsResponse ListGroupJoinRequests(1: ListGroupJoinRequestsRequest req)
+  ConversationEventResponse ReviewGroupJoinRequest(1: ReviewGroupJoinRequestRequest req)
   ConversationEventResponse InviteMember(1: InviteMemberRequest req)
   ConversationEventResponse LeaveGroup(1: LeaveGroupRequest req)
   ConversationEventResponse TransferOwner(1: TransferOwnerRequest req)
@@ -604,6 +674,8 @@ service ChatService {
   ConversationEventResponse RemoveMember(1: RemoveMemberRequest req)
   ConversationEventResponse SetGroupMuteAll(1: SetGroupMuteAllRequest req)
   ConversationEventResponse UpdateGroupAnnouncement(1: UpdateGroupAnnouncementRequest req)
+  ConversationEventResponse UpdateGroupAvatar(1: UpdateGroupAvatarRequest req)
+  ConversationEventResponse DisbandGroup(1: DisbandGroupRequest req)
   ListMembersResponse ListMembers(1: ListMembersRequest req)
   ListMessagesResponse ListMessages(1: ListMessagesRequest req)
   CommonResponse MarkConversationRead(1: MarkConversationReadRequest req)
@@ -634,4 +706,6 @@ service ChatService {
   WriteUserMemoryResponse WriteUserMemory(1: WriteUserMemoryRequest req)
   ListUserMemoriesResponse ListUserMemories(1: ListUserMemoriesRequest req)
   UpdateUserMemoryResponse UpdateUserMemory(1: UpdateUserMemoryRequest req)
+  GetUserMemorySettingResponse GetUserMemorySetting(1: GetUserMemorySettingRequest req)
+  UpdateUserMemorySettingResponse UpdateUserMemorySetting(1: UpdateUserMemorySettingRequest req)
 }

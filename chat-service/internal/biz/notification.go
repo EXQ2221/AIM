@@ -157,7 +157,8 @@ func notificationRecipients(eventType string, actorUserID uint64, targetUserIDs 
 		model.SystemEventMemberUnmuted,
 		model.SystemEventAdminAdded,
 		model.SystemEventAdminRemoved,
-		model.SystemEventOwnerTransferred:
+		model.SystemEventOwnerTransferred,
+		model.SystemEventGroupDisbanded:
 	default:
 		return nil
 	}
@@ -226,6 +227,8 @@ func (s *ChatService) renderNotificationCopy(
 			return title, actorName + " 已将群聊「" + groupName + "」的群主转让给你。"
 		}
 		return title, actorName + " 已将群主转让给 " + targetText + "。"
+	case model.SystemEventGroupDisbanded:
+		return title, actorName + " 已解散群聊「" + groupName + "」。"
 	default:
 		content := strings.TrimSpace(s.renderSystemMessageTextV2(ctx, eventType, actorUserID, targetUserIDs))
 		if content == "" {
@@ -287,6 +290,8 @@ func notificationTitle(eventType string) string {
 		return "管理员变更"
 	case model.SystemEventOwnerTransferred:
 		return "群主变更"
+	case model.SystemEventGroupDisbanded:
+		return "群聊解散"
 	default:
 		return "群通知"
 	}
@@ -297,4 +302,11 @@ func (s *ChatService) notificationRepoWithTx(tx *gorm.DB) repository.Notificatio
 		return nil
 	}
 	return s.NotificationRepo.WithTx(tx)
+}
+
+func (s *ChatService) groupJoinRequestRepoWithTx(tx *gorm.DB) repository.GroupJoinRequestRepository {
+	if s == nil || s.GroupJoinRequestRepo == nil {
+		return nil
+	}
+	return s.GroupJoinRequestRepo.WithTx(tx)
 }

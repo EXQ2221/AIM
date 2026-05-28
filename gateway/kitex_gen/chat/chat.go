@@ -754,6 +754,284 @@ var fieldIDToName_JoinGroupRequest = map[int16]string{
 	2: "conversation_id",
 }
 
+type GroupJoinRequestInfo struct {
+	RequestId       int64  `thrift:"request_id,1" frugal:"1,default,i64" json:"request_id"`
+	ConversationId  string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	ApplicantUserId int64  `thrift:"applicant_user_id,3" frugal:"3,default,i64" json:"applicant_user_id"`
+	ApplicantName   string `thrift:"applicant_name,4" frugal:"4,default,string" json:"applicant_name"`
+	ApplicantAvatar string `thrift:"applicant_avatar,5" frugal:"5,default,string" json:"applicant_avatar"`
+	Reason          string `thrift:"reason,6" frugal:"6,default,string" json:"reason"`
+	Status          string `thrift:"status,7" frugal:"7,default,string" json:"status"`
+	ReviewedBy      *int64 `thrift:"reviewed_by,8,optional" frugal:"8,optional,i64" json:"reviewed_by,omitempty"`
+	ReviewedAt      *int64 `thrift:"reviewed_at,9,optional" frugal:"9,optional,i64" json:"reviewed_at,omitempty"`
+	CreatedAt       int64  `thrift:"created_at,10" frugal:"10,default,i64" json:"created_at"`
+	UpdatedAt       int64  `thrift:"updated_at,11" frugal:"11,default,i64" json:"updated_at"`
+}
+
+func NewGroupJoinRequestInfo() *GroupJoinRequestInfo {
+	return &GroupJoinRequestInfo{}
+}
+
+func (p *GroupJoinRequestInfo) InitDefault() {
+}
+
+func (p *GroupJoinRequestInfo) GetRequestId() (v int64) {
+	return p.RequestId
+}
+
+func (p *GroupJoinRequestInfo) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *GroupJoinRequestInfo) GetApplicantUserId() (v int64) {
+	return p.ApplicantUserId
+}
+
+func (p *GroupJoinRequestInfo) GetApplicantName() (v string) {
+	return p.ApplicantName
+}
+
+func (p *GroupJoinRequestInfo) GetApplicantAvatar() (v string) {
+	return p.ApplicantAvatar
+}
+
+func (p *GroupJoinRequestInfo) GetReason() (v string) {
+	return p.Reason
+}
+
+func (p *GroupJoinRequestInfo) GetStatus() (v string) {
+	return p.Status
+}
+
+var GroupJoinRequestInfo_ReviewedBy_DEFAULT int64
+
+func (p *GroupJoinRequestInfo) GetReviewedBy() (v int64) {
+	if !p.IsSetReviewedBy() {
+		return GroupJoinRequestInfo_ReviewedBy_DEFAULT
+	}
+	return *p.ReviewedBy
+}
+
+var GroupJoinRequestInfo_ReviewedAt_DEFAULT int64
+
+func (p *GroupJoinRequestInfo) GetReviewedAt() (v int64) {
+	if !p.IsSetReviewedAt() {
+		return GroupJoinRequestInfo_ReviewedAt_DEFAULT
+	}
+	return *p.ReviewedAt
+}
+
+func (p *GroupJoinRequestInfo) GetCreatedAt() (v int64) {
+	return p.CreatedAt
+}
+
+func (p *GroupJoinRequestInfo) GetUpdatedAt() (v int64) {
+	return p.UpdatedAt
+}
+func (p *GroupJoinRequestInfo) SetRequestId(val int64) {
+	p.RequestId = val
+}
+func (p *GroupJoinRequestInfo) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *GroupJoinRequestInfo) SetApplicantUserId(val int64) {
+	p.ApplicantUserId = val
+}
+func (p *GroupJoinRequestInfo) SetApplicantName(val string) {
+	p.ApplicantName = val
+}
+func (p *GroupJoinRequestInfo) SetApplicantAvatar(val string) {
+	p.ApplicantAvatar = val
+}
+func (p *GroupJoinRequestInfo) SetReason(val string) {
+	p.Reason = val
+}
+func (p *GroupJoinRequestInfo) SetStatus(val string) {
+	p.Status = val
+}
+func (p *GroupJoinRequestInfo) SetReviewedBy(val *int64) {
+	p.ReviewedBy = val
+}
+func (p *GroupJoinRequestInfo) SetReviewedAt(val *int64) {
+	p.ReviewedAt = val
+}
+func (p *GroupJoinRequestInfo) SetCreatedAt(val int64) {
+	p.CreatedAt = val
+}
+func (p *GroupJoinRequestInfo) SetUpdatedAt(val int64) {
+	p.UpdatedAt = val
+}
+
+func (p *GroupJoinRequestInfo) IsSetReviewedBy() bool {
+	return p.ReviewedBy != nil
+}
+
+func (p *GroupJoinRequestInfo) IsSetReviewedAt() bool {
+	return p.ReviewedAt != nil
+}
+
+func (p *GroupJoinRequestInfo) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("GroupJoinRequestInfo(%+v)", *p)
+}
+
+var fieldIDToName_GroupJoinRequestInfo = map[int16]string{
+	1:  "request_id",
+	2:  "conversation_id",
+	3:  "applicant_user_id",
+	4:  "applicant_name",
+	5:  "applicant_avatar",
+	6:  "reason",
+	7:  "status",
+	8:  "reviewed_by",
+	9:  "reviewed_at",
+	10: "created_at",
+	11: "updated_at",
+}
+
+type ListGroupJoinRequestsRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	Limit          *int32 `thrift:"limit,3,optional" frugal:"3,optional,i32" json:"limit,omitempty"`
+}
+
+func NewListGroupJoinRequestsRequest() *ListGroupJoinRequestsRequest {
+	return &ListGroupJoinRequestsRequest{}
+}
+
+func (p *ListGroupJoinRequestsRequest) InitDefault() {
+}
+
+func (p *ListGroupJoinRequestsRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *ListGroupJoinRequestsRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+var ListGroupJoinRequestsRequest_Limit_DEFAULT int32
+
+func (p *ListGroupJoinRequestsRequest) GetLimit() (v int32) {
+	if !p.IsSetLimit() {
+		return ListGroupJoinRequestsRequest_Limit_DEFAULT
+	}
+	return *p.Limit
+}
+func (p *ListGroupJoinRequestsRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *ListGroupJoinRequestsRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *ListGroupJoinRequestsRequest) SetLimit(val *int32) {
+	p.Limit = val
+}
+
+func (p *ListGroupJoinRequestsRequest) IsSetLimit() bool {
+	return p.Limit != nil
+}
+
+func (p *ListGroupJoinRequestsRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListGroupJoinRequestsRequest(%+v)", *p)
+}
+
+var fieldIDToName_ListGroupJoinRequestsRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "limit",
+}
+
+type ListGroupJoinRequestsResponse struct {
+	Requests []*GroupJoinRequestInfo `thrift:"requests,1" frugal:"1,default,list<GroupJoinRequestInfo>" json:"requests"`
+}
+
+func NewListGroupJoinRequestsResponse() *ListGroupJoinRequestsResponse {
+	return &ListGroupJoinRequestsResponse{}
+}
+
+func (p *ListGroupJoinRequestsResponse) InitDefault() {
+}
+
+func (p *ListGroupJoinRequestsResponse) GetRequests() (v []*GroupJoinRequestInfo) {
+	return p.Requests
+}
+func (p *ListGroupJoinRequestsResponse) SetRequests(val []*GroupJoinRequestInfo) {
+	p.Requests = val
+}
+
+func (p *ListGroupJoinRequestsResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListGroupJoinRequestsResponse(%+v)", *p)
+}
+
+var fieldIDToName_ListGroupJoinRequestsResponse = map[int16]string{
+	1: "requests",
+}
+
+type ReviewGroupJoinRequestRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	RequestId      int64  `thrift:"request_id,3" frugal:"3,default,i64" json:"request_id"`
+	Action         string `thrift:"action,4" frugal:"4,default,string" json:"action"`
+}
+
+func NewReviewGroupJoinRequestRequest() *ReviewGroupJoinRequestRequest {
+	return &ReviewGroupJoinRequestRequest{}
+}
+
+func (p *ReviewGroupJoinRequestRequest) InitDefault() {
+}
+
+func (p *ReviewGroupJoinRequestRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *ReviewGroupJoinRequestRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *ReviewGroupJoinRequestRequest) GetRequestId() (v int64) {
+	return p.RequestId
+}
+
+func (p *ReviewGroupJoinRequestRequest) GetAction() (v string) {
+	return p.Action
+}
+func (p *ReviewGroupJoinRequestRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *ReviewGroupJoinRequestRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *ReviewGroupJoinRequestRequest) SetRequestId(val int64) {
+	p.RequestId = val
+}
+func (p *ReviewGroupJoinRequestRequest) SetAction(val string) {
+	p.Action = val
+}
+
+func (p *ReviewGroupJoinRequestRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ReviewGroupJoinRequestRequest(%+v)", *p)
+}
+
+var fieldIDToName_ReviewGroupJoinRequestRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "request_id",
+	4: "action",
+}
+
 type InviteMemberRequest struct {
 	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
 	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
@@ -2054,6 +2332,91 @@ var fieldIDToName_UpdateGroupAnnouncementRequest = map[int16]string{
 	1: "operator_id",
 	2: "conversation_id",
 	3: "announcement",
+}
+
+type UpdateGroupAvatarRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+	Avatar         string `thrift:"avatar,3" frugal:"3,default,string" json:"avatar"`
+}
+
+func NewUpdateGroupAvatarRequest() *UpdateGroupAvatarRequest {
+	return &UpdateGroupAvatarRequest{}
+}
+
+func (p *UpdateGroupAvatarRequest) InitDefault() {
+}
+
+func (p *UpdateGroupAvatarRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *UpdateGroupAvatarRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+
+func (p *UpdateGroupAvatarRequest) GetAvatar() (v string) {
+	return p.Avatar
+}
+func (p *UpdateGroupAvatarRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *UpdateGroupAvatarRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+func (p *UpdateGroupAvatarRequest) SetAvatar(val string) {
+	p.Avatar = val
+}
+
+func (p *UpdateGroupAvatarRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("UpdateGroupAvatarRequest(%+v)", *p)
+}
+
+var fieldIDToName_UpdateGroupAvatarRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
+	3: "avatar",
+}
+
+type DisbandGroupRequest struct {
+	OperatorId     int64  `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	ConversationId string `thrift:"conversation_id,2" frugal:"2,default,string" json:"conversation_id"`
+}
+
+func NewDisbandGroupRequest() *DisbandGroupRequest {
+	return &DisbandGroupRequest{}
+}
+
+func (p *DisbandGroupRequest) InitDefault() {
+}
+
+func (p *DisbandGroupRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *DisbandGroupRequest) GetConversationId() (v string) {
+	return p.ConversationId
+}
+func (p *DisbandGroupRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *DisbandGroupRequest) SetConversationId(val string) {
+	p.ConversationId = val
+}
+
+func (p *DisbandGroupRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("DisbandGroupRequest(%+v)", *p)
+}
+
+var fieldIDToName_DisbandGroupRequest = map[int16]string{
+	1: "operator_id",
+	2: "conversation_id",
 }
 
 type BotInfo struct {
@@ -4948,6 +5311,62 @@ var fieldIDToName_UserMemoryInfo = map[int16]string{
 	8: "updated_at",
 }
 
+type UserMemorySettingInfo struct {
+	Enabled         bool     `thrift:"enabled,1" frugal:"1,default,bool" json:"enabled"`
+	Scope           string   `thrift:"scope,2" frugal:"2,default,string" json:"scope"`
+	ConversationIds []string `thrift:"conversation_ids,3" frugal:"3,default,list<string>" json:"conversation_ids"`
+	UpdatedAt       int64    `thrift:"updated_at,4" frugal:"4,default,i64" json:"updated_at"`
+}
+
+func NewUserMemorySettingInfo() *UserMemorySettingInfo {
+	return &UserMemorySettingInfo{}
+}
+
+func (p *UserMemorySettingInfo) InitDefault() {
+}
+
+func (p *UserMemorySettingInfo) GetEnabled() (v bool) {
+	return p.Enabled
+}
+
+func (p *UserMemorySettingInfo) GetScope() (v string) {
+	return p.Scope
+}
+
+func (p *UserMemorySettingInfo) GetConversationIds() (v []string) {
+	return p.ConversationIds
+}
+
+func (p *UserMemorySettingInfo) GetUpdatedAt() (v int64) {
+	return p.UpdatedAt
+}
+func (p *UserMemorySettingInfo) SetEnabled(val bool) {
+	p.Enabled = val
+}
+func (p *UserMemorySettingInfo) SetScope(val string) {
+	p.Scope = val
+}
+func (p *UserMemorySettingInfo) SetConversationIds(val []string) {
+	p.ConversationIds = val
+}
+func (p *UserMemorySettingInfo) SetUpdatedAt(val int64) {
+	p.UpdatedAt = val
+}
+
+func (p *UserMemorySettingInfo) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("UserMemorySettingInfo(%+v)", *p)
+}
+
+var fieldIDToName_UserMemorySettingInfo = map[int16]string{
+	1: "enabled",
+	2: "scope",
+	3: "conversation_ids",
+	4: "updated_at",
+}
+
 type WriteUserMemoryResponse struct {
 	Memory *UserMemoryInfo `thrift:"memory,1" frugal:"1,default,UserMemoryInfo" json:"memory"`
 }
@@ -5147,6 +5566,194 @@ var fieldIDToName_UpdateUserMemoryResponse = map[int16]string{
 	1: "memory",
 }
 
+type GetUserMemorySettingRequest struct {
+	OperatorId int64 `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+}
+
+func NewGetUserMemorySettingRequest() *GetUserMemorySettingRequest {
+	return &GetUserMemorySettingRequest{}
+}
+
+func (p *GetUserMemorySettingRequest) InitDefault() {
+}
+
+func (p *GetUserMemorySettingRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+func (p *GetUserMemorySettingRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+
+func (p *GetUserMemorySettingRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("GetUserMemorySettingRequest(%+v)", *p)
+}
+
+var fieldIDToName_GetUserMemorySettingRequest = map[int16]string{
+	1: "operator_id",
+}
+
+type GetUserMemorySettingResponse struct {
+	Setting *UserMemorySettingInfo `thrift:"setting,1" frugal:"1,default,UserMemorySettingInfo" json:"setting"`
+}
+
+func NewGetUserMemorySettingResponse() *GetUserMemorySettingResponse {
+	return &GetUserMemorySettingResponse{}
+}
+
+func (p *GetUserMemorySettingResponse) InitDefault() {
+}
+
+var GetUserMemorySettingResponse_Setting_DEFAULT *UserMemorySettingInfo
+
+func (p *GetUserMemorySettingResponse) GetSetting() (v *UserMemorySettingInfo) {
+	if !p.IsSetSetting() {
+		return GetUserMemorySettingResponse_Setting_DEFAULT
+	}
+	return p.Setting
+}
+func (p *GetUserMemorySettingResponse) SetSetting(val *UserMemorySettingInfo) {
+	p.Setting = val
+}
+
+func (p *GetUserMemorySettingResponse) IsSetSetting() bool {
+	return p.Setting != nil
+}
+
+func (p *GetUserMemorySettingResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("GetUserMemorySettingResponse(%+v)", *p)
+}
+
+var fieldIDToName_GetUserMemorySettingResponse = map[int16]string{
+	1: "setting",
+}
+
+type UpdateUserMemorySettingRequest struct {
+	OperatorId      int64    `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	Enabled         *bool    `thrift:"enabled,2,optional" frugal:"2,optional,bool" json:"enabled,omitempty"`
+	Scope           *string  `thrift:"scope,3,optional" frugal:"3,optional,string" json:"scope,omitempty"`
+	ConversationIds []string `thrift:"conversation_ids,4,optional" frugal:"4,optional,list<string>" json:"conversation_ids,omitempty"`
+}
+
+func NewUpdateUserMemorySettingRequest() *UpdateUserMemorySettingRequest {
+	return &UpdateUserMemorySettingRequest{}
+}
+
+func (p *UpdateUserMemorySettingRequest) InitDefault() {
+}
+
+func (p *UpdateUserMemorySettingRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+var UpdateUserMemorySettingRequest_Enabled_DEFAULT bool
+
+func (p *UpdateUserMemorySettingRequest) GetEnabled() (v bool) {
+	if !p.IsSetEnabled() {
+		return UpdateUserMemorySettingRequest_Enabled_DEFAULT
+	}
+	return *p.Enabled
+}
+
+var UpdateUserMemorySettingRequest_Scope_DEFAULT string
+
+func (p *UpdateUserMemorySettingRequest) GetScope() (v string) {
+	if !p.IsSetScope() {
+		return UpdateUserMemorySettingRequest_Scope_DEFAULT
+	}
+	return *p.Scope
+}
+
+var UpdateUserMemorySettingRequest_ConversationIds_DEFAULT []string
+
+func (p *UpdateUserMemorySettingRequest) GetConversationIds() (v []string) {
+	if !p.IsSetConversationIds() {
+		return UpdateUserMemorySettingRequest_ConversationIds_DEFAULT
+	}
+	return p.ConversationIds
+}
+func (p *UpdateUserMemorySettingRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *UpdateUserMemorySettingRequest) SetEnabled(val *bool) {
+	p.Enabled = val
+}
+func (p *UpdateUserMemorySettingRequest) SetScope(val *string) {
+	p.Scope = val
+}
+func (p *UpdateUserMemorySettingRequest) SetConversationIds(val []string) {
+	p.ConversationIds = val
+}
+
+func (p *UpdateUserMemorySettingRequest) IsSetEnabled() bool {
+	return p.Enabled != nil
+}
+
+func (p *UpdateUserMemorySettingRequest) IsSetScope() bool {
+	return p.Scope != nil
+}
+
+func (p *UpdateUserMemorySettingRequest) IsSetConversationIds() bool {
+	return p.ConversationIds != nil
+}
+
+func (p *UpdateUserMemorySettingRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("UpdateUserMemorySettingRequest(%+v)", *p)
+}
+
+var fieldIDToName_UpdateUserMemorySettingRequest = map[int16]string{
+	1: "operator_id",
+	2: "enabled",
+	3: "scope",
+	4: "conversation_ids",
+}
+
+type UpdateUserMemorySettingResponse struct {
+	Setting *UserMemorySettingInfo `thrift:"setting,1" frugal:"1,default,UserMemorySettingInfo" json:"setting"`
+}
+
+func NewUpdateUserMemorySettingResponse() *UpdateUserMemorySettingResponse {
+	return &UpdateUserMemorySettingResponse{}
+}
+
+func (p *UpdateUserMemorySettingResponse) InitDefault() {
+}
+
+var UpdateUserMemorySettingResponse_Setting_DEFAULT *UserMemorySettingInfo
+
+func (p *UpdateUserMemorySettingResponse) GetSetting() (v *UserMemorySettingInfo) {
+	if !p.IsSetSetting() {
+		return UpdateUserMemorySettingResponse_Setting_DEFAULT
+	}
+	return p.Setting
+}
+func (p *UpdateUserMemorySettingResponse) SetSetting(val *UserMemorySettingInfo) {
+	p.Setting = val
+}
+
+func (p *UpdateUserMemorySettingResponse) IsSetSetting() bool {
+	return p.Setting != nil
+}
+
+func (p *UpdateUserMemorySettingResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("UpdateUserMemorySettingResponse(%+v)", *p)
+}
+
+var fieldIDToName_UpdateUserMemorySettingResponse = map[int16]string{
+	1: "setting",
+}
+
 type ChatService interface {
 	Health(ctx context.Context, req *HealthRequest) (r *HealthResponse, err error)
 
@@ -5159,6 +5766,10 @@ type ChatService interface {
 	ListConversations(ctx context.Context, req *ListConversationsRequest) (r *ListConversationsResponse, err error)
 
 	JoinGroup(ctx context.Context, req *JoinGroupRequest) (r *ConversationEventResponse, err error)
+
+	ListGroupJoinRequests(ctx context.Context, req *ListGroupJoinRequestsRequest) (r *ListGroupJoinRequestsResponse, err error)
+
+	ReviewGroupJoinRequest(ctx context.Context, req *ReviewGroupJoinRequestRequest) (r *ConversationEventResponse, err error)
 
 	InviteMember(ctx context.Context, req *InviteMemberRequest) (r *ConversationEventResponse, err error)
 
@@ -5179,6 +5790,10 @@ type ChatService interface {
 	SetGroupMuteAll(ctx context.Context, req *SetGroupMuteAllRequest) (r *ConversationEventResponse, err error)
 
 	UpdateGroupAnnouncement(ctx context.Context, req *UpdateGroupAnnouncementRequest) (r *ConversationEventResponse, err error)
+
+	UpdateGroupAvatar(ctx context.Context, req *UpdateGroupAvatarRequest) (r *ConversationEventResponse, err error)
+
+	DisbandGroup(ctx context.Context, req *DisbandGroupRequest) (r *ConversationEventResponse, err error)
 
 	ListMembers(ctx context.Context, req *ListMembersRequest) (r *ListMembersResponse, err error)
 
@@ -5239,6 +5854,10 @@ type ChatService interface {
 	ListUserMemories(ctx context.Context, req *ListUserMemoriesRequest) (r *ListUserMemoriesResponse, err error)
 
 	UpdateUserMemory(ctx context.Context, req *UpdateUserMemoryRequest) (r *UpdateUserMemoryResponse, err error)
+
+	GetUserMemorySetting(ctx context.Context, req *GetUserMemorySettingRequest) (r *GetUserMemorySettingResponse, err error)
+
+	UpdateUserMemorySetting(ctx context.Context, req *UpdateUserMemorySettingRequest) (r *UpdateUserMemorySettingResponse, err error)
 }
 
 type ChatServiceHealthArgs struct {
@@ -5694,6 +6313,158 @@ func (p *ChatServiceJoinGroupResult) String() string {
 }
 
 var fieldIDToName_ChatServiceJoinGroupResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceListGroupJoinRequestsArgs struct {
+	Req *ListGroupJoinRequestsRequest `thrift:"req,1" frugal:"1,default,ListGroupJoinRequestsRequest" json:"req"`
+}
+
+func NewChatServiceListGroupJoinRequestsArgs() *ChatServiceListGroupJoinRequestsArgs {
+	return &ChatServiceListGroupJoinRequestsArgs{}
+}
+
+func (p *ChatServiceListGroupJoinRequestsArgs) InitDefault() {
+}
+
+var ChatServiceListGroupJoinRequestsArgs_Req_DEFAULT *ListGroupJoinRequestsRequest
+
+func (p *ChatServiceListGroupJoinRequestsArgs) GetReq() (v *ListGroupJoinRequestsRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceListGroupJoinRequestsArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceListGroupJoinRequestsArgs) SetReq(val *ListGroupJoinRequestsRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceListGroupJoinRequestsArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceListGroupJoinRequestsArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListGroupJoinRequestsArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListGroupJoinRequestsArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceListGroupJoinRequestsResult struct {
+	Success *ListGroupJoinRequestsResponse `thrift:"success,0,optional" frugal:"0,optional,ListGroupJoinRequestsResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceListGroupJoinRequestsResult() *ChatServiceListGroupJoinRequestsResult {
+	return &ChatServiceListGroupJoinRequestsResult{}
+}
+
+func (p *ChatServiceListGroupJoinRequestsResult) InitDefault() {
+}
+
+var ChatServiceListGroupJoinRequestsResult_Success_DEFAULT *ListGroupJoinRequestsResponse
+
+func (p *ChatServiceListGroupJoinRequestsResult) GetSuccess() (v *ListGroupJoinRequestsResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceListGroupJoinRequestsResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceListGroupJoinRequestsResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ListGroupJoinRequestsResponse)
+}
+
+func (p *ChatServiceListGroupJoinRequestsResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceListGroupJoinRequestsResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceListGroupJoinRequestsResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceListGroupJoinRequestsResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceReviewGroupJoinRequestArgs struct {
+	Req *ReviewGroupJoinRequestRequest `thrift:"req,1" frugal:"1,default,ReviewGroupJoinRequestRequest" json:"req"`
+}
+
+func NewChatServiceReviewGroupJoinRequestArgs() *ChatServiceReviewGroupJoinRequestArgs {
+	return &ChatServiceReviewGroupJoinRequestArgs{}
+}
+
+func (p *ChatServiceReviewGroupJoinRequestArgs) InitDefault() {
+}
+
+var ChatServiceReviewGroupJoinRequestArgs_Req_DEFAULT *ReviewGroupJoinRequestRequest
+
+func (p *ChatServiceReviewGroupJoinRequestArgs) GetReq() (v *ReviewGroupJoinRequestRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceReviewGroupJoinRequestArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceReviewGroupJoinRequestArgs) SetReq(val *ReviewGroupJoinRequestRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceReviewGroupJoinRequestArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceReviewGroupJoinRequestArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceReviewGroupJoinRequestArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceReviewGroupJoinRequestArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceReviewGroupJoinRequestResult struct {
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceReviewGroupJoinRequestResult() *ChatServiceReviewGroupJoinRequestResult {
+	return &ChatServiceReviewGroupJoinRequestResult{}
+}
+
+func (p *ChatServiceReviewGroupJoinRequestResult) InitDefault() {
+}
+
+var ChatServiceReviewGroupJoinRequestResult_Success_DEFAULT *ConversationEventResponse
+
+func (p *ChatServiceReviewGroupJoinRequestResult) GetSuccess() (v *ConversationEventResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceReviewGroupJoinRequestResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceReviewGroupJoinRequestResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConversationEventResponse)
+}
+
+func (p *ChatServiceReviewGroupJoinRequestResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceReviewGroupJoinRequestResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceReviewGroupJoinRequestResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceReviewGroupJoinRequestResult = map[int16]string{
 	0: "success",
 }
 
@@ -6454,6 +7225,158 @@ func (p *ChatServiceUpdateGroupAnnouncementResult) String() string {
 }
 
 var fieldIDToName_ChatServiceUpdateGroupAnnouncementResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceUpdateGroupAvatarArgs struct {
+	Req *UpdateGroupAvatarRequest `thrift:"req,1" frugal:"1,default,UpdateGroupAvatarRequest" json:"req"`
+}
+
+func NewChatServiceUpdateGroupAvatarArgs() *ChatServiceUpdateGroupAvatarArgs {
+	return &ChatServiceUpdateGroupAvatarArgs{}
+}
+
+func (p *ChatServiceUpdateGroupAvatarArgs) InitDefault() {
+}
+
+var ChatServiceUpdateGroupAvatarArgs_Req_DEFAULT *UpdateGroupAvatarRequest
+
+func (p *ChatServiceUpdateGroupAvatarArgs) GetReq() (v *UpdateGroupAvatarRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceUpdateGroupAvatarArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceUpdateGroupAvatarArgs) SetReq(val *UpdateGroupAvatarRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceUpdateGroupAvatarArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceUpdateGroupAvatarArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUpdateGroupAvatarArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUpdateGroupAvatarArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceUpdateGroupAvatarResult struct {
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceUpdateGroupAvatarResult() *ChatServiceUpdateGroupAvatarResult {
+	return &ChatServiceUpdateGroupAvatarResult{}
+}
+
+func (p *ChatServiceUpdateGroupAvatarResult) InitDefault() {
+}
+
+var ChatServiceUpdateGroupAvatarResult_Success_DEFAULT *ConversationEventResponse
+
+func (p *ChatServiceUpdateGroupAvatarResult) GetSuccess() (v *ConversationEventResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceUpdateGroupAvatarResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceUpdateGroupAvatarResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConversationEventResponse)
+}
+
+func (p *ChatServiceUpdateGroupAvatarResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceUpdateGroupAvatarResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUpdateGroupAvatarResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUpdateGroupAvatarResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceDisbandGroupArgs struct {
+	Req *DisbandGroupRequest `thrift:"req,1" frugal:"1,default,DisbandGroupRequest" json:"req"`
+}
+
+func NewChatServiceDisbandGroupArgs() *ChatServiceDisbandGroupArgs {
+	return &ChatServiceDisbandGroupArgs{}
+}
+
+func (p *ChatServiceDisbandGroupArgs) InitDefault() {
+}
+
+var ChatServiceDisbandGroupArgs_Req_DEFAULT *DisbandGroupRequest
+
+func (p *ChatServiceDisbandGroupArgs) GetReq() (v *DisbandGroupRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceDisbandGroupArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceDisbandGroupArgs) SetReq(val *DisbandGroupRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceDisbandGroupArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceDisbandGroupArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceDisbandGroupArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceDisbandGroupArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceDisbandGroupResult struct {
+	Success *ConversationEventResponse `thrift:"success,0,optional" frugal:"0,optional,ConversationEventResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceDisbandGroupResult() *ChatServiceDisbandGroupResult {
+	return &ChatServiceDisbandGroupResult{}
+}
+
+func (p *ChatServiceDisbandGroupResult) InitDefault() {
+}
+
+var ChatServiceDisbandGroupResult_Success_DEFAULT *ConversationEventResponse
+
+func (p *ChatServiceDisbandGroupResult) GetSuccess() (v *ConversationEventResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceDisbandGroupResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceDisbandGroupResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ConversationEventResponse)
+}
+
+func (p *ChatServiceDisbandGroupResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceDisbandGroupResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceDisbandGroupResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceDisbandGroupResult = map[int16]string{
 	0: "success",
 }
 
@@ -8734,5 +9657,157 @@ func (p *ChatServiceUpdateUserMemoryResult) String() string {
 }
 
 var fieldIDToName_ChatServiceUpdateUserMemoryResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceGetUserMemorySettingArgs struct {
+	Req *GetUserMemorySettingRequest `thrift:"req,1" frugal:"1,default,GetUserMemorySettingRequest" json:"req"`
+}
+
+func NewChatServiceGetUserMemorySettingArgs() *ChatServiceGetUserMemorySettingArgs {
+	return &ChatServiceGetUserMemorySettingArgs{}
+}
+
+func (p *ChatServiceGetUserMemorySettingArgs) InitDefault() {
+}
+
+var ChatServiceGetUserMemorySettingArgs_Req_DEFAULT *GetUserMemorySettingRequest
+
+func (p *ChatServiceGetUserMemorySettingArgs) GetReq() (v *GetUserMemorySettingRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceGetUserMemorySettingArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceGetUserMemorySettingArgs) SetReq(val *GetUserMemorySettingRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceGetUserMemorySettingArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceGetUserMemorySettingArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceGetUserMemorySettingArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceGetUserMemorySettingArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceGetUserMemorySettingResult struct {
+	Success *GetUserMemorySettingResponse `thrift:"success,0,optional" frugal:"0,optional,GetUserMemorySettingResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceGetUserMemorySettingResult() *ChatServiceGetUserMemorySettingResult {
+	return &ChatServiceGetUserMemorySettingResult{}
+}
+
+func (p *ChatServiceGetUserMemorySettingResult) InitDefault() {
+}
+
+var ChatServiceGetUserMemorySettingResult_Success_DEFAULT *GetUserMemorySettingResponse
+
+func (p *ChatServiceGetUserMemorySettingResult) GetSuccess() (v *GetUserMemorySettingResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceGetUserMemorySettingResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceGetUserMemorySettingResult) SetSuccess(x interface{}) {
+	p.Success = x.(*GetUserMemorySettingResponse)
+}
+
+func (p *ChatServiceGetUserMemorySettingResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceGetUserMemorySettingResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceGetUserMemorySettingResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceGetUserMemorySettingResult = map[int16]string{
+	0: "success",
+}
+
+type ChatServiceUpdateUserMemorySettingArgs struct {
+	Req *UpdateUserMemorySettingRequest `thrift:"req,1" frugal:"1,default,UpdateUserMemorySettingRequest" json:"req"`
+}
+
+func NewChatServiceUpdateUserMemorySettingArgs() *ChatServiceUpdateUserMemorySettingArgs {
+	return &ChatServiceUpdateUserMemorySettingArgs{}
+}
+
+func (p *ChatServiceUpdateUserMemorySettingArgs) InitDefault() {
+}
+
+var ChatServiceUpdateUserMemorySettingArgs_Req_DEFAULT *UpdateUserMemorySettingRequest
+
+func (p *ChatServiceUpdateUserMemorySettingArgs) GetReq() (v *UpdateUserMemorySettingRequest) {
+	if !p.IsSetReq() {
+		return ChatServiceUpdateUserMemorySettingArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *ChatServiceUpdateUserMemorySettingArgs) SetReq(val *UpdateUserMemorySettingRequest) {
+	p.Req = val
+}
+
+func (p *ChatServiceUpdateUserMemorySettingArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *ChatServiceUpdateUserMemorySettingArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUpdateUserMemorySettingArgs(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUpdateUserMemorySettingArgs = map[int16]string{
+	1: "req",
+}
+
+type ChatServiceUpdateUserMemorySettingResult struct {
+	Success *UpdateUserMemorySettingResponse `thrift:"success,0,optional" frugal:"0,optional,UpdateUserMemorySettingResponse" json:"success,omitempty"`
+}
+
+func NewChatServiceUpdateUserMemorySettingResult() *ChatServiceUpdateUserMemorySettingResult {
+	return &ChatServiceUpdateUserMemorySettingResult{}
+}
+
+func (p *ChatServiceUpdateUserMemorySettingResult) InitDefault() {
+}
+
+var ChatServiceUpdateUserMemorySettingResult_Success_DEFAULT *UpdateUserMemorySettingResponse
+
+func (p *ChatServiceUpdateUserMemorySettingResult) GetSuccess() (v *UpdateUserMemorySettingResponse) {
+	if !p.IsSetSuccess() {
+		return ChatServiceUpdateUserMemorySettingResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *ChatServiceUpdateUserMemorySettingResult) SetSuccess(x interface{}) {
+	p.Success = x.(*UpdateUserMemorySettingResponse)
+}
+
+func (p *ChatServiceUpdateUserMemorySettingResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *ChatServiceUpdateUserMemorySettingResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ChatServiceUpdateUserMemorySettingResult(%+v)", *p)
+}
+
+var fieldIDToName_ChatServiceUpdateUserMemorySettingResult = map[int16]string{
 	0: "success",
 }
