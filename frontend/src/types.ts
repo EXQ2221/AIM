@@ -149,6 +149,25 @@ export type GroupInfo = {
   createdAt: number;
 };
 
+export type JoinGroupResponse = {
+  message: string;
+  pending: boolean;
+};
+
+export type GroupJoinRequestInfo = {
+  requestId: number;
+  conversationId: string;
+  applicantUserId: number;
+  applicantName: string;
+  applicantAvatar: string;
+  reason: string;
+  status: string;
+  reviewedBy?: number | null;
+  reviewedAt?: number | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type MessageType = "TEXT" | "IMAGE" | "FILE" | "VOICE" | "SYSTEM" | "BOT_REPLY" | string;
 
 export type TextMessageContent = {
@@ -317,7 +336,7 @@ export type WebSocketEvent =
       data?: unknown;
     };
 
-export type MobilePane = "conversations" | "chat" | "friends" | "members" | "account" | "bots";
+export type MobilePane = "conversations" | "chat" | "friends" | "members" | "knowledge" | "account" | "bots";
 
 export type BotInfo = {
   botId: number;
@@ -407,6 +426,13 @@ export type UserMemoryInfo = {
   sourceMessageId?: number | null;
   lastUsedAt: number;
   createdAt: number;
+  updatedAt: number;
+};
+
+export type UserMemorySettingInfo = {
+  enabled: boolean;
+  scope: "ALL_GROUPS" | "SELECTED_GROUPS" | string;
+  conversationIds: string[];
   updatedAt: number;
 };
 

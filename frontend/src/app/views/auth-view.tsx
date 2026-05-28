@@ -12,8 +12,8 @@ export function AuthView({
   onRegister: (input: { aim_id: string; email: string; nickname: string; password: string }) => Promise<void>;
 }) {
   const [mode, setMode] = useState<AuthMode>("login");
-  const [email, setEmail] = useState("demo@example.com");
-  const [password, setPassword] = useState("Password123!");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [aimID, setAimID] = useState("");
   const [nickname, setNickname] = useState("");
 
@@ -34,21 +34,20 @@ export function AuthView({
           <div className="brand-mark">A</div>
           <div>
             <h1>AIM</h1>
-            <p>P0/P1 Chat Console</p>
           </div>
         </div>
         <div className="auth-signal">
           <div className="signal-line">
             <ShieldCheck size={18} />
-            <span>Gateway Cookie Auth</span>
+            <span>AI助手</span>
           </div>
           <div className="signal-line">
             <UsersRound size={18} />
-            <span>Group Conversations</span>
+            <span>群聊</span>
           </div>
           <div className="signal-line">
             <MessageCircle size={18} />
-            <span>Text Message History</span>
+            <span>历史记录</span>
           </div>
         </div>
       </section>
@@ -75,10 +74,10 @@ export function AuthView({
             </>
           )}
           <Field icon={<Mail size={18}></Mail>} label="邮箱">
-            <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="demo@example.com" />
+            <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="请输入邮箱" />
           </Field>
           <Field icon={<LockKeyhole size={18}></LockKeyhole>} label="密码">
-            <input required type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password123!" />
+            <input required type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="请输入密码" />
           </Field>
           <button className="primary-action" disabled={busy} type="submit">
             {busy ? <Loader2 className="spin" size={18} /> : <CheckCircle2 size={18} />}

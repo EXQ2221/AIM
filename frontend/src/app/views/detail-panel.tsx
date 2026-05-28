@@ -19,6 +19,7 @@
   X
 } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { api } from "../../api";
 import type {
   AICallLogInfo,
   AICallLogQuotaInfo,
@@ -29,12 +30,14 @@ import type {
   FriendInfo,
   FriendRequestInfo,
   GroupInfo,
+  GroupJoinRequestInfo,
   KnowledgeBaseInfo,
   KnowledgeDocumentInfo,
   KnowledgeSearchChunkInfo,
   MemberInfo,
   SessionInfo,
   UserMemoryInfo,
+  UserMemorySettingInfo,
   UserInfo
 } from "../../types";
 import { AvatarUploader } from "../avatar-uploader";
@@ -71,6 +74,7 @@ function isTextImportFile(file: File | null) {
 
 export function DetailPanel({
   active,
+  mobileManageMode,
   tab,
   user,
   friendGroups,
@@ -89,6 +93,8 @@ export function DetailPanel({
   selectedConversationType,
   selectedGroupInfo,
   currentMember,
+  groupJoinRequests,
+  loadingGroupJoinRequests,
   availableBots,
   customBots,
   conversationBots,
@@ -104,7 +110,9 @@ export function DetailPanel({
   loadingKnowledge,
   knowledgeBusy,
   userMemories,
+  userMemorySetting,
   loadingUserMemories,
+  loadingUserMemorySetting,
   onTabChange,
   onCreateFriendGroup,
   onAddFriend,
@@ -127,6 +135,10 @@ export function DetailPanel({
   onRemoveMember,
   onSetGroupMuteAll,
   onUpdateGroupAnnouncement,
+  onUpdateGroupAvatar,
+  onDisbandGroup,
+  onRefreshGroupJoinRequests,
+  onReviewGroupJoinRequest,
   onAddBot,
   onRemoveBot,
   onCreateCustomBot,
@@ -142,13 +154,19 @@ export function DetailPanel({
   onBindConversationKnowledgeBase,
   onUnbindConversationKnowledgeBase,
   onRefreshKnowledgePanelData,
+  onSelectConversation,
+  onLoadConversationKnowledgeBases,
+  onLoadKnowledgeDocuments,
   onRefreshUserMemories,
+  onRefreshUserMemorySetting,
   onWriteUserMemory,
   onUpdateUserMemory,
+  onUpdateUserMemorySetting,
   onMention,
   onClose
 }: {
   active: boolean;
+  mobileManageMode?: boolean;
   tab: DetailTab;
   user: UserInfo;
   friendGroups: FriendGroupInfo[];
@@ -167,6 +185,8 @@ export function DetailPanel({
   selectedConversationType: ConversationInfo["type"] | null;
   selectedGroupInfo: GroupInfo | null;
   currentMember: MemberInfo | null;
+  groupJoinRequests: GroupJoinRequestInfo[];
+  loadingGroupJoinRequests: boolean;
   availableBots: BotInfo[];
   customBots: BotInfo[];
   conversationBots: BotInfo[];
@@ -182,7 +202,9 @@ export function DetailPanel({
   loadingKnowledge: boolean;
   knowledgeBusy: boolean;
   userMemories: UserMemoryInfo[];
+  userMemorySetting: UserMemorySettingInfo;
   loadingUserMemories: boolean;
+  loadingUserMemorySetting: boolean;
   onTabChange: (tab: DetailTab) => void;
   onCreateFriendGroup: (name: string) => Promise<void>;
   onAddFriend: (input: { targetAimId: string; remark: string; groupId: number | null }) => Promise<void>;
@@ -205,6 +227,10 @@ export function DetailPanel({
   onRemoveMember: (targetUserId: number) => Promise<void>;
   onSetGroupMuteAll: (muteAll: boolean) => Promise<void>;
   onUpdateGroupAnnouncement: (announcement: string) => Promise<void>;
+  onUpdateGroupAvatar: (avatarUrl: string) => Promise<void>;
+  onDisbandGroup: () => Promise<void>;
+  onRefreshGroupJoinRequests: () => Promise<void>;
+  onReviewGroupJoinRequest: (requestId: number, action: "APPROVE" | "REJECT") => Promise<void>;
   onAddBot: (input: {
     botId: number;
     displayNameOverride?: string;
@@ -251,35 +277,44 @@ export function DetailPanel({
   }) => Promise<void>;
   onSearchKnowledgeBase: (input: { knowledgeBaseId: number; query: string; topK: number }) => Promise<void>;
   onDeleteKnowledgeDocument: (knowledgeBaseId: number, documentId: number) => Promise<void>;
-  onBindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
-  onUnbindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
+  onBindConversationKnowledgeBase: (input: { conversationId: string; knowledgeBaseId: number }) => Promise<void>;
+  onUnbindConversationKnowledgeBase: (input: { conversationId: string; knowledgeBaseId: number }) => Promise<void>;
   onRefreshKnowledgePanelData: () => Promise<void>;
+  onSelectConversation: (conversationId: string) => void;
+  onLoadConversationKnowledgeBases: (conversationId: string) => Promise<ConversationKnowledgeBaseInfo[]>;
+  onLoadKnowledgeDocuments: (knowledgeBaseId: number) => Promise<KnowledgeDocumentInfo[]>;
   onRefreshUserMemories: () => Promise<void>;
+  onRefreshUserMemorySetting: () => Promise<void>;
   onWriteUserMemory: (content: string) => Promise<void>;
   onUpdateUserMemory: (memoryId: number, content: string) => Promise<void>;
+  onUpdateUserMemorySetting: (input: {
+    enabled?: boolean;
+    scope?: "ALL_GROUPS" | "SELECTED_GROUPS" | string;
+    conversationIds?: string[];
+  }) => Promise<void>;
   onMention: (mentionTarget: string) => void;
   onClose: () => void;
 }) {
   return (
-    <aside className={cx("pane detail-pane", active && "mobile-active")}>
+    <aside className={cx("pane detail-pane", active && "mobile-active", mobileManageMode && "mobile-manage-mode")}>
       <header className="detail-header">
         <div className="segmented small-tabs tabs-six">
-          <button className={tab === "friends" ? "active" : ""} type="button" onClick={() => onTabChange("friends")}>
-            好友
+          <button className={cx("tab-friends", tab === "friends" && "active")} type="button" onClick={() => onTabChange("friends")}>
+            联系人
           </button>
-          <button className={tab === "members" ? "active" : ""} type="button" onClick={() => onTabChange("members")}>
+          <button className={cx("tab-members", tab === "members" && "active")} type="button" onClick={() => onTabChange("members")}>
             成员
           </button>
-          <button className={tab === "bots" ? "active" : ""} type="button" onClick={() => onTabChange("bots")}>
+          <button className={cx("tab-bots", tab === "bots" && "active")} type="button" onClick={() => onTabChange("bots")}>
             AI 助手
           </button>
-          <button className={tab === "knowledge" ? "active" : ""} type="button" onClick={() => onTabChange("knowledge")}>
+          <button className={cx("tab-knowledge", tab === "knowledge" && "active")} type="button" onClick={() => onTabChange("knowledge")}>
             知识库
           </button>
-          <button disabled={!selectedConversationId} className={tab === "logs" ? "active" : ""} type="button" onClick={() => onTabChange("logs")}>
+          <button disabled={!selectedConversationId} className={cx("tab-logs", tab === "logs" && "active")} type="button" onClick={() => onTabChange("logs")}>
             日志
           </button>
-          <button className={tab === "account" ? "active" : ""} type="button" onClick={() => onTabChange("account")}>
+          <button className={cx("tab-account", tab === "account" && "active")} type="button" onClick={() => onTabChange("account")}>
 账号
           </button>
         </div>
@@ -291,15 +326,21 @@ export function DetailPanel({
       {tab === "friends" ? (
         <FriendsView
           busy={busy}
+          selectedConversation={selectedConversation}
+          currentMember={currentMember}
           friendGroups={friendGroups}
           friends={friends}
           friendRequests={friendRequests}
+          groupJoinRequests={groupJoinRequests}
+          loadingGroupJoinRequests={loadingGroupJoinRequests}
           onOpenChatWithFriend={onOpenChatWithFriend}
           onCreateFriendGroup={onCreateFriendGroup}
           onAddFriend={onAddFriend}
           onRespondFriendRequest={onRespondFriendRequest}
           onUpdateFriend={onUpdateFriend}
           onDeleteFriend={onDeleteFriend}
+          onRefreshGroupJoinRequests={onRefreshGroupJoinRequests}
+          onReviewGroupJoinRequest={onReviewGroupJoinRequest}
         />
       ) : tab === "members" ? (
         <MembersViewClean
@@ -317,6 +358,8 @@ export function DetailPanel({
           onRemoveMember={onRemoveMember}
           onSetGroupMuteAll={onSetGroupMuteAll}
           onUpdateGroupAnnouncement={onUpdateGroupAnnouncement}
+          onUpdateGroupAvatar={onUpdateGroupAvatar}
+          onDisbandGroup={onDisbandGroup}
         />
       ) : tab === "bots" ? (
         <BotPanelClean
@@ -346,6 +389,8 @@ export function DetailPanel({
         />
       ) : tab === "knowledge" ? (
         <KnowledgeBasePanel
+          mobileManageMode={mobileManageMode}
+          conversations={conversations}
           selectedConversationId={selectedConversationId}
           selectedConversationType={selectedConversationType}
           currentMember={currentMember}
@@ -364,6 +409,9 @@ export function DetailPanel({
           onBindConversationKnowledgeBase={onBindConversationKnowledgeBase}
           onUnbindConversationKnowledgeBase={onUnbindConversationKnowledgeBase}
           onRefresh={onRefreshKnowledgePanelData}
+          onSelectConversation={onSelectConversation}
+          onLoadConversationKnowledgeBases={onLoadConversationKnowledgeBases}
+          onLoadKnowledgeDocuments={onLoadKnowledgeDocuments}
         />
       ) : (
         <AccountView
@@ -375,7 +423,10 @@ export function DetailPanel({
           notificationsEnabled={notificationsEnabled}
           invisibleMode={invisibleMode}
           userMemories={userMemories}
+          userMemorySetting={userMemorySetting}
           loadingUserMemories={loadingUserMemories}
+          loadingUserMemorySetting={loadingUserMemorySetting}
+          conversations={conversations}
           onRefreshSessions={onRefreshSessions}
           onLogout={onLogout}
           onLogoutAll={onLogoutAll}
@@ -384,8 +435,10 @@ export function DetailPanel({
           onToggleNotifications={onToggleNotifications}
           onToggleInvisibleMode={onToggleInvisibleMode}
           onRefreshUserMemories={onRefreshUserMemories}
+          onRefreshUserMemorySetting={onRefreshUserMemorySetting}
           onWriteUserMemory={onWriteUserMemory}
           onUpdateUserMemory={onUpdateUserMemory}
+          onUpdateUserMemorySetting={onUpdateUserMemorySetting}
         />
       )}
     </aside>
@@ -393,6 +446,8 @@ export function DetailPanel({
 }
 
 function KnowledgeBasePanel({
+  mobileManageMode,
+  conversations,
   selectedConversationId,
   selectedConversationType,
   currentMember,
@@ -410,8 +465,13 @@ function KnowledgeBasePanel({
   onDeleteKnowledgeDocument,
   onBindConversationKnowledgeBase,
   onUnbindConversationKnowledgeBase,
-  onRefresh
+  onRefresh,
+  onSelectConversation,
+  onLoadConversationKnowledgeBases,
+  onLoadKnowledgeDocuments
 }: {
+  mobileManageMode?: boolean;
+  conversations: ConversationInfo[];
   selectedConversationId: string | null;
   selectedConversationType: ConversationInfo["type"] | null;
   currentMember: MemberInfo | null;
@@ -433,9 +493,12 @@ function KnowledgeBasePanel({
   }) => Promise<void>;
   onSearchKnowledgeBase: (input: { knowledgeBaseId: number; query: string; topK: number }) => Promise<void>;
   onDeleteKnowledgeDocument: (knowledgeBaseId: number, documentId: number) => Promise<void>;
-  onBindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
-  onUnbindConversationKnowledgeBase: (knowledgeBaseId: number) => Promise<void>;
+  onBindConversationKnowledgeBase: (input: { conversationId: string; knowledgeBaseId: number }) => Promise<void>;
+  onUnbindConversationKnowledgeBase: (input: { conversationId: string; knowledgeBaseId: number }) => Promise<void>;
   onRefresh: () => Promise<void>;
+  onSelectConversation: (conversationId: string) => void;
+  onLoadConversationKnowledgeBases: (conversationId: string) => Promise<ConversationKnowledgeBaseInfo[]>;
+  onLoadKnowledgeDocuments: (knowledgeBaseId: number) => Promise<KnowledgeDocumentInfo[]>;
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -445,14 +508,42 @@ function KnowledgeBasePanel({
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(5);
   const [bindKnowledgeBaseId, setBindKnowledgeBaseId] = useState<number | "">("");
+  const [createExpanded, setCreateExpanded] = useState(false);
+  const [selectExpanded, setSelectExpanded] = useState(false);
+  const [importExpanded, setImportExpanded] = useState(false);
+  const [documentExpanded, setDocumentExpanded] = useState(false);
+  const [searchExpanded, setSearchExpanded] = useState(false);
+  const [bindingExpanded, setBindingExpanded] = useState(false);
+  const [bindingConversationId, setBindingConversationId] = useState<string>("");
+  const [mobileViewingConversationId, setMobileViewingConversationId] = useState<string>("");
+  const [mobileBindings, setMobileBindings] = useState<ConversationKnowledgeBaseInfo[]>([]);
+  const [mobileKnowledgeDocuments, setMobileKnowledgeDocuments] = useState<KnowledgeDocumentInfo[]>([]);
+  const [mobileLoadingBindings, setMobileLoadingBindings] = useState(false);
+  const [mobileLoadingDocuments, setMobileLoadingDocuments] = useState(false);
+  const [mobileDocumentError, setMobileDocumentError] = useState("");
 
-  const canManageBinding =
-    selectedConversationType === "GROUP" && (currentMember?.role === "OWNER" || currentMember?.role === "ADMIN");
   const visibleKnowledgeDocuments = knowledgeDocuments.filter((item) => (item.status || "").toUpperCase() !== "FAILED");
   const failedKnowledgeDocuments = knowledgeDocuments.filter((item) => (item.status || "").toUpperCase() === "FAILED");
-  const enabledBindings = conversationKnowledgeBases.filter((item) => item.enabled);
+  const groupConversations = useMemo(
+    () => conversations.filter((item) => item.type === "GROUP"),
+    [conversations]
+  );
+  const enabledBindings = useMemo(
+    () =>
+      (bindingConversationId === selectedConversationId
+        ? conversationKnowledgeBases
+        : mobileBindings
+      ).filter((item) => item.enabled),
+    [bindingConversationId, conversationKnowledgeBases, mobileBindings, selectedConversationId]
+  );
   const enabledBindingIds = new Set(enabledBindings.map((item) => item.knowledgeBaseId));
   const bindCandidates = knowledgeBases.filter((item) => !enabledBindingIds.has(item.knowledgeBaseId));
+  const bindingConversationType = useMemo(
+    () => groupConversations.find((item) => item.conversationId === bindingConversationId)?.type ?? null,
+    [bindingConversationId, groupConversations]
+  );
+  const canManageBindingForSelection =
+    bindingConversationType === "GROUP" && (currentMember?.role === "OWNER" || currentMember?.role === "ADMIN");
 
   useEffect(() => {
     if (bindCandidates.length === 0) {
@@ -463,6 +554,117 @@ function KnowledgeBasePanel({
       setBindKnowledgeBaseId(bindCandidates[0].knowledgeBaseId);
     }
   }, [bindCandidates, bindKnowledgeBaseId]);
+
+  useEffect(() => {
+    if (selectedConversationId && selectedConversationType === "GROUP") {
+      setBindingConversationId(selectedConversationId);
+      return;
+    }
+    if (groupConversations.length > 0) {
+      setBindingConversationId((current) =>
+        current && groupConversations.some((item) => item.conversationId === current)
+          ? current
+          : groupConversations[0].conversationId
+      );
+      return;
+    }
+    setBindingConversationId("");
+  }, [groupConversations, selectedConversationId, selectedConversationType]);
+
+  useEffect(() => {
+    if (!mobileManageMode) {
+      return;
+    }
+    if (!selectedConversationId || selectedConversationType !== "GROUP") {
+      setMobileViewingConversationId("");
+      setMobileBindings([]);
+      setMobileKnowledgeDocuments([]);
+      setMobileDocumentError("");
+      return;
+    }
+    setMobileViewingConversationId(selectedConversationId);
+  }, [mobileManageMode, selectedConversationId, selectedConversationType]);
+
+  useEffect(() => {
+    if (!mobileManageMode || !mobileViewingConversationId) {
+      return;
+    }
+    let active = true;
+    setMobileLoadingBindings(true);
+    setMobileDocumentError("");
+    void onLoadConversationKnowledgeBases(mobileViewingConversationId)
+      .then((items) => {
+        if (!active) return;
+        const next = items.filter((item) => item.enabled);
+        setMobileBindings(next);
+      })
+      .catch(() => {
+        if (!active) return;
+        setMobileBindings([]);
+      })
+      .finally(() => {
+        if (active) {
+          setMobileLoadingBindings(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [mobileManageMode, mobileViewingConversationId, onLoadConversationKnowledgeBases]);
+
+  useEffect(() => {
+    if (!bindingConversationId || bindingConversationId === selectedConversationId) {
+      if (bindingConversationId !== selectedConversationId) {
+        setMobileBindings([]);
+      }
+      return;
+    }
+    let active = true;
+    void onLoadConversationKnowledgeBases(bindingConversationId)
+      .then((items) => {
+        if (!active) return;
+        setMobileBindings(items);
+      })
+      .catch(() => {
+        if (!active) return;
+        setMobileBindings([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [bindingConversationId, onLoadConversationKnowledgeBases, selectedConversationId]);
+
+  useEffect(() => {
+    if (!mobileManageMode) {
+      return;
+    }
+    const first = mobileBindings[0];
+    if (!first) {
+      setMobileKnowledgeDocuments([]);
+      return;
+    }
+    let active = true;
+    setMobileLoadingDocuments(true);
+    setMobileDocumentError("");
+    void onLoadKnowledgeDocuments(first.knowledgeBaseId)
+      .then((items) => {
+        if (!active) return;
+        setMobileKnowledgeDocuments(items.filter((item) => (item.status || "").toUpperCase() !== "FAILED"));
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setMobileKnowledgeDocuments([]);
+        setMobileDocumentError(error instanceof Error ? error.message : "加载知识库内容失败");
+      })
+      .finally(() => {
+        if (active) {
+          setMobileLoadingDocuments(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [mobileBindings, mobileManageMode, onLoadKnowledgeDocuments]);
 
   const submitCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -549,9 +751,103 @@ function KnowledgeBasePanel({
 
   const submitBind = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedConversationId || typeof bindKnowledgeBaseId !== "number") return;
-    await onBindConversationKnowledgeBase(bindKnowledgeBaseId);
+    if (!bindingConversationId || typeof bindKnowledgeBaseId !== "number") return;
+    await onBindConversationKnowledgeBase({
+      conversationId: bindingConversationId,
+      knowledgeBaseId: bindKnowledgeBaseId
+    });
+    const updated = await onLoadConversationKnowledgeBases(bindingConversationId);
+    setMobileBindings(updated);
   };
+
+  if (mobileManageMode) {
+    const firstBinding = mobileBindings[0];
+    return (
+      <div className="detail-body knowledge-body mobile-knowledge-lite">
+        <div className="section-title">
+          <span>会话知识库</span>
+          <IconButton label="刷新知识库数据" onClick={() => void onRefresh()}>
+            <RefreshCw size={16} />
+          </IconButton>
+        </div>
+
+        <div className="kb-card">
+          <label className="field">
+            <span>群聊会话</span>
+            <select
+              value={mobileViewingConversationId}
+              onChange={(event) => {
+                const nextId = event.target.value;
+                setMobileViewingConversationId(nextId);
+                if (nextId) {
+                  onSelectConversation(nextId);
+                }
+              }}
+              disabled={groupConversations.length === 0 || busy}
+            >
+              {groupConversations.length === 0 && <option value="">暂无可用群聊</option>}
+              {groupConversations.map((item) => (
+                <option key={item.conversationId} value={item.conversationId}>
+                  {item.title || item.conversationId}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="kb-card">
+          <div className="kb-card-head static">
+            <span>当前绑定知识库</span>
+          </div>
+          <div className="kb-card-body">
+            {mobileLoadingBindings ? (
+              <span className="kb-hint">
+                <Loader2 className="spin" size={14} />
+                加载中
+              </span>
+            ) : firstBinding ? (
+              <div className="kb-row">
+                <strong>
+                  {firstBinding.name} (#{firstBinding.knowledgeBaseId})
+                </strong>
+                <span>{knowledgeBaseStatusLabel(firstBinding.status)}</span>
+              </div>
+            ) : (
+              <span className="kb-empty">当前会话暂无绑定知识库</span>
+            )}
+          </div>
+        </div>
+
+        <div className="kb-card">
+          <div className="kb-card-head static">
+            <span>知识库内容</span>
+          </div>
+          <div className="kb-card-body">
+            {mobileLoadingDocuments ? (
+              <span className="kb-hint">
+                <Loader2 className="spin" size={14} />
+                加载中
+              </span>
+            ) : mobileDocumentError ? (
+              <span className="kb-empty">{mobileDocumentError}</span>
+            ) : (
+              <div className="kb-list">
+                {mobileKnowledgeDocuments.map((item) => (
+                  <div className="kb-row" key={item.documentId}>
+                    <strong>{item.title}</strong>
+                    <span>
+                      {knowledgeSourceTypeLabel(item.sourceType)} · {knowledgeDocumentStatusLabel(item.status)}
+                    </span>
+                  </div>
+                ))}
+                {mobileKnowledgeDocuments.length === 0 && <span className="kb-empty">暂无文档</span>}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="detail-body knowledge-body">
@@ -562,229 +858,297 @@ function KnowledgeBasePanel({
         </IconButton>
       </div>
 
-      <form className="drawer-form" onSubmit={submitCreate}>
-        <label className="field">
+      <div className="kb-card kb-collapsible">
+        <button className="kb-card-head" type="button" onClick={() => setCreateExpanded((value) => !value)} aria-expanded={createExpanded}>
           <span>新建知识库</span>
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="知识库名称" required />
-        </label>
-        <textarea
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-          placeholder="知识库描述（可选）"
-          rows={2}
-        />
-        <button disabled={busy} type="submit">
-          {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
-          创建知识库
+          <ChevronDown size={16} className={cx(createExpanded && "expanded")} />
         </button>
-      </form>
-
-      <div className="kb-card">
-        <label className="field">
-          <span>当前知识库</span>
-          <select
-            value={selectedKnowledgeBaseId ?? ""}
-            onChange={(event) => onSelectKnowledgeBase(event.target.value ? Number(event.target.value) : null)}
-          >
-            <option value="">请选择知识库</option>
-            {knowledgeBases.map((item) => (
-              <option key={item.knowledgeBaseId} value={item.knowledgeBaseId}>
-                {item.name} (#{item.knowledgeBaseId})
-              </option>
-            ))}
-          </select>
-        </label>
-        {loading && (
-          <span className="kb-hint">
-            <Loader2 className="spin" size={14} />
-            加载中
-          </span>
-        )}
-      </div>
-
-      <form className="drawer-form" onSubmit={submitDocument}>
-        <label className="field">
-          <span>导入文档</span>
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="文档标题"
-            disabled={!selectedKnowledgeBaseId}
-            required
-          />
-        </label>
-        <span className="form-hint">系统会自动识别并处理文档类型，无需手动选择。</span>
-        <label className="field">
-          <span>选择文件</span>
-          <input
-            type="file"
-            accept=".txt,.md,.markdown,.pdf,.docx,.pptx,.ppt,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
-            onChange={handleDocumentFileChange}
-            disabled={!selectedKnowledgeBaseId}
-          />
-        </label>
-        {selectedDocumentFile && <span className="form-hint">已选择：{selectedDocumentFile.name}</span>}
-        {selectedDocumentFile && !isTextImportFile(selectedDocumentFile) && (
-          <span className="form-hint">PDF / DOCX / PPTX 文件会在服务端解析后再进入 RAG 链路。</span>
-        )}
-        <textarea
-          value={content}
-          onChange={(event) => setContent(event.target.value)}
-          placeholder={
-            selectedDocumentFile && !isTextImportFile(selectedDocumentFile)
-              ? "PDF / DOCX / PPTX 会由后端直接解析，无需在这里粘贴内容"
-              : "文件内容会自动填充，也可手动补充编辑"
-          }
-          rows={5}
-          disabled={!selectedKnowledgeBaseId}
-        />
-        <span className="form-hint">
-          支持直接粘贴，或上传 txt / md / pdf / docx / pptx 文件。文件导入时会自动识别类型。
-        </span>
-        <button
-          disabled={
-            busy ||
-            !selectedKnowledgeBaseId ||
-            !title.trim() ||
-            (!selectedDocumentFile && !content.trim())
-          }
-          type="submit"
-        >
-          {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
-          导入文档
-        </button>
-      </form>
-
-      <div className="kb-card">
-        <div className="section-title">
-          <span>文档状态</span>
-          <strong>{visibleKnowledgeDocuments.length}</strong>
-        </div>
-        {failedKnowledgeDocuments.length > 0 && (
-          <span className="form-hint">有 {failedKnowledgeDocuments.length} 条导入失败，失败原因已推送到通知中心。</span>
-        )}
-        <div className="kb-list">
-          {visibleKnowledgeDocuments.map((item) => (
-            <div className="kb-row" key={item.documentId}>
-              <strong>{item.title}</strong>
-              <span>
-                {knowledgeSourceTypeLabel(item.sourceType)} · {knowledgeDocumentStatusLabel(item.status)}
-              </span>
-              <button
-                className="danger-button compact-button"
-                disabled={busy || !selectedKnowledgeBaseId}
-                type="button"
-                onClick={() => {
-                  if (!selectedKnowledgeBaseId) return;
-                  if (!window.confirm(`确认删除文档「${item.title}」吗？`)) return;
-                  void onDeleteKnowledgeDocument(selectedKnowledgeBaseId, item.documentId);
-                }}
-              >
-                <Trash2 size={14} />
-                删除
+        {createExpanded && (
+          <div className="kb-card-body">
+            <form className="kb-form" onSubmit={submitCreate}>
+              <label className="field">
+                <span>知识库信息</span>
+                <input value={name} onChange={(event) => setName(event.target.value)} placeholder="知识库名称" required />
+              </label>
+              <textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="知识库描述（可选）"
+                rows={2}
+              />
+              <button disabled={busy} type="submit">
+                {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
+                创建知识库
               </button>
-            </div>
-          ))}
-          {visibleKnowledgeDocuments.length === 0 && <span className="kb-empty">暂无文档</span>}
-        </div>
+            </form>
+          </div>
+        )}
       </div>
 
-      <form className="drawer-form" onSubmit={submitSearch}>
-        <label className="field">
-          <span>检索测试</span>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="输入检索问题"
-            disabled={!selectedKnowledgeBaseId}
-          />
-        </label>
-        <label className="field">
-          <span>TopK</span>
-          <input
-            type="number"
-            min={1}
-            max={10}
-            value={topK}
-            onChange={(event) => setTopK(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
-            disabled={!selectedKnowledgeBaseId}
-          />
-        </label>
-        <button disabled={busy || !selectedKnowledgeBaseId} type="submit">
-          {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
-          执行检索
+      <div className="kb-card kb-collapsible">
+        <button className="kb-card-head" type="button" onClick={() => setSelectExpanded((value) => !value)} aria-expanded={selectExpanded}>
+          <span>当前知识库</span>
+          <ChevronDown size={16} className={cx(selectExpanded && "expanded")} />
         </button>
-      </form>
-
-      <div className="kb-card">
-        <div className="section-title">
-          <span>检索结果</span>
-          <strong>{knowledgeSearchChunks.length}</strong>
-        </div>
-        <div className="kb-list">
-          {knowledgeSearchChunks.map((item) => (
-            <div className="kb-row" key={item.chunkId}>
-              <strong>Chunk #{item.chunkId}</strong>
-              <span>
-                文档 #{item.documentId} · score {item.score.toFixed(4)}
-              </span>
-              <p>{item.content}</p>
-            </div>
-          ))}
-          {knowledgeSearchChunks.length === 0 && <span className="kb-empty">暂无检索结果</span>}
-        </div>
-      </div>
-
-      <div className="kb-card">
-        <div className="section-title">
-          <span>会话绑定知识库</span>
-          <strong>{enabledBindings.length}</strong>
-        </div>
-        {!selectedConversationId || selectedConversationType !== "GROUP" ? (
-          <span className="kb-empty">仅群聊支持知识库绑定</span>
-        ) : (
-          <>
-            <form className="kb-bind-form" onSubmit={submitBind}>
+        {selectExpanded && (
+          <div className="kb-card-body">
+            <label className="field">
+              <span>知识库列表</span>
               <select
-                value={bindKnowledgeBaseId}
-                onChange={(event) => setBindKnowledgeBaseId(event.target.value ? Number(event.target.value) : "")}
-                disabled={!canManageBinding || bindCandidates.length === 0}
+                value={selectedKnowledgeBaseId ?? ""}
+                onChange={(event) => onSelectKnowledgeBase(event.target.value ? Number(event.target.value) : null)}
               >
-                <option value="">请选择待绑定知识库</option>
-                {bindCandidates.map((item) => (
+                <option value="">请选择知识库</option>
+                {knowledgeBases.map((item) => (
                   <option key={item.knowledgeBaseId} value={item.knowledgeBaseId}>
                     {item.name} (#{item.knowledgeBaseId})
                   </option>
                 ))}
               </select>
-              <button disabled={!canManageBinding || busy || typeof bindKnowledgeBaseId !== "number"} type="submit">
-                绑定
+            </label>
+            {loading && (
+              <span className="kb-hint">
+                <Loader2 className="spin" size={14} />
+                加载中
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="kb-card kb-collapsible">
+        <button className="kb-card-head" type="button" onClick={() => setImportExpanded((value) => !value)} aria-expanded={importExpanded}>
+          <span>导入文档</span>
+          <ChevronDown size={16} className={cx(importExpanded && "expanded")} />
+        </button>
+        {importExpanded && (
+          <div className="kb-card-body">
+            <form className="kb-form" onSubmit={submitDocument}>
+              <label className="field">
+                <span>文档标题</span>
+                <input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="文档标题"
+                  disabled={!selectedKnowledgeBaseId}
+                  required
+                />
+              </label>
+              <span className="form-hint">系统会自动识别并处理文档类型，无需手动选择。</span>
+              <label className="field">
+                <span>选择文件</span>
+                <input
+                  type="file"
+                  accept=".txt,.md,.markdown,.pdf,.docx,.pptx,.ppt,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-powerpoint"
+                  onChange={handleDocumentFileChange}
+                  disabled={!selectedKnowledgeBaseId}
+                />
+              </label>
+              {selectedDocumentFile && <span className="form-hint">已选择：{selectedDocumentFile.name}</span>}
+              {selectedDocumentFile && !isTextImportFile(selectedDocumentFile) && (
+                <span className="form-hint">PDF / DOCX / PPTX 文件会在服务端解析后再进入 RAG 链路。</span>
+              )}
+              <textarea
+                value={content}
+                onChange={(event) => setContent(event.target.value)}
+                placeholder={
+                  selectedDocumentFile && !isTextImportFile(selectedDocumentFile)
+                    ? "PDF / DOCX / PPTX 会由后端直接解析，无需在这里粘贴内容"
+                    : "文件内容会自动填充，也可手动补充编辑"
+                }
+                rows={5}
+                disabled={!selectedKnowledgeBaseId}
+              />
+              <span className="form-hint">
+                支持直接粘贴，或上传 txt / md / pdf / docx / pptx 文件。文件导入时会自动识别类型。
+              </span>
+              <button
+                disabled={
+                  busy ||
+                  !selectedKnowledgeBaseId ||
+                  !title.trim() ||
+                  (!selectedDocumentFile && !content.trim())
+                }
+                type="submit"
+              >
+                {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
+                导入文档
               </button>
             </form>
-            {!canManageBinding && <span className="kb-empty">当前角色为只读（仅 OWNER/ADMIN 可绑定或解绑）</span>}
-          </>
+          </div>
         )}
-        <div className="kb-list">
-          {enabledBindings.map((item) => (
-            <div className="kb-row" key={item.id}>
-              <strong>
-                {item.name} (#{item.knowledgeBaseId})
-              </strong>
-              <span>{knowledgeBaseStatusLabel(item.status)}</span>
-              {canManageBinding && selectedConversationType === "GROUP" && (
-                <button
-                  className="danger-button compact-button"
-                  disabled={busy}
-                  type="button"
-                  onClick={() => void onUnbindConversationKnowledgeBase(item.knowledgeBaseId)}
-                >
-                  解绑
-                </button>
-              )}
+      </div>
+
+      <div className="kb-card kb-collapsible">
+        <button className="kb-card-head" type="button" onClick={() => setDocumentExpanded((value) => !value)} aria-expanded={documentExpanded}>
+          <span>文档状态</span>
+          <div className="kb-head-right">
+            <strong>{visibleKnowledgeDocuments.length}</strong>
+            <ChevronDown size={16} className={cx(documentExpanded && "expanded")} />
+          </div>
+        </button>
+        {documentExpanded && (
+          <div className="kb-card-body">
+            {failedKnowledgeDocuments.length > 0 && (
+              <span className="form-hint">有 {failedKnowledgeDocuments.length} 条导入失败，失败原因已推送到通知中心。</span>
+            )}
+            <div className="kb-list">
+              {visibleKnowledgeDocuments.map((item) => (
+                <div className="kb-row" key={item.documentId}>
+                  <strong>{item.title}</strong>
+                  <span>
+                    {knowledgeSourceTypeLabel(item.sourceType)} · {knowledgeDocumentStatusLabel(item.status)}
+                  </span>
+                  <button
+                    className="danger-button compact-button"
+                    disabled={busy || !selectedKnowledgeBaseId}
+                    type="button"
+                    onClick={() => {
+                      if (!selectedKnowledgeBaseId) return;
+                      if (!window.confirm(`确认删除文档「${item.title}」吗？`)) return;
+                      void onDeleteKnowledgeDocument(selectedKnowledgeBaseId, item.documentId);
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    删除
+                  </button>
+                </div>
+              ))}
+              {visibleKnowledgeDocuments.length === 0 && <span className="kb-empty">暂无文档</span>}
             </div>
-          ))}
-          {enabledBindings.length === 0 && <span className="kb-empty">当前会话暂无绑定知识库</span>}
-        </div>
+          </div>
+        )}
+      </div>
+
+      <div className="kb-card kb-collapsible">
+        <button className="kb-card-head" type="button" onClick={() => setSearchExpanded((value) => !value)} aria-expanded={searchExpanded}>
+          <span>检索测试与结果</span>
+          <div className="kb-head-right">
+            <strong>{knowledgeSearchChunks.length}</strong>
+            <ChevronDown size={16} className={cx(searchExpanded && "expanded")} />
+          </div>
+        </button>
+        {searchExpanded && (
+          <div className="kb-card-body">
+            <form className="kb-form" onSubmit={submitSearch}>
+              <label className="field">
+                <span>检索问题</span>
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="输入检索问题"
+                  disabled={!selectedKnowledgeBaseId}
+                />
+              </label>
+              <label className="field">
+                <span>TopK</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={topK}
+                  onChange={(event) => setTopK(Math.max(1, Math.min(10, Number(event.target.value) || 1)))}
+                  disabled={!selectedKnowledgeBaseId}
+                />
+              </label>
+              <button disabled={busy || !selectedKnowledgeBaseId} type="submit">
+                {busy ? <Loader2 className="spin" size={16} /> : <CheckCircle2 size={16} />}
+                执行检索
+              </button>
+            </form>
+            <div className="kb-list">
+              {knowledgeSearchChunks.map((item) => (
+                <div className="kb-row" key={item.chunkId}>
+                  <strong>Chunk #{item.chunkId}</strong>
+                  <span>
+                    文档 #{item.documentId} · score {item.score.toFixed(4)}
+                  </span>
+                  <p>{item.content}</p>
+                </div>
+              ))}
+              {knowledgeSearchChunks.length === 0 && <span className="kb-empty">暂无检索结果</span>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="kb-card kb-collapsible">
+        <button className="kb-card-head" type="button" onClick={() => setBindingExpanded((value) => !value)} aria-expanded={bindingExpanded}>
+          <span>会话绑定知识库</span>
+          <div className="kb-head-right">
+            <strong>{enabledBindings.length}</strong>
+            <ChevronDown size={16} className={cx(bindingExpanded && "expanded")} />
+          </div>
+        </button>
+        {bindingExpanded && (
+          <div className="kb-card-body">
+            {!bindingConversationId ? (
+              <span className="kb-empty">仅群聊支持知识库绑定</span>
+            ) : (
+              <>
+                <form className="kb-bind-form" onSubmit={submitBind}>
+                  <select
+                    value={bindingConversationId}
+                    onChange={(event) => setBindingConversationId(event.target.value)}
+                    disabled={groupConversations.length === 0 || busy}
+                  >
+                    {groupConversations.length === 0 && <option value="">暂无可选群聊</option>}
+                    {groupConversations.map((item) => (
+                      <option key={item.conversationId} value={item.conversationId}>
+                        {item.title || item.conversationId}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={bindKnowledgeBaseId}
+                    onChange={(event) => setBindKnowledgeBaseId(event.target.value ? Number(event.target.value) : "")}
+                    disabled={!canManageBindingForSelection || bindCandidates.length === 0}
+                  >
+                    <option value="">请选择待绑定知识库</option>
+                    {bindCandidates.map((item) => (
+                      <option key={item.knowledgeBaseId} value={item.knowledgeBaseId}>
+                        {item.name} (#{item.knowledgeBaseId})
+                      </option>
+                    ))}
+                  </select>
+                  <button disabled={!canManageBindingForSelection || busy || typeof bindKnowledgeBaseId !== "number"} type="submit">
+                    绑定
+                  </button>
+                </form>
+                {!canManageBindingForSelection && <span className="kb-empty">当前角色为只读（仅 OWNER/ADMIN 可绑定或解绑）</span>}
+              </>
+            )}
+            <div className="kb-list">
+              {enabledBindings.map((item) => (
+                <div className="kb-row" key={item.id}>
+                  <strong>
+                    {item.name} (#{item.knowledgeBaseId})
+                  </strong>
+                  <span>{knowledgeBaseStatusLabel(item.status)}</span>
+                  {canManageBindingForSelection && bindingConversationType === "GROUP" && (
+                    <button
+                      className="danger-button compact-button"
+                      disabled={busy}
+                      type="button"
+                      onClick={async () => {
+                        if (!bindingConversationId) return;
+                        await onUnbindConversationKnowledgeBase({
+                          conversationId: bindingConversationId,
+                          knowledgeBaseId: item.knowledgeBaseId
+                        });
+                        const updated = await onLoadConversationKnowledgeBases(bindingConversationId);
+                        setMobileBindings(updated);
+                      }}
+                    >
+                      解绑
+                    </button>
+                  )}
+                </div>
+              ))}
+              {enabledBindings.length === 0 && <span className="kb-empty">当前会话暂无绑定知识库</span>}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -792,26 +1156,38 @@ function KnowledgeBasePanel({
 
 function FriendsView({
   busy,
+  selectedConversation,
+  currentMember,
   friendGroups,
   friends,
   friendRequests,
+  groupJoinRequests,
+  loadingGroupJoinRequests,
   onOpenChatWithFriend,
   onCreateFriendGroup,
   onAddFriend,
   onRespondFriendRequest,
   onUpdateFriend,
-  onDeleteFriend
+  onDeleteFriend,
+  onRefreshGroupJoinRequests,
+  onReviewGroupJoinRequest
 }: {
   busy: boolean;
+  selectedConversation: ConversationInfo | null;
+  currentMember: MemberInfo | null;
   friendGroups: FriendGroupInfo[];
   friends: FriendInfo[];
   friendRequests: FriendRequestInfo[];
+  groupJoinRequests: GroupJoinRequestInfo[];
+  loadingGroupJoinRequests: boolean;
   onOpenChatWithFriend?: (friend: FriendInfo) => void;
   onCreateFriendGroup: (name: string) => Promise<void>;
   onAddFriend: (input: { targetAimId: string; remark: string; groupId: number | null }) => Promise<void>;
   onRespondFriendRequest: (requestId: number, action: "ACCEPTED" | "REJECTED") => Promise<void>;
   onUpdateFriend: (friendUserId: number, input: { remark: string; groupId: number | null }) => Promise<void>;
   onDeleteFriend: (friendUserId: number) => Promise<void>;
+  onRefreshGroupJoinRequests: () => Promise<void>;
+  onReviewGroupJoinRequest: (requestId: number, action: "APPROVE" | "REJECT") => Promise<void>;
 }) {
   const [addOpen, setAddOpen] = useState(false);
   const [groupOpen, setGroupOpen] = useState(false);
@@ -825,6 +1201,8 @@ function FriendsView({
     if (selectedGroupId === null) return friends;
     return friends.filter((friend) => friend.group_id === selectedGroupId);
   }, [friends, selectedGroupId]);
+  const canReviewJoinRequests =
+    selectedConversation?.type === "GROUP" && (currentMember?.role === "OWNER" || currentMember?.role === "ADMIN");
 
   const createGroup = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -851,7 +1229,7 @@ function FriendsView({
       <div className="action-grid detail-actions">
         <button type="button" onClick={() => setAddOpen((value) => !value)}>
           <UserPlus size={18} />
-          添加好友
+          添加联系人
         </button>
         <button type="button" onClick={() => setGroupOpen((value) => !value)}>
           <BadgePlus size={18} />
@@ -890,7 +1268,7 @@ function FriendsView({
       )}
 
       <div className="section-title">
-        <span>好友申请</span>
+        <span>联系人申请</span>
         <strong>{friendRequests.length}</strong>
       </div>
 
@@ -906,18 +1284,62 @@ function FriendsView({
         {friendRequests.length === 0 && (
           <div className="empty-block compact-empty">
             <Mail size={24} />
-            <strong>暂无好友申请</strong>
+            <strong>暂无联系人申请</strong>
           </div>
         )}
       </div>
 
+      {canReviewJoinRequests && (
+        <>
+          <div className="section-title">
+            <span>入群申请</span>
+            <strong>{groupJoinRequests.length}</strong>
+          </div>
+          <div className="group-join-review-card">
+            <div className="group-join-review-header">
+              <strong>待审核列表</strong>
+              <div className="group-join-review-actions">
+                <button className="secondary-button compact-button" disabled={busy || loadingGroupJoinRequests} type="button" onClick={() => void onRefreshGroupJoinRequests()}>
+                  刷新
+                </button>
+              </div>
+            </div>
+            {loadingGroupJoinRequests ? (
+              <div className="group-join-review-empty">加载中...</div>
+            ) : groupJoinRequests.length === 0 ? (
+              <div className="group-join-review-empty">暂无待审核申请</div>
+            ) : (
+              <div className="group-join-review-list">
+                {groupJoinRequests.map((item) => (
+                  <div className="group-join-review-item" key={item.requestId}>
+                    <div className="group-join-review-meta">
+                      <strong>{item.applicantName || `用户 ${item.applicantUserId}`}</strong>
+                      <span>{formatRelative(item.createdAt)}</span>
+                    </div>
+                    {item.reason && <div className="group-join-review-reason">{item.reason}</div>}
+                    <div className="group-join-review-buttons">
+                      <button className="secondary-button compact-button" disabled={busy} type="button" onClick={() => void onReviewGroupJoinRequest(item.requestId, "APPROVE")}>
+                        通过
+                      </button>
+                      <button className="danger-button compact-button" disabled={busy} type="button" onClick={() => void onReviewGroupJoinRequest(item.requestId, "REJECT")}>
+                        拒绝
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       <div className="section-title">
-        <span>好友分组</span>
+        <span>联系人分组</span>
         <strong>{friendGroups.length}</strong>
       </div>
 
       <div className="section-title">
-        <span>好友</span>
+        <span>联系人</span>
         <strong>{filteredFriends.length}</strong>
       </div>
 
@@ -952,15 +1374,15 @@ function FriendsView({
         {filteredFriends.length === 0 && friends.length > 0 && (
           <div className="empty-block">
             <UserRound size={28} />
-            <strong>当前分组暂无好友</strong>
-            <span>可切换分组筛选，或先把好友移动到该分组。</span>
+            <strong>当前分组暂无联系人</strong>
+            <span>可切换分组筛选，或先把联系人移动到该分组。</span>
           </div>
         )}
         {friends.length === 0 && (
           <div className="empty-block">
             <UserRound size={28} />
-            <strong>暂无好友</strong>
-            <span>可以先通过 AIM ID 添加好友。</span>
+            <strong>暂无联系人</strong>
+            <span>可以先通过 AIM ID 添加联系人。</span>
           </div>
         )}
       </div>
@@ -1066,7 +1488,7 @@ function FriendRow({
         <div className="friend-card-form">
           <label className="field compact-field">
             <span>备注</span>
-            <input value={remark} onChange={(event) => setRemark(event.target.value)} placeholder="好友备注" />
+            <input value={remark} onChange={(event) => setRemark(event.target.value)} placeholder="联系人备注" />
           </label>
 
           <label className="field compact-field">
@@ -1374,7 +1796,9 @@ function MembersViewClean({
   onUnmuteMember,
   onRemoveMember,
   onSetGroupMuteAll,
-  onUpdateGroupAnnouncement
+  onUpdateGroupAnnouncement,
+  onUpdateGroupAvatar,
+  onDisbandGroup
 }: {
   members: MemberInfo[];
   selectedConversation: ConversationInfo | null;
@@ -1390,11 +1814,15 @@ function MembersViewClean({
   onRemoveMember: (targetUserId: number) => Promise<void>;
   onSetGroupMuteAll: (muteAll: boolean) => Promise<void>;
   onUpdateGroupAnnouncement: (announcement: string) => Promise<void>;
+  onUpdateGroupAvatar: (avatarUrl: string) => Promise<void>;
+  onDisbandGroup: () => Promise<void>;
 }) {
   const [muteDurations, setMuteDurations] = useState<Record<number, number>>({});
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
   const isGroup = selectedConversation?.type === "GROUP";
   const canToggleMuteAll = isGroup && currentMember?.role === "OWNER";
+  const canUpdateGroupAvatar = isGroup && (currentMember?.role === "OWNER" || currentMember?.role === "ADMIN");
+  const canDisbandGroup = isGroup && currentMember?.role === "OWNER";
   const muteAllEnabled = Boolean(selectedConversation?.muteAll);
   const durationOptions = [
     { label: "10分钟", value: 10 * 60 },
@@ -1447,6 +1875,12 @@ function MembersViewClean({
 
   return (
     <div className="detail-body">
+      {selectedConversation?.conversationId && (
+        <div className="conversation-id-row" style={{ margin: "0 14px 10px" }}>
+          <span>会话ID</span>
+          <code>{selectedConversation.conversationId}</code>
+        </div>
+      )}
       {isGroup && (
         <GroupAnnouncementCard
           groupInfo={groupInfo}
@@ -1455,6 +1889,31 @@ function MembersViewClean({
           busy={busy}
           onSave={onUpdateGroupAnnouncement}
         />
+      )}
+      {isGroup && (
+        <section className="group-avatar-section">
+          <div className="group-avatar-head">
+            <strong>群头像</strong>
+            {groupInfo?.avatar ? (
+              <Avatar name={groupInfo?.name || selectedConversation?.title || "群聊"} src={groupInfo.avatar} size="normal" />
+            ) : (
+              <span className="group-avatar-empty">暂无群头像</span>
+            )}
+          </div>
+          {canUpdateGroupAvatar ? (
+            <AvatarUploader
+              busy={busy}
+              onUpload={async (blob) => {
+                const fileName = `group-avatar-${selectedConversation?.conversationId || "group"}.png`;
+                const file = new File([blob], fileName, { type: "image/png" });
+                const uploaded = await api.uploadImage(file);
+                await onUpdateGroupAvatar(uploaded.file.url);
+              }}
+            />
+          ) : (
+            <p className="group-avatar-hint">仅群主或管理员可修改群头像</p>
+          )}
+        </section>
       )}
       <div className="section-title">
         <span>成员</span>
@@ -1635,6 +2094,24 @@ function MembersViewClean({
           </div>
         )}
       </div>
+      {canDisbandGroup && (
+        <div className="group-danger-zone">
+          <button
+            className="danger-button"
+            disabled={busy}
+            type="button"
+            onClick={() => {
+              const groupName = groupInfo?.name || selectedConversation?.title || selectedConversation?.conversationId || "该群聊";
+              if (window.confirm(`确认解散${groupName}吗？解散后成员将无法继续访问该群聊。`)) {
+                void onDisbandGroup();
+              }
+            }}
+          >
+            <Trash2 size={15} />
+            解散群聊
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -2407,7 +2884,10 @@ function AccountView({
   notificationsEnabled,
   invisibleMode,
   userMemories,
+  userMemorySetting,
   loadingUserMemories,
+  loadingUserMemorySetting,
+  conversations,
   onRefreshSessions,
   onLogout,
   onLogoutAll,
@@ -2416,8 +2896,10 @@ function AccountView({
   onToggleNotifications,
   onToggleInvisibleMode,
   onRefreshUserMemories,
+  onRefreshUserMemorySetting,
   onWriteUserMemory,
-  onUpdateUserMemory
+  onUpdateUserMemory,
+  onUpdateUserMemorySetting
 }: {
   user: UserInfo;
   sessions: SessionInfo[];
@@ -2427,7 +2909,10 @@ function AccountView({
   notificationsEnabled: boolean;
   invisibleMode: boolean;
   userMemories: UserMemoryInfo[];
+  userMemorySetting: UserMemorySettingInfo;
   loadingUserMemories: boolean;
+  loadingUserMemorySetting: boolean;
+  conversations: ConversationInfo[];
   onRefreshSessions: () => Promise<void>;
   onLogout: () => Promise<void>;
   onLogoutAll: (password: string) => Promise<void>;
@@ -2436,14 +2921,27 @@ function AccountView({
   onToggleNotifications: () => Promise<void>;
   onToggleInvisibleMode: (invisible: boolean) => Promise<void>;
   onRefreshUserMemories: () => Promise<void>;
+  onRefreshUserMemorySetting: () => Promise<void>;
   onWriteUserMemory: (content: string) => Promise<void>;
   onUpdateUserMemory: (memoryId: number, content: string) => Promise<void>;
+  onUpdateUserMemorySetting: (input: {
+    enabled?: boolean;
+    scope?: "ALL_GROUPS" | "SELECTED_GROUPS" | string;
+    conversationIds?: string[];
+  }) => Promise<void>;
 }) {
   const [password, setPassword] = useState("");
+  const [passwordFieldReadonly, setPasswordFieldReadonly] = useState(true);
   const [newMemoryContent, setNewMemoryContent] = useState("");
   const [memoryDrafts, setMemoryDrafts] = useState<Record<number, string>>({});
   const [creatingMemory, setCreatingMemory] = useState(false);
   const [savingMemoryId, setSavingMemoryId] = useState<number | null>(null);
+  const [memoryExpanded, setMemoryExpanded] = useState(false);
+  const [memoryEnabledDraft, setMemoryEnabledDraft] = useState(Boolean(userMemorySetting.enabled));
+  const [memoryScopeDraft, setMemoryScopeDraft] = useState<"ALL_GROUPS" | "SELECTED_GROUPS">(
+    userMemorySetting.scope === "SELECTED_GROUPS" ? "SELECTED_GROUPS" : "ALL_GROUPS"
+  );
+  const [memoryConversationDrafts, setMemoryConversationDrafts] = useState<string[]>(Array.isArray(userMemorySetting.conversationIds) ? userMemorySetting.conversationIds : []);
   const notificationLabel =
     notificationStatus === "unsupported"
       ? "当前浏览器不支持通知"
@@ -2465,6 +2963,12 @@ function AccountView({
       return next;
     });
   }, [userMemories]);
+
+  useEffect(() => {
+    setMemoryEnabledDraft(Boolean(userMemorySetting.enabled));
+    setMemoryScopeDraft(userMemorySetting.scope === "SELECTED_GROUPS" ? "SELECTED_GROUPS" : "ALL_GROUPS");
+    setMemoryConversationDrafts(Array.isArray(userMemorySetting.conversationIds) ? userMemorySetting.conversationIds : []);
+  }, [userMemorySetting]);
 
   const handleCreateMemory = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2499,6 +3003,49 @@ function AccountView({
     }
   };
 
+  const groupConversations = useMemo(
+    () => conversations.filter((item) => item.type === "GROUP"),
+    [conversations]
+  );
+
+  const canSaveMemorySetting = useMemo(() => {
+    const currentScope = userMemorySetting.scope === "SELECTED_GROUPS" ? "SELECTED_GROUPS" : "ALL_GROUPS";
+    const normalizedCurrentIDs = (userMemorySetting.conversationIds ?? []).slice().sort().join(",");
+    const normalizedDraftIDs = (memoryConversationDrafts ?? []).slice().sort().join(",");
+    return (
+      Boolean(userMemorySetting.enabled) !== memoryEnabledDraft ||
+      currentScope !== memoryScopeDraft ||
+      normalizedCurrentIDs !== normalizedDraftIDs
+    );
+  }, [memoryConversationDrafts, memoryEnabledDraft, memoryScopeDraft, userMemorySetting.conversationIds, userMemorySetting.enabled, userMemorySetting.scope]);
+
+  const handleToggleConversationScope = (conversationId: string, checked: boolean) => {
+    setMemoryConversationDrafts((current) => {
+      const set = new Set(current);
+      if (checked) {
+        set.add(conversationId);
+      } else {
+        set.delete(conversationId);
+      }
+      return Array.from(set);
+    });
+  };
+
+  const handleSaveMemorySetting = async () => {
+    const payload: {
+      enabled?: boolean;
+      scope?: "ALL_GROUPS" | "SELECTED_GROUPS";
+      conversationIds?: string[];
+    } = {
+      enabled: memoryEnabledDraft,
+      scope: memoryScopeDraft
+    };
+    if (memoryScopeDraft === "SELECTED_GROUPS") {
+      payload.conversationIds = memoryConversationDrafts;
+    }
+    await onUpdateUserMemorySetting(payload);
+  };
+
   return (
     <div className="detail-body account-body">
       <div className="account-card">
@@ -2516,7 +3063,29 @@ function AccountView({
 
       <label className="password-box">
         <KeyRound size={17} />
-        <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="会话管理密码" />
+        <input
+          type="password"
+          id="session-management-passcode"
+          name="session_management_passcode"
+          autoComplete="new-password"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-bwignore="true"
+          data-form-type="other"
+          readOnly={passwordFieldReadonly}
+          value={password}
+          onFocus={() => setPasswordFieldReadonly(false)}
+          onBlur={() => {
+            if (!password.trim()) {
+              setPasswordFieldReadonly(true);
+            }
+          }}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="会话管理密码"
+        />
       </label>
 
       <div className="account-actions">
@@ -2543,7 +3112,7 @@ function AccountView({
       <div className="notification-card">
         <div>
           <ShieldCheck size={18} />
-          <span>{invisibleMode ? "当前为隐身模式（好友侧显示离线）" : "当前为可见在线状态"}</span>
+          <span>{invisibleMode ? "当前为隐身模式（联系人侧显示离线）" : "当前为可见在线状态"}</span>
         </div>
         <button className={cx(invisibleMode && "is-on")} disabled={busy} type="button" onClick={() => void onToggleInvisibleMode(!invisibleMode)}>
           {invisibleMode ? "关闭隐身" : "开启隐身"}
@@ -2552,7 +3121,10 @@ function AccountView({
 
       <div className="memory-card">
         <div className="memory-card-head">
-          <strong>个人记忆</strong>
+          <button className="memory-toggle" type="button" onClick={() => setMemoryExpanded((current) => !current)}>
+            <ChevronDown size={16} className={cx(memoryExpanded && "expanded")} />
+            <strong>个人记忆</strong>
+          </button>
           <div className="memory-card-tools">
             <span className="memory-count">{userMemories.length} 条</span>
             <IconButton label="刷新记忆" onClick={() => void onRefreshUserMemories()}>
@@ -2560,65 +3132,137 @@ function AccountView({
             </IconButton>
           </div>
         </div>
-        <p className="memory-hint">最多 512 字。支持修改为空，用于清空该条记忆。</p>
-
-        <form className="memory-create-form" onSubmit={handleCreateMemory}>
-          <textarea
-            value={newMemoryContent}
-            onChange={(event) => setNewMemoryContent(event.target.value)}
-            rows={3}
-            maxLength={512}
-            placeholder="新增一条个人记忆，例如：我偏好简洁回答，优先给结论。"
-          />
-          <button disabled={busy || creatingMemory || !newMemoryContent.trim()} type="submit">
-            {creatingMemory ? <Loader2 className="spin" size={16} /> : <BadgePlus size={16} />}
-            新增记忆
-          </button>
-        </form>
-
-        {loadingUserMemories ? (
-          <div className="memory-empty">
-            <Loader2 className="spin" size={16} />
-            <span>记忆加载中...</span>
-          </div>
-        ) : userMemories.length === 0 ? (
-          <div className="memory-empty">
-            <span>暂无记忆，新增后可在 AI 对话中优先参考。</span>
-          </div>
-        ) : (
-          <div className="memory-list">
-            {userMemories.map((memory) => (
-              <div className="memory-row" key={memory.id}>
-                <div className="memory-row-meta">
-                  <span># {memory.id}</span>
-                  <span>更新于 {formatRelative(memory.updatedAt)}</span>
-                </div>
-                <textarea
-                  value={memoryDrafts[memory.id] ?? ""}
-                  onChange={(event) =>
-                    setMemoryDrafts((current) => ({
-                      ...current,
-                      [memory.id]: event.target.value
-                    }))
-                  }
-                  rows={3}
-                  maxLength={512}
-                />
-                <div className="memory-row-actions">
-                  <span>{(memoryDrafts[memory.id] ?? "").length}/512</span>
-                  <button
-                    className="secondary-button compact-button"
-                    disabled={busy || savingMemoryId === memory.id}
-                    type="button"
-                    onClick={() => void handleSaveMemory(memory.id)}
-                  >
-                    {savingMemoryId === memory.id ? <Loader2 className="spin" size={14} /> : <CheckCircle2 size={14} />}
-                    保存修改
-                  </button>
+        {memoryExpanded && (
+          <>
+            <div className="memory-setting-card">
+              <div className="memory-setting-head">
+                <strong>长期记忆设置</strong>
+                <div className="memory-card-tools">
+                  <IconButton label="刷新长期记忆设置" onClick={() => void onRefreshUserMemorySetting()}>
+                    <RefreshCw size={16} />
+                  </IconButton>
                 </div>
               </div>
-            ))}
-          </div>
+              {loadingUserMemorySetting ? (
+                <div className="memory-empty">
+                  <Loader2 className="spin" size={16} />
+                  <span>设置加载中...</span>
+                </div>
+              ) : (
+                <div className="memory-setting-body">
+                  <label className="memory-switch-row">
+                    <input
+                      type="checkbox"
+                      checked={memoryEnabledDraft}
+                      onChange={(event) => setMemoryEnabledDraft(event.target.checked)}
+                    />
+                    <span>启用长期记忆</span>
+                  </label>
+                  <label className="field">
+                    <span>生效范围</span>
+                    <select value={memoryScopeDraft} onChange={(event) => setMemoryScopeDraft(event.target.value as "ALL_GROUPS" | "SELECTED_GROUPS")}>
+                      <option value="ALL_GROUPS">全部群聊（含新群聊）</option>
+                      <option value="SELECTED_GROUPS">指定群聊</option>
+                    </select>
+                  </label>
+                  {memoryScopeDraft === "SELECTED_GROUPS" && (
+                    <div className="memory-conversation-picker">
+                      {groupConversations.length === 0 ? (
+                        <span className="memory-hint">当前暂无群聊可选</span>
+                      ) : (
+                        groupConversations.map((item) => {
+                          const checked = memoryConversationDrafts.includes(item.conversationId);
+                          return (
+                            <label className="memory-conversation-item" key={item.conversationId}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(event) =>
+                                  handleToggleConversationScope(item.conversationId, event.target.checked)
+                                }
+                              />
+                              <div className="memory-conversation-meta">
+                                <strong>{item.title || item.conversationId}</strong>
+                                <span>{item.conversationId}</span>
+                              </div>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                  <button
+                    className="secondary-button compact-button"
+                    type="button"
+                    disabled={busy || !canSaveMemorySetting}
+                    onClick={() => void handleSaveMemorySetting()}
+                  >
+                    保存设置
+                  </button>
+                </div>
+              )}
+            </div>
+            <p className="memory-hint">最多 512 字。支持修改为空，用于清空该条记忆。</p>
+
+            <form className="memory-create-form" onSubmit={handleCreateMemory}>
+              <textarea
+                value={newMemoryContent}
+                onChange={(event) => setNewMemoryContent(event.target.value)}
+                rows={3}
+                maxLength={512}
+                placeholder="新增一条个人记忆，例如：我偏好简洁回答，优先给结论。"
+              />
+              <button disabled={busy || creatingMemory || !newMemoryContent.trim()} type="submit">
+                {creatingMemory ? <Loader2 className="spin" size={16} /> : <BadgePlus size={16} />}
+                新增记忆
+              </button>
+            </form>
+
+            {loadingUserMemories ? (
+              <div className="memory-empty">
+                <Loader2 className="spin" size={16} />
+                <span>记忆加载中...</span>
+              </div>
+            ) : userMemories.length === 0 ? (
+              <div className="memory-empty">
+                <span>暂无记忆，新增后可在 AI 对话中优先参考。</span>
+              </div>
+            ) : (
+              <div className="memory-list">
+                {userMemories.map((memory) => (
+                  <div className="memory-row" key={memory.id}>
+                    <div className="memory-row-meta">
+                      <span># {memory.id}</span>
+                      <span>更新于 {formatRelative(memory.updatedAt)}</span>
+                    </div>
+                    <textarea
+                      value={memoryDrafts[memory.id] ?? ""}
+                      onChange={(event) =>
+                        setMemoryDrafts((current) => ({
+                          ...current,
+                          [memory.id]: event.target.value
+                        }))
+                      }
+                      rows={3}
+                      maxLength={512}
+                    />
+                    <div className="memory-row-actions">
+                      <span>{(memoryDrafts[memory.id] ?? "").length}/512</span>
+                      <button
+                        className="secondary-button compact-button"
+                        disabled={busy || savingMemoryId === memory.id}
+                        type="button"
+                        onClick={() => void handleSaveMemory(memory.id)}
+                      >
+                        {savingMemoryId === memory.id ? <Loader2 className="spin" size={14} /> : <CheckCircle2 size={14} />}
+                        保存修改
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 

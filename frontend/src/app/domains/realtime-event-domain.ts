@@ -24,6 +24,7 @@ type RealtimeHandlerDeps = {
   messageListRef: RefObject<HTMLDivElement | null>;
   markConversationRead: (conversationID: string, lastReadMessageId: number) => void | Promise<void>;
   refreshSelectedGroupInfo: (conversationId: string) => void | Promise<unknown>;
+  refreshSelectedConversationMembers: (conversationId: string) => void | Promise<void>;
   showMessageNotification: (message: MessageInfo) => void;
   showToast: (message: string, tone?: ToastTone) => void;
   refreshConversations: () => Promise<ConversationInfo[]>;
@@ -52,6 +53,16 @@ function replaceBotGeneratingMessage(messages: MessageInfo[], incoming: MessageI
 }
 
 export function buildRealtimeEventHandler(deps: RealtimeHandlerDeps) {
+  const memberMutationEvents = new Set([
+    "MEMBER_JOINED",
+    "MEMBER_LEFT",
+    "MEMBER_INVITED",
+    "MEMBER_REMOVED",
+    "ADMIN_ADDED",
+    "ADMIN_REMOVED",
+    "OWNER_TRANSFERRED"
+  ]);
+
   return (raw: string) => {
     let event: WebSocketEvent;
     try {
@@ -114,6 +125,8 @@ export function buildRealtimeEventHandler(deps: RealtimeHandlerDeps) {
         void deps.markConversationRead(incoming.conversationId, incoming.id);
         if (systemContent?.eventType === "ANNOUNCEMENT_UPDATED") {
           void deps.refreshSelectedGroupInfo(incoming.conversationId);
+        } else if (systemContent?.eventType && memberMutationEvents.has(systemContent.eventType)) {
+          void deps.refreshSelectedConversationMembers(incoming.conversationId);
         }
       } else if (incoming.messageType !== "SYSTEM") {
         deps.setUnreadCounts((current) => ({

@@ -38,11 +38,15 @@ export async function createGroupAction(
 export async function joinGroupAction(conversationId: string, deps: ConversationDomainDeps) {
   deps.setBusyAction(true);
   try {
-    await api.joinGroup(conversationId);
+    const result = await api.joinGroup(conversationId);
     await deps.refreshConversations();
-    deps.setSelectedConversationId(conversationId);
-    deps.setMobilePane("chat");
-    deps.showToast("Joined group", "success");
+    if (result.pending) {
+      deps.showToast(result.message || "已提交入群申请，等待管理员审核", "info");
+    } else {
+      deps.setSelectedConversationId(conversationId);
+      deps.setMobilePane("chat");
+      deps.showToast(result.message || "已加入群聊", "success");
+    }
   } catch (error) {
     deps.showToast(errorMessage(error), "error");
   } finally {
@@ -196,6 +200,45 @@ export async function updateGroupAnnouncementAction(announcement: string, deps: 
       refreshSelectedConversationStateAction(deps)
     ]);
     deps.showToast("Group announcement updated", "success");
+  } catch (error) {
+    deps.showToast(errorMessage(error), "error");
+  } finally {
+    deps.setBusyAction(false);
+  }
+}
+
+export async function updateGroupAvatarAction(avatar: string, deps: ConversationDomainDeps) {
+  if (!deps.selectedConversationId) return;
+  deps.setBusyAction(true);
+  try {
+    await api.updateGroupAvatar(deps.selectedConversationId, avatar);
+    await Promise.all([
+      deps.refreshSelectedGroupInfo(deps.selectedConversationId),
+      refreshSelectedConversationStateAction(deps)
+    ]);
+    deps.showToast("群头像已更新", "success");
+  } catch (error) {
+    deps.showToast(errorMessage(error), "error");
+  } finally {
+    deps.setBusyAction(false);
+  }
+}
+
+export async function disbandGroupAction(deps: ConversationDomainDeps) {
+  if (!deps.selectedConversationId) return;
+  deps.setBusyAction(true);
+  try {
+    await api.disbandGroup(deps.selectedConversationId);
+    const removedConversationID = deps.selectedConversationId;
+    const nextConversations = await deps.refreshConversations();
+    if (deps.selectedConversationIdRef.current === removedConversationID) {
+      const nextSelected = nextConversations[0]?.conversationId ?? null;
+      deps.setSelectedConversationId(nextSelected);
+      if (!nextSelected) {
+        deps.setMobilePane("conversations");
+      }
+    }
+    deps.showToast("群聊已解散", "success");
   } catch (error) {
     deps.showToast(errorMessage(error), "error");
   } finally {

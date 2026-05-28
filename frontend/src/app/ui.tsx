@@ -1,6 +1,6 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
-import { FileText, Loader2, MessageCircle, Mic, SendHorizontal, UserPlus, UserRound, Wifi, WifiOff } from "lucide-react";
+import { Database, FileText, Loader2, MessageCircle, Mic, SendHorizontal, UserPlus, UserRound, Wifi, WifiOff } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { MessageInfo, MobilePane } from "../types";
@@ -369,6 +369,10 @@ export function MobileNav({
       <button className={active === "friends" ? "active" : ""} type="button" onClick={() => onChange("friends")}>
         <UserPlus size={20} />
         {"\u597d\u53cb"}
+      </button>
+      <button className={active === "knowledge" ? "active" : ""} type="button" onClick={() => onChange("knowledge")}>
+        <Database size={20} />
+        {"\u77e5\u8bc6\u5e93"}
       </button>
       <button className={active === "account" ? "active" : ""} type="button" onClick={() => onChange("account")}>
         <UserRound size={20} />

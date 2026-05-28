@@ -115,6 +115,7 @@ function formatHistoryTime(unixSeconds: number) {
 export function ChatPanel({
   active,
   conversation,
+  conversations,
   currentUser,
   currentMember,
   members,
@@ -130,6 +131,8 @@ export function ChatPanel({
   composerRef,
   canSend,
   onBack,
+  onSwitchConversation,
+  onHistoryJumpNotice,
   onDraftChange,
   onLoadOlder,
   onLeaveGroup,
@@ -144,6 +147,7 @@ export function ChatPanel({
 }: {
   active: boolean;
   conversation: ConversationInfo | null;
+  conversations: ConversationInfo[];
   currentUser: UserInfo;
   currentMember: MemberInfo | null;
   members: MemberInfo[];
@@ -159,6 +163,8 @@ export function ChatPanel({
   composerRef: React.RefObject<HTMLTextAreaElement | null>;
   canSend: boolean;
   onBack: () => void;
+  onSwitchConversation: (conversationId: string) => void;
+  onHistoryJumpNotice?: (message: string) => void;
   onDraftChange: (value: string) => void;
   onLoadOlder: () => Promise<void>;
   onLeaveGroup: () => Promise<void>;
@@ -171,6 +177,10 @@ export function ChatPanel({
   onCancelReply: () => void;
   onSend: (payload?: OutgoingMessagePayload) => void;
 }) {
+  const historySearchSupportedConversations = useMemo(
+    () => conversations.filter((item) => item.type === "GROUP" || item.type === "SINGLE"),
+    [conversations]
+  );
   const [historySearchOpen, setHistorySearchOpen] = useState(false);
   const [historySearchKeyword, setHistorySearchKeyword] = useState("");
   const [historySearchStartAt, setHistorySearchStartAt] = useState(() => {
@@ -180,11 +190,14 @@ export function ChatPanel({
   });
   const [historySearchEndAt, setHistorySearchEndAt] = useState(() => toDateTimeLocal(new Date()));
   const [historySearchCurrentConversationOnly, setHistorySearchCurrentConversationOnly] = useState(true);
+  const [historySearchConversationType, setHistorySearchConversationType] = useState<"ALL" | "GROUP" | "SINGLE">("ALL");
+  const [historySearchConversationId, setHistorySearchConversationId] = useState("");
   const [historySearchLoading, setHistorySearchLoading] = useState(false);
   const [historySearchResults, setHistorySearchResults] = useState<HistorySearchMessageItem[]>([]);
   const [historySearchError, setHistorySearchError] = useState("");
   const [historySearchSearched, setHistorySearchSearched] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState<number | null>(null);
+  const [pendingHistoryJump, setPendingHistoryJump] = useState<HistorySearchMessageItem | null>(null);
   const [conversationSummaryOpen, setConversationSummaryOpen] = useState(false);
   const [conversationSummaryCount, setConversationSummaryCount] = useState(100);
   const [conversationSummaryLoading, setConversationSummaryLoading] = useState(false);
@@ -212,6 +225,7 @@ export function ChatPanel({
   const voiceTimerRef = useRef<number | null>(null);
   const discardVoiceUploadRef = useRef(false);
   const messagesRef = useRef<MessageInfo[]>([]);
+  const historyJumpRunningRef = useRef(false);
 
   const isGroupChat = conversation?.type === "GROUP";
   const summaryCacheStorageKey = useMemo(() => `aim:conversation-summary:v1:${currentUser.user_id}`, [currentUser.user_id]);
@@ -664,6 +678,8 @@ export function ChatPanel({
     setHistorySearchEndAt(toDateTimeLocal(now));
     setHistorySearchKeyword("");
     setHistorySearchCurrentConversationOnly(true);
+    setHistorySearchConversationType("ALL");
+    setHistorySearchConversationId("");
     setHistorySearchError("");
     setHistorySearchResults([]);
     setHistorySearchSearched(false);
@@ -741,6 +757,64 @@ export function ChatPanel({
     setHistorySearchLoading(false);
   }, []);
 
+  const locateHistoryMessageInCurrentConversation = useCallback(
+    async (item: HistorySearchMessageItem, notifyOnSuccess = false) => {
+      if (historyJumpRunningRef.current) {
+        return;
+      }
+      const scroller = messageListRef.current;
+      if (!scroller) {
+        return;
+      }
+      historyJumpRunningRef.current = true;
+      try {
+        const ensureAndScroll = () => {
+          const element = scroller.querySelector(`[data-message-id="${item.message.id}"]`) as HTMLElement | null;
+          if (!element) {
+            return false;
+          }
+          setHighlightedMessageId(item.message.id);
+          element.scrollIntoView({ block: "center", behavior: "smooth" });
+          setHistorySearchOpen(false);
+          return true;
+        };
+
+        if (ensureAndScroll()) {
+          if (notifyOnSuccess) {
+            onHistoryJumpNotice?.(`已定位到会话「${item.conversationTitle || item.conversationId}」中的目标消息`);
+          }
+          setPendingHistoryJump(null);
+          return;
+        }
+
+        for (let i = 0; i < 12; i += 1) {
+          const loaded = messagesRef.current.some((message) => message.id === item.message.id);
+          if (loaded && ensureAndScroll()) {
+            if (notifyOnSuccess) {
+              onHistoryJumpNotice?.(`已定位到会话「${item.conversationTitle || item.conversationId}」中的目标消息`);
+            }
+            setPendingHistoryJump(null);
+            return;
+          }
+          await onLoadOlder();
+          if (ensureAndScroll()) {
+            if (notifyOnSuccess) {
+              onHistoryJumpNotice?.(`已定位到会话「${item.conversationTitle || item.conversationId}」中的目标消息`);
+            }
+            setPendingHistoryJump(null);
+            return;
+          }
+        }
+        if (!ensureAndScroll()) {
+          alert("未能定位到该消息，可能已超出当前可加载范围。");
+        }
+      } finally {
+        historyJumpRunningRef.current = false;
+      }
+    },
+    [messageListRef, onHistoryJumpNotice, onLoadOlder]
+  );
+
   const submitHistorySearch = useCallback(async () => {
     if (!historySearchStartAt || !historySearchEndAt) {
       setHistorySearchError("请先选择开始和结束时间");
@@ -760,12 +834,19 @@ export function ChatPanel({
       setHistorySearchError("当前没有可用会话");
       return;
     }
+    if (!historySearchCurrentConversationOnly && historySearchConversationId && !historySearchSupportedConversations.some((item) => item.conversationId === historySearchConversationId)) {
+      setHistorySearchError("指定会话无效");
+      return;
+    }
 
     setHistorySearchLoading(true);
     setHistorySearchError("");
     try {
       const items = await api.searchHistoryMessages({
-        conversationId: historySearchCurrentConversationOnly ? conversation?.conversationId : undefined,
+        conversationId: historySearchCurrentConversationOnly
+          ? conversation?.conversationId
+          : historySearchConversationId || undefined,
+        conversationType: historySearchCurrentConversationOnly ? undefined : historySearchConversationType,
         startAt,
         endAt,
         keyword: historySearchKeyword.trim() || undefined
@@ -779,7 +860,16 @@ export function ChatPanel({
     } finally {
       setHistorySearchLoading(false);
     }
-  }, [conversation?.conversationId, historySearchCurrentConversationOnly, historySearchEndAt, historySearchKeyword, historySearchStartAt]);
+  }, [
+    conversation?.conversationId,
+    historySearchConversationId,
+    historySearchConversationType,
+    historySearchCurrentConversationOnly,
+    historySearchEndAt,
+    historySearchKeyword,
+    historySearchStartAt,
+    historySearchSupportedConversations
+  ]);
 
   const resolveHistorySenderName = useCallback(
     (message: MessageInfo) => {
@@ -799,39 +889,26 @@ export function ChatPanel({
   const jumpToHistoryMessage = useCallback(
     (item: HistorySearchMessageItem) => {
       if (item.conversationId !== conversation?.conversationId) {
-        alert("这条消息不在当前会话，请切换到对应会话后再定位。");
+        onHistoryJumpNotice?.(`正在切换到会话「${item.conversationTitle || item.conversationId}」并定位消息`);
+        setPendingHistoryJump(item);
+        onSwitchConversation(item.conversationId);
+        setHistorySearchOpen(false);
         return;
       }
-      const scroller = messageListRef.current;
-      if (!scroller) return;
-
-      const ensureAndScroll = () => {
-        const element = scroller.querySelector(`[data-message-id="${item.message.id}"]`) as HTMLElement | null;
-        if (!element) {
-          return false;
-        }
-        setHighlightedMessageId(item.message.id);
-        element.scrollIntoView({ block: "center", behavior: "smooth" });
-        setHistorySearchOpen(false);
-        return true;
-      };
-
-      if (ensureAndScroll()) return;
-
-      const tryLoadAndScroll = async () => {
-        for (let i = 0; i < 12; i += 1) {
-          const loaded = messagesRef.current.some((message) => message.id === item.message.id);
-          if (loaded && ensureAndScroll()) return;
-          await onLoadOlder();
-        }
-        if (!ensureAndScroll()) {
-          alert("未能定位到该消息，可能已超出当前可加载范围。");
-        }
-      };
-      void tryLoadAndScroll();
+      void locateHistoryMessageInCurrentConversation(item);
     },
-    [conversation?.conversationId, messageListRef, onLoadOlder]
+    [conversation?.conversationId, locateHistoryMessageInCurrentConversation, onSwitchConversation]
   );
+
+  useEffect(() => {
+    if (!pendingHistoryJump) {
+      return;
+    }
+    if (pendingHistoryJump.conversationId !== conversation?.conversationId) {
+      return;
+    }
+    void locateHistoryMessageInCurrentConversation(pendingHistoryJump, true);
+  }, [conversation?.conversationId, locateHistoryMessageInCurrentConversation, pendingHistoryJump]);
 
   return (
     <main className={cx("pane chat-pane", active && "mobile-active")} aria-label="聊天面板">
@@ -844,13 +921,12 @@ export function ChatPanel({
             <Avatar name={conversation.title || `#${conversation.conversationId}`} src={conversation.avatar} />
             <div className="chat-title">
               <strong>{conversation.title || `会话 ${conversation.conversationId}`}</strong>
-              <span>
-                conversationId: {conversation.conversationId} · {currentMember ? roleLabel(currentMember.role) : roleLabel(conversation.role)}
-              </span>
+              <span className="chat-member-role">{currentMember ? roleLabel(currentMember.role) : roleLabel(conversation.role)}</span>
               {peerTypingText && <span className="chat-typing-status">{peerTypingText}</span>}
             </div>
-            <span className="chat-id-badge">ID {conversation.conversationId}</span>
-            <WsBadge status={wsStatus} />
+            <span className="chat-ws-indicator">
+              <WsBadge status={wsStatus} />
+            </span>
             <IconButton label="历史搜索" onClick={openHistorySearch}>
               <Search size={19} />
             </IconButton>
@@ -867,7 +943,16 @@ export function ChatPanel({
                 <UserPlus size={19} />
               </IconButton>
             )}
-            <IconButton label="退出群聊" disabled={busy} onClick={() => void onLeaveGroup()}>
+            <IconButton
+              label="退出群聊"
+              disabled={busy}
+              onClick={() => {
+                const groupName = conversation.title || `#${conversation.conversationId}`;
+                if (window.confirm(`确认退出群聊「${groupName}」吗？`)) {
+                  void onLeaveGroup();
+                }
+              }}
+            >
               <DoorOpen size={19} />
             </IconButton>
           </header>
@@ -1088,7 +1173,7 @@ export function ChatPanel({
 
       {inviteOpen && (
         <div className="modal-overlay" onClick={() => setInviteOpen(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-box invite-modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <strong>邀请好友</strong>
               <button type="button" onClick={() => setInviteOpen(false)}>
@@ -1113,13 +1198,13 @@ export function ChatPanel({
                       <Avatar name={friend.nickname || friend.aim_id} src={friend.avatar} />
                       <div className="invite-friend-info">
                         <strong>{friend.remark || friend.nickname || friend.aim_id}</strong>
-                        <span>{alreadyIn ? "已在群聊中" : friend.nickname || friend.aim_id}</span>
+                        <span>{friend.aim_id}</span>
                       </div>
                       {alreadyIn ? (
                         <span className="invite-badge in-group">已在群聊中</span>
                       ) : (
                         <button
-                          className="btn btn-sm"
+                          className="invite-action-btn"
                           disabled={inviting}
                           type="button"
                           onClick={() => void handleInviteFriend(friend)}
@@ -1177,6 +1262,37 @@ export function ChatPanel({
                 />
                 <span>仅搜索当前会话</span>
               </label>
+              {!historySearchCurrentConversationOnly && (
+                <>
+                  <label className="history-search-field">
+                    <span>会话类型</span>
+                    <select
+                      value={historySearchConversationType}
+                      onChange={(event) => setHistorySearchConversationType((event.target.value as "ALL" | "GROUP" | "SINGLE") || "ALL")}
+                    >
+                      <option value="ALL">全部</option>
+                      <option value="GROUP">群聊</option>
+                      <option value="SINGLE">单聊</option>
+                    </select>
+                  </label>
+                  <label className="history-search-field">
+                    <span>指定会话（可选）</span>
+                    <select
+                      value={historySearchConversationId}
+                      onChange={(event) => setHistorySearchConversationId(event.target.value)}
+                    >
+                      <option value="">全部会话</option>
+                      {historySearchSupportedConversations
+                        .filter((item) => historySearchConversationType === "ALL" || item.type === historySearchConversationType)
+                        .map((item) => (
+                          <option key={item.conversationId} value={item.conversationId}>
+                            {`${item.title || item.conversationId}（${item.type === "GROUP" ? "群聊" : "单聊"}）`}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                </>
+              )}
               {historySearchError && <p className="history-search-error">{historySearchError}</p>}
               <div className="history-search-actions">
                 <button type="button" disabled={historySearchLoading} onClick={() => void submitHistorySearch()}>

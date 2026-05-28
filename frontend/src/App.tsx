@@ -82,6 +82,7 @@ import type {
   FriendInfo,
   FriendRequestInfo,
   GroupInfo,
+  GroupJoinRequestInfo,
   KnowledgeBaseInfo,
   KnowledgeDocumentInfo,
   KnowledgeSearchChunkInfo,
@@ -93,6 +94,7 @@ import type {
   SessionInfo,
   TypingEventData,
   UserMemoryInfo,
+  UserMemorySettingInfo,
   UserInfo
 } from "./types";
 import { AuthView } from "./app/views/auth-view";
@@ -110,6 +112,7 @@ import {
 import { logoutAllAction, revokeSessionAction, uploadAvatarAction } from "./app/domains/auth-domain";
 import {
   createGroupAction,
+  disbandGroupAction,
   inviteMemberAction,
   joinGroupAction,
   leaveGroupAction,
@@ -118,6 +121,7 @@ import {
   removeMemberAction,
   setAdminAction,
   setGroupMuteAllAction,
+  updateGroupAvatarAction,
   transferOwnerAction,
   unmuteMemberAction,
   updateGroupAnnouncementAction
@@ -185,8 +189,17 @@ function App() {
   const [knowledgeSearchChunks, setKnowledgeSearchChunks] = useState<KnowledgeSearchChunkInfo[]>([]);
   const [conversationKnowledgeBases, setConversationKnowledgeBases] = useState<ConversationKnowledgeBaseInfo[]>([]);
   const [loadingKnowledge, setLoadingKnowledge] = useState(false);
+  const [groupJoinRequests, setGroupJoinRequests] = useState<GroupJoinRequestInfo[]>([]);
+  const [loadingGroupJoinRequests, setLoadingGroupJoinRequests] = useState(false);
   const [userMemories, setUserMemories] = useState<UserMemoryInfo[]>([]);
   const [loadingUserMemories, setLoadingUserMemories] = useState(false);
+  const [userMemorySetting, setUserMemorySetting] = useState<UserMemorySettingInfo>({
+    enabled: true,
+    scope: "ALL_GROUPS",
+    conversationIds: [],
+    updatedAt: 0
+  });
+  const [loadingUserMemorySetting, setLoadingUserMemorySetting] = useState(false);
   const [theme, setTheme] = useState<UITheme>(() => {
     try {
       const stored = window.localStorage.getItem(themeStorageKey);
@@ -475,6 +488,13 @@ function App() {
     return data;
   }, []);
 
+  const refreshSelectedConversationMembers = useCallback(async (conversationId: string) => {
+    const list = await api.members(conversationId);
+    if (selectedConversationIdRef.current === conversationId) {
+      setMembers(list);
+    }
+  }, []);
+
   const { notificationStatus, notificationsEnabled, showMessageNotification, handleToggleNotifications } =
     useNotificationDomain({
       user,
@@ -502,6 +522,7 @@ function App() {
         messageListRef,
         markConversationRead,
         refreshSelectedGroupInfo,
+        refreshSelectedConversationMembers,
         showMessageNotification,
         showToast,
         refreshConversations,
@@ -517,6 +538,7 @@ function App() {
       applyRecalledMessageEvent,
       markConversationRead,
       refreshSelectedGroupInfo,
+      refreshSelectedConversationMembers,
       refreshConversations,
       showMessageNotification,
       showToast,
@@ -954,6 +976,12 @@ function App() {
   const handleUpdateGroupAnnouncement = async (announcement: string) =>
     updateGroupAnnouncementAction(announcement, conversationDomainDeps);
 
+  const handleUpdateGroupAvatar = async (avatarUrl: string) =>
+    updateGroupAvatarAction(avatarUrl, conversationDomainDeps);
+
+  const handleDisbandGroup = async () =>
+    disbandGroupAction(conversationDomainDeps);
+
   const { handleRecallMessage, handleSendMessage, handleLoadOlder } = useMessageActions({
     user,
     selectedConversationId,
@@ -1025,6 +1053,21 @@ function App() {
     }
   }, []);
 
+  const refreshUserMemorySetting = useCallback(async () => {
+    setLoadingUserMemorySetting(true);
+    try {
+      const data = await api.getUserMemorySetting();
+      setUserMemorySetting({
+        enabled: Boolean(data.enabled),
+        scope: data.scope || "ALL_GROUPS",
+        conversationIds: Array.isArray(data.conversationIds) ? data.conversationIds : [],
+        updatedAt: data.updatedAt || 0
+      });
+    } finally {
+      setLoadingUserMemorySetting(false);
+    }
+  }, []);
+
   const handleWriteUserMemory = async (content: string) => {
     setBusyAction(true);
     try {
@@ -1045,6 +1088,29 @@ function App() {
       await api.updateUserMemory(memoryId, content);
       await refreshUserMemories();
       showToast("记忆已更新", "success");
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+      throw error;
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  const handleUpdateUserMemorySetting = async (input: {
+    enabled?: boolean;
+    scope?: "ALL_GROUPS" | "SELECTED_GROUPS" | string;
+    conversationIds?: string[];
+  }) => {
+    setBusyAction(true);
+    try {
+      const data = await api.updateUserMemorySetting(input);
+      setUserMemorySetting({
+        enabled: Boolean(data.enabled),
+        scope: data.scope || "ALL_GROUPS",
+        conversationIds: Array.isArray(data.conversationIds) ? data.conversationIds : [],
+        updatedAt: data.updatedAt || 0
+      });
+      showToast("长期记忆设置已更新", "success");
     } catch (error) {
       showToast(errorMessage(error), "error");
       throw error;
@@ -1187,7 +1253,10 @@ function App() {
     void refreshUserMemories().catch((error) => {
       showToast(errorMessage(error), "error");
     });
-  }, [detailTab, refreshUserMemories, showToast, user]);
+    void refreshUserMemorySetting().catch((error) => {
+      showToast(errorMessage(error), "error");
+    });
+  }, [detailTab, refreshUserMemories, refreshUserMemorySetting, showToast, user]);
 
   const handleCreateKnowledgeBase = async (input: { name: string; description: string }) => {
     setKnowledgeBusy(true);
@@ -1282,12 +1351,14 @@ function App() {
     }
   };
 
-  const handleBindConversationKnowledgeBase = async (knowledgeBaseId: number) => {
-    if (!selectedConversationId) return;
+  const handleBindConversationKnowledgeBase = async (input: { conversationId: string; knowledgeBaseId: number }) => {
+    if (!input.conversationId) return;
     setKnowledgeBusy(true);
     try {
-      await api.bindConversationKnowledgeBase(selectedConversationId, knowledgeBaseId);
-      await refreshConversationKnowledgeBases();
+      await api.bindConversationKnowledgeBase(input.conversationId, input.knowledgeBaseId);
+      if (selectedConversationId === input.conversationId) {
+        await refreshConversationKnowledgeBases();
+      }
       showToast("已绑定知识库", "success");
     } catch (error) {
       showToast(errorMessage(error), "error");
@@ -1297,12 +1368,14 @@ function App() {
     }
   };
 
-  const handleUnbindConversationKnowledgeBase = async (knowledgeBaseId: number) => {
-    if (!selectedConversationId) return;
+  const handleUnbindConversationKnowledgeBase = async (input: { conversationId: string; knowledgeBaseId: number }) => {
+    if (!input.conversationId) return;
     setKnowledgeBusy(true);
     try {
-      await api.unbindConversationKnowledgeBase(selectedConversationId, knowledgeBaseId);
-      await refreshConversationKnowledgeBases();
+      await api.unbindConversationKnowledgeBase(input.conversationId, input.knowledgeBaseId);
+      if (selectedConversationId === input.conversationId) {
+        await refreshConversationKnowledgeBases();
+      }
       showToast("已解绑知识库", "success");
     } catch (error) {
       showToast(errorMessage(error), "error");
@@ -1311,6 +1384,51 @@ function App() {
       setKnowledgeBusy(false);
     }
   };
+
+  const refreshGroupJoinRequests = useCallback(async () => {
+    if (!selectedConversationId || selectedConversation?.type !== "GROUP") {
+      setGroupJoinRequests([]);
+      return;
+    }
+    if (!currentMember || (currentMember.role !== "OWNER" && currentMember.role !== "ADMIN")) {
+      setGroupJoinRequests([]);
+      return;
+    }
+    setLoadingGroupJoinRequests(true);
+    try {
+      const items = await api.listGroupJoinRequests(selectedConversationId, 100);
+      setGroupJoinRequests(items);
+    } catch (error) {
+      showToast(errorMessage(error), "error");
+    } finally {
+      setLoadingGroupJoinRequests(false);
+    }
+  }, [currentMember, selectedConversation?.type, selectedConversationId, showToast]);
+
+  const handleReviewGroupJoinRequest = useCallback(
+    async (requestId: number, action: "APPROVE" | "REJECT") => {
+      if (!selectedConversationId) return;
+      setBusyAction(true);
+      try {
+        const result = await api.reviewGroupJoinRequest(selectedConversationId, requestId, action);
+        await Promise.all([refreshConversations(), refreshGroupJoinRequests()]);
+        if (action === "APPROVE") {
+          await Promise.all([refreshCurrentConversationMessages(), api.members(selectedConversationId).then(setMembers)]);
+        }
+        showToast(result.message || (action === "APPROVE" ? "已通过入群申请" : "已拒绝入群申请"), "success");
+      } catch (error) {
+        showToast(errorMessage(error), "error");
+      } finally {
+        setBusyAction(false);
+      }
+    },
+    [refreshConversations, refreshCurrentConversationMessages, refreshGroupJoinRequests, selectedConversationId, showToast]
+  );
+
+  useEffect(() => {
+    if (detailTab !== "friends") return;
+    void refreshGroupJoinRequests();
+  }, [detailTab, refreshGroupJoinRequests]);
 
   useEffect(() => {
     if (selectedKnowledgeBaseId) {
@@ -1375,6 +1493,7 @@ function App() {
       <ChatPanel
         active={mobilePane === "chat"}
         conversation={selectedConversation}
+        conversations={conversations}
         currentUser={user}
         currentMember={currentMember}
         members={members}
@@ -1390,6 +1509,11 @@ function App() {
         composerRef={composerRef}
         canSend={canSendCurrentConversation}
         onBack={() => setMobilePane("conversations")}
+        onSwitchConversation={(conversationId) => {
+          setSelectedConversationId(conversationId);
+          setMobilePane("chat");
+        }}
+        onHistoryJumpNotice={(message) => showToast(message, "info")}
         onDraftChange={handleDraftChange}
         onLoadOlder={handleLoadOlder}
         onLeaveGroup={handleLeaveGroup}
@@ -1410,9 +1534,11 @@ function App() {
         active={
           mobilePane === "friends" ||
           mobilePane === "members" ||
+          mobilePane === "knowledge" ||
           mobilePane === "bots" ||
           mobilePane === "account"
         }
+        mobileManageMode={mobilePane === "members"}
         tab={detailTab}
         user={user}
         friendGroups={friendGroups}
@@ -1431,6 +1557,8 @@ function App() {
         selectedConversationType={selectedConversation?.type ?? null}
         selectedGroupInfo={selectedGroupInfo}
         currentMember={currentMember}
+        groupJoinRequests={groupJoinRequests}
+        loadingGroupJoinRequests={loadingGroupJoinRequests}
         availableBots={availableBots}
         customBots={customBots}
         conversationBots={conversationBots}
@@ -1446,7 +1574,9 @@ function App() {
         loadingKnowledge={loadingKnowledge}
         knowledgeBusy={knowledgeBusy}
         userMemories={userMemories}
+        userMemorySetting={userMemorySetting}
         loadingUserMemories={loadingUserMemories}
+        loadingUserMemorySetting={loadingUserMemorySetting}
         onTabChange={setDetailTab}
         onCreateFriendGroup={handleCreateFriendGroup}
         onAddFriend={handleAddFriend}
@@ -1469,6 +1599,10 @@ function App() {
         onRemoveMember={handleRemoveMember}
         onSetGroupMuteAll={handleSetGroupMuteAll}
         onUpdateGroupAnnouncement={handleUpdateGroupAnnouncement}
+        onUpdateGroupAvatar={handleUpdateGroupAvatar}
+        onDisbandGroup={handleDisbandGroup}
+        onRefreshGroupJoinRequests={refreshGroupJoinRequests}
+        onReviewGroupJoinRequest={handleReviewGroupJoinRequest}
         onAddBot={handleAddBot}
         onRemoveBot={handleRemoveBot}
         onCreateCustomBot={handleCreateCustomBot}
@@ -1484,9 +1618,14 @@ function App() {
         onBindConversationKnowledgeBase={handleBindConversationKnowledgeBase}
         onUnbindConversationKnowledgeBase={handleUnbindConversationKnowledgeBase}
         onRefreshKnowledgePanelData={loadKnowledgePanelData}
+        onSelectConversation={(conversationId) => setSelectedConversationId(conversationId)}
+        onLoadConversationKnowledgeBases={(conversationId) => api.listConversationKnowledgeBases(conversationId)}
+        onLoadKnowledgeDocuments={(knowledgeBaseId) => api.listKnowledgeDocuments(knowledgeBaseId)}
         onRefreshUserMemories={refreshUserMemories}
+        onRefreshUserMemorySetting={refreshUserMemorySetting}
         onWriteUserMemory={handleWriteUserMemory}
         onUpdateUserMemory={handleUpdateUserMemory}
+        onUpdateUserMemorySetting={handleUpdateUserMemorySetting}
         onMention={handleMention}
         onClose={() => setMobilePane(selectedConversation ? "chat" : "conversations")}
       />
@@ -1495,7 +1634,7 @@ function App() {
         active={mobilePane}
         hasConversation={Boolean(selectedConversation)}
         onChange={(pane) => {
-          if (pane === "friends" || pane === "members" || pane === "bots" || pane === "account") {
+          if (pane === "friends" || pane === "members" || pane === "bots" || pane === "knowledge" || pane === "account") {
             setDetailTab(pane);
           }
           setMobilePane(pane);

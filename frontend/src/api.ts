@@ -11,9 +11,11 @@ import type {
   FriendRequestInfo,
   FriendRequestResponse,
   GroupInfo,
+  GroupJoinRequestInfo,
   KnowledgeBaseInfo,
   KnowledgeDocumentInfo,
   KnowledgeSearchChunkInfo,
+  JoinGroupResponse,
   NotificationListResponse,
   MemberInfo,
   MessageInfo,
@@ -23,6 +25,7 @@ import type {
   UploadAvatarResponse,
   UploadMediaResponse,
   UserMemoryInfo,
+  UserMemorySettingInfo,
   UserInfo
 } from "./types";
 
@@ -168,6 +171,19 @@ export const api = {
       body: JSON.stringify({ content })
     });
   },
+  getUserMemorySetting() {
+    return request<UserMemorySettingInfo>("/api/v1/users/memory/settings");
+  },
+  updateUserMemorySetting(input: {
+    enabled?: boolean;
+    scope?: "ALL_GROUPS" | "SELECTED_GROUPS" | string;
+    conversationIds?: string[];
+  }) {
+    return request<UserMemorySettingInfo>("/api/v1/users/memory/settings", {
+      method: "PUT",
+      body: JSON.stringify(input)
+    });
+  },
   uploadAvatar(file: Blob) {
     const body = new FormData();
     body.append("file", file, "avatar.png");
@@ -280,9 +296,27 @@ export const api = {
     });
   },
   joinGroup(conversationId: string) {
-    return request<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/members`, {
+    return request<JoinGroupResponse>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/members`, {
       method: "POST"
     });
+  },
+  listGroupJoinRequests(conversationId: string, limit = 50) {
+    const params = new URLSearchParams();
+    if (limit > 0) {
+      params.set("limit", String(limit));
+    }
+    return request<GroupJoinRequestInfo[]>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/join-requests${params.toString() ? `?${params.toString()}` : ""}`
+    );
+  },
+  reviewGroupJoinRequest(conversationId: string, requestId: number, action: "APPROVE" | "REJECT") {
+    return request<{ message: string }>(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/join-requests/${encodeURIComponent(String(requestId))}/review`,
+      {
+        method: "POST",
+        body: JSON.stringify({ action })
+      }
+    );
   },
   inviteMember(conversationId: string, targetUserId: number) {
     return request<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/members/invite`, {
@@ -354,6 +388,17 @@ export const api = {
       body: JSON.stringify({ announcement })
     });
   },
+  updateGroupAvatar(conversationId: string, avatar: string) {
+    return request<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/avatar`, {
+      method: "PUT",
+      body: JSON.stringify({ avatar })
+    });
+  },
+  disbandGroup(conversationId: string) {
+    return request<void>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/group`, {
+      method: "DELETE"
+    });
+  },
   members(conversationId: string) {
     return request<MemberInfo[]>(`/api/v1/conversations/${encodeURIComponent(conversationId)}/members`);
   },
@@ -370,10 +415,19 @@ export const api = {
       timeoutMs: 45000
     });
   },
-  searchHistoryMessages(options: { conversationId?: string; startAt: number; endAt: number; keyword?: string }) {
+  searchHistoryMessages(options: {
+    conversationId?: string;
+    startAt: number;
+    endAt: number;
+    keyword?: string;
+    conversationType?: "ALL" | "GROUP" | "SINGLE";
+  }) {
     const params = new URLSearchParams();
     if (options.conversationId && options.conversationId.trim()) {
       params.set("conversationId", options.conversationId.trim());
+    }
+    if (options.conversationType && options.conversationType !== "ALL") {
+      params.set("conversationType", options.conversationType);
     }
     params.set("startAt", String(options.startAt));
     params.set("endAt", String(options.endAt));

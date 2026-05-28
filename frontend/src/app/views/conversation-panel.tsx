@@ -141,7 +141,23 @@ export function ConversationPanel({
 
       <label className="search-box">
         <Search size={17} />
-        <input aria-label="搜索会话" value={search} onChange={(event) => onSearch(event.target.value)} placeholder="搜索会话或会话 ID" />
+        <input
+          aria-label="搜索会话"
+          type="search"
+          name="conversation_query"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          inputMode="search"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-bwignore="true"
+          data-form-type="other"
+          value={search}
+          onChange={(event) => onSearch(event.target.value)}
+          placeholder="搜索会话或会话 ID"
+        />
       </label>
 
       <div className="list-meta">
