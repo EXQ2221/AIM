@@ -171,7 +171,7 @@ select:focus-visible {
   height: 58px;
   place-items: center;
   border-radius: 8px;
-  background: #1f6feb;
+  background: var(--teal-strong);
   color: #ffffff;
   font-size: 28px;
   font-weight: 800;
@@ -339,7 +339,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #3f4d49;
+  color: var(--ink);
   font-size: 13px;
   font-weight: 700;
 }
@@ -845,7 +845,7 @@ select:focus-visible {
 
 .conversation-item:hover,
 .conversation-item.active {
-  background: #eef4ff;
+  background: var(--im-item-active);
 }
 
 .conversation-item.active {
@@ -1045,8 +1045,8 @@ select:focus-visible {
 }
 
 .message-row.mine .message-bubble {
-  border-color: #0969da;
-  background: #0969da;
+  border-color: var(--teal);
+  background: var(--teal);
   color: #ffffff;
 }
 
@@ -1875,7 +1875,7 @@ select:focus-visible {
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #f7faf8;
+  background: var(--panel-strong);
   display: grid;
   gap: 8px;
 }
@@ -1965,19 +1965,19 @@ select:focus-visible {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fff;
+  background: var(--panel);
 }
 
 .kb-row p {
   margin: 0;
-  color: #3f4d49;
+  color: var(--ink);
   font-size: 13px;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .kb-empty {
-  color: #6a7f78;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -1995,9 +1995,9 @@ select:focus-visible {
   gap: 8px;
   min-height: 36px;
   padding: 0 14px;
-  border: 1px solid #1f6feb;
+  border: 1px solid var(--teal-strong);
   border-radius: 8px;
-  background: #1f6feb;
+  background: var(--teal-strong);
   color: #ffffff;
   font-size: 13px;
   font-weight: 700;
@@ -2020,7 +2020,7 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #6a7f78;
+  color: var(--muted);
   font-size: 12px;
 }
 
@@ -2050,7 +2050,7 @@ select:focus-visible {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #f7faf8;
+  background: var(--panel-strong);
 }
 
 .quota-card-head,
@@ -2255,7 +2255,7 @@ select:focus-visible {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
 }
 
@@ -2286,8 +2286,8 @@ select:focus-visible {
   min-width: 0;
   padding: 6px 10px;
   border-radius: 999px;
-  background: rgba(39, 99, 84, 0.1);
-  color: #0b5d4b;
+  background: var(--teal-soft);
+  color: var(--teal);
   font-weight: 700;
   font-size: 13px;
   overflow: hidden;
@@ -2357,7 +2357,7 @@ select:focus-visible {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #f7faf8;
+  background: var(--panel-strong);
 }
 
 .friend-card-head {
@@ -2371,7 +2371,7 @@ select:focus-visible {
 }
 
 .friend-card-head:hover {
-  background: rgba(11, 111, 103, 0.05);
+  background: var(--teal-soft);
 }
 
 .friend-card-meta strong,
@@ -2509,7 +2509,7 @@ select:focus-visible {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #f7faf8;
+  background: var(--panel-strong);
 }
 
 .group-avatar-head {
@@ -2532,7 +2532,7 @@ select:focus-visible {
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: #f7faf8;
+  background: var(--panel-strong);
 }
 
 .group-join-review-header {
@@ -2563,9 +2563,9 @@ select:focus-visible {
   display: grid;
   gap: 6px;
   padding: 10px;
-  border: 1px solid rgba(220, 229, 225, 0.9);
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fff;
+  background: var(--panel);
 }
 
 .group-join-review-meta {
@@ -2642,9 +2642,9 @@ select:focus-visible {
   gap: 8px;
   margin-top: 6px;
   padding: 10px;
-  border: 1px solid rgba(220, 229, 225, 0.9);
+  border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(247, 250, 248, 0.96);
+  background: var(--panel-strong);
 }
 
 .member-action-row {
@@ -2682,7 +2682,7 @@ select:focus-visible {
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #f7faf8;
+  background: var(--panel-strong);
   text-align: center;
 }
 
@@ -2832,7 +2832,7 @@ select:focus-visible {
 }
 
 .account-actions button:first-child {
-  background: #26332f;
+  background: var(--teal-strong);
 }
 
 .account-actions button:last-child {
@@ -2972,7 +2972,7 @@ select:focus-visible {
   border: 1px solid var(--line-strong);
   border-radius: 4px;
   box-shadow: none;
-  accent-color: #1f6feb;
+  accent-color: var(--teal);
 }
 
 .memory-conversation-picker {
@@ -3012,7 +3012,7 @@ select:focus-visible {
   padding: 0;
   border-radius: 4px;
   box-shadow: none;
-  accent-color: #1f6feb;
+  accent-color: var(--teal);
 }
 
 .memory-conversation-meta {
@@ -3271,7 +3271,7 @@ select:focus-visible {
 }
 
 .conversation-pane .conversation-item.active {
-  box-shadow: inset 2px 0 0 #1f6feb;
+  box-shadow: inset 2px 0 0 var(--teal-strong);
 }
 
 .conversation-pane .notification-item:hover {
@@ -3316,8 +3316,8 @@ select:focus-visible {
 }
 
 .message-row.mine .message-bubble {
-  border-color: #1f6feb;
-  background: #1f6feb;
+  border-color: var(--teal-strong);
+  background: var(--teal-strong);
 }
 
 .message-meta {
@@ -3339,7 +3339,7 @@ select:focus-visible {
 
 .composer-input-row > button {
   border-radius: 6px;
-  background: #1f6feb;
+  background: var(--teal-strong);
 }
 
 .composer-tools button,
@@ -3690,9 +3690,9 @@ select:focus-visible {
   min-width: 78px;
   min-height: 34px;
   padding: 0 12px;
-  border: 1px solid #1f6feb;
+  border: 1px solid var(--teal-strong);
   border-radius: 8px;
-  background: #1f6feb;
+  background: var(--teal-strong);
   color: #ffffff;
   font-size: 13px;
   font-weight: 700;

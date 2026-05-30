@@ -62,7 +62,21 @@ export function AuthView({
           </button>
         </div>
 
-        <form className="stack-form" onSubmit={submit}>
+        <form autoComplete="off" className="stack-form" onSubmit={submit}>
+          <input
+            aria-hidden="true"
+            autoComplete="username"
+            style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0 }}
+            tabIndex={-1}
+            type="text"
+          />
+          <input
+            aria-hidden="true"
+            autoComplete="current-password"
+            style={{ position: "absolute", left: "-9999px", width: 1, height: 1, opacity: 0 }}
+            tabIndex={-1}
+            type="password"
+          />
           {mode === "register" && (
             <>
               <Field icon={<BadgePlus size={18}></BadgePlus>} label="AIM ID">
@@ -74,10 +88,30 @@ export function AuthView({
             </>
           )}
           <Field icon={<Mail size={18}></Mail>} label="邮箱">
-            <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="请输入邮箱" />
+            <input
+              required
+              autoComplete="off"
+              name="aim_email_input"
+              onFocus={(event) => event.currentTarget.removeAttribute("readonly")}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="请输入邮箱"
+              readOnly
+              type="email"
+              value={email}
+            />
           </Field>
           <Field icon={<LockKeyhole size={18}></LockKeyhole>} label="密码">
-            <input required type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="请输入密码" />
+            <input
+              required
+              autoComplete="new-password"
+              name="aim_password_input"
+              onFocus={(event) => event.currentTarget.removeAttribute("readonly")}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="请输入密码"
+              readOnly
+              type="password"
+              value={password}
+            />
           </Field>
           <button className="primary-action" disabled={busy} type="submit">
             {busy ? <Loader2 className="spin" size={18} /> : <CheckCircle2 size={18} />}
