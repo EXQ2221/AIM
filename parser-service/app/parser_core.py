@@ -7,7 +7,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import BinaryIO, Iterable, cast
 
 import requests
 from pptx import Presentation
@@ -36,27 +36,42 @@ class ParsedDocument:
     page_texts: list[str]
 
 
-def parse_document(filename: str, content_type: str, data: bytes, title_override: str | None = None) -> ParsedDocument:
-    if not data:
+def parse_document(
+    filename: str,
+    content_type: str,
+    data: bytes | BinaryIO,
+    title_override: str | None = None,
+) -> ParsedDocument:
+    source = _as_binary_source(data)
+    return parse_document_from_source(filename, content_type, source, title_override)
+
+
+def parse_document_from_source(
+    filename: str,
+    content_type: str,
+    source: BinaryIO,
+    title_override: str | None = None,
+) -> ParsedDocument:
+    if _is_empty_source(source):
         raise ValueError("file is empty")
 
     title = (title_override or "").strip() or Path(filename or "").stem.strip() or "Imported Document"
     file_type = detect_file_type(filename, content_type)
 
     if file_type == "text":
-        content = normalize_text(decode_utf8(data))
+        content = normalize_text(decode_utf8(source.read()))
         return ParsedDocument(title, "TEXT", ensure_not_empty(content), file_type, 0, False, [])
     if file_type == "markdown":
-        content = normalize_text(decode_utf8(data))
+        content = normalize_text(decode_utf8(source.read()))
         return ParsedDocument(title, "MARKDOWN", ensure_not_empty(content), file_type, 0, False, [])
     if file_type == "pdf":
-        text, page_texts, images = parse_pdf(data)
+        text, page_texts, images = parse_pdf(source)
         return build_multimodal_document(title, file_type, text, images, page_texts)
     if file_type == "pptx":
-        text, images = parse_pptx(data)
+        text, images = parse_pptx(source)
         return build_multimodal_document(title, file_type, text, images, [])
     if file_type == "docx":
-        text = parse_docx(data)
+        text = parse_docx(source)
         return ParsedDocument(title, "TEXT", ensure_not_empty(text), file_type, 0, False, [])
     if file_type == "ppt":
         raise ValueError("legacy .ppt is not supported yet, please convert it to .pptx")
@@ -109,11 +124,11 @@ def decode_utf8(data: bytes) -> str:
         raise ValueError("text document is not valid UTF-8") from exc
 
 
-def parse_docx(data: bytes) -> str:
+def parse_docx(data: bytes | BinaryIO) -> str:
     from zipfile import ZipFile
 
     text_parts: list[str] = []
-    with ZipFile(io.BytesIO(data)) as zf:
+    with ZipFile(_as_binary_source(data)) as zf:
         for name in ("word/document.xml", "word/footnotes.xml", "word/endnotes.xml"):
             if name not in zf.namelist():
                 continue
@@ -133,8 +148,8 @@ def extract_text_from_openxml(xml_text: str) -> str:
     return text
 
 
-def parse_pdf(data: bytes) -> tuple[str, list[str], list[bytes]]:
-    reader = PdfReader(io.BytesIO(data), strict=False)
+def parse_pdf(data: bytes | BinaryIO) -> tuple[str, list[str], list[bytes]]:
+    reader = PdfReader(_as_binary_source(data), strict=False)
     pages: list[str] = []
     images: list[bytes] = []
     for page in reader.pages:
@@ -155,8 +170,8 @@ def parse_pdf(data: bytes) -> tuple[str, list[str], list[bytes]]:
     return combined, pages, images
 
 
-def parse_pptx(data: bytes) -> tuple[str, list[bytes]]:
-    prs = Presentation(io.BytesIO(data))
+def parse_pptx(data: bytes | BinaryIO) -> tuple[str, list[bytes]]:
+    prs = Presentation(_as_binary_source(data))
     texts: list[str] = []
     images: list[bytes] = []
 
@@ -300,3 +315,25 @@ def ensure_not_empty(text: str) -> str:
     if not text:
         raise ValueError("no extractable text found")
     return text
+
+
+def _as_binary_source(data: bytes | BinaryIO) -> BinaryIO:
+    if hasattr(data, "read"):
+        source = cast(BinaryIO, data)
+        try:
+            source.seek(0)
+        except Exception:
+            pass
+        return source
+    return io.BytesIO(bytes(data))
+
+
+def _is_empty_source(source: BinaryIO) -> bool:
+    try:
+        current = source.tell()
+        source.seek(0, io.SEEK_END)
+        end = source.tell()
+        source.seek(current)
+        return end == 0
+    except Exception:
+        return False

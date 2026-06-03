@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -27,20 +28,65 @@ type knowledgeDocumentFileImportTask struct {
 	Filename          string
 	ContentType       string
 	Title             string
-	Data              []byte
+	SourcePath        string
+	SourceSize        int64
 	StartedAt         time.Time
 }
 
 func runKnowledgeDocumentFileImport(task knowledgeDocumentFileImportTask) {
 	logger := observability.L()
+	defer func() {
+		if sourcePath := strings.TrimSpace(task.SourcePath); sourcePath != "" {
+			_ = os.Remove(sourcePath)
+		}
+	}()
+
+	kbName := strings.TrimSpace(task.KnowledgeBaseName)
+	if kbName == "" {
+		kbName = resolveKnowledgeBaseDisplayName(task.UserID, task.KnowledgeBaseID)
+	}
+	task.KnowledgeBaseName = kbName
+
+	displayTitle := strings.TrimSpace(task.Title)
+	if displayTitle == "" {
+		displayTitle = knowledgeFileTitle(task.Filename)
+	}
+	/*
+		pushKnowledgeImportStatusNotification(
+			task.UserID,
+			"鐭ヨ瘑搴撴枃浠跺鍏ュ凡鎻愪氦",
+			fmt.Sprintf("鐭ヨ瘑搴撱€?s銆嶇殑鏂囦欢銆?s銆嶅凡鎻愪氦锛屾鍦ㄥ悗鍙拌В鏋愬苟鍏ュ簱銆?, kbName, title),
+		)
+
+	*/
+	pushKnowledgeImportStatusNotification(
+		task.UserID,
+		"知识库文件导入已提交",
+		fmt.Sprintf("知识库「%s」的文件「%s」已提交，正在后台解析并入库。", kbName, displayTitle),
+	)
+
+	src, err := os.Open(task.SourcePath)
+	if err != nil {
+		logger.Warn("knowledge_import.open_failed",
+			zap.Int64("user_id", task.UserID),
+			zap.Int64("kb_id", task.KnowledgeBaseID),
+			zap.String("filename", task.Filename),
+			zap.String("source_path", task.SourcePath),
+			zap.Error(err),
+		)
+		pushKnowledgeImportFailureNotification(task, err.Error())
+		return
+	}
+	defer src.Close()
+
 	parseStart := time.Now()
 	parseCtx, cancelParse := context.WithTimeout(context.Background(), knowledgeImportParseTimeout)
-	parsed, parseErr := knowledgeimport.ParseViaService(
+	parsed, parseErr := knowledgeimport.ParseViaServiceFromReader(
 		parseCtx,
 		task.Filename,
 		task.ContentType,
-		task.Data,
-		task.Title,
+		src,
+		strings.TrimSpace(task.Title),
 	)
 	cancelParse()
 	if parseErr != nil {
@@ -48,7 +94,7 @@ func runKnowledgeDocumentFileImport(task knowledgeDocumentFileImportTask) {
 			zap.Int64("user_id", task.UserID),
 			zap.Int64("kb_id", task.KnowledgeBaseID),
 			zap.String("filename", task.Filename),
-			zap.Int("size_bytes", len(task.Data)),
+			zap.Int64("size_bytes", task.SourceSize),
 			zap.Int64("parse_ms", time.Since(parseStart).Milliseconds()),
 			zap.Error(parseErr),
 		)
@@ -59,7 +105,7 @@ func runKnowledgeDocumentFileImport(task knowledgeDocumentFileImportTask) {
 		zap.Int64("user_id", task.UserID),
 		zap.Int64("kb_id", task.KnowledgeBaseID),
 		zap.String("filename", task.Filename),
-		zap.Int("size_bytes", len(task.Data)),
+		zap.Int64("size_bytes", task.SourceSize),
 		zap.String("file_type", parsed.FileType),
 		zap.String("source_type", parsed.SourceType),
 		zap.Int("image_count", parsed.ImageCount),
@@ -68,7 +114,7 @@ func runKnowledgeDocumentFileImport(task knowledgeDocumentFileImportTask) {
 		zap.Int("text_chars", len([]rune(parsed.Content))),
 	)
 
-	title := task.Title
+	title := strings.TrimSpace(task.Title)
 	if title == "" {
 		title = parsed.Title
 	}
@@ -131,14 +177,14 @@ func marshalDocumentImportPayload(parsed *knowledgeimport.ParsedDocument) string
 		CharEnd       int    `json:"charEnd,omitempty"`
 	}
 	type payloadChunk struct {
-		Index        int    `json:"index"`
-		ChunkType    string `json:"chunkType,omitempty"`
-		SectionTitle string `json:"sectionTitle,omitempty"`
-		Content      string `json:"content"`
-		PageStart    int    `json:"pageStart,omitempty"`
-		PageEnd      int    `json:"pageEnd,omitempty"`
-		CharStart    int    `json:"charStart,omitempty"`
-		CharEnd      int    `json:"charEnd,omitempty"`
+		Index        int               `json:"index"`
+		ChunkType    string            `json:"chunkType,omitempty"`
+		SectionTitle string            `json:"sectionTitle,omitempty"`
+		Content      string            `json:"content"`
+		PageStart    int               `json:"pageStart,omitempty"`
+		PageEnd      int               `json:"pageEnd,omitempty"`
+		CharStart    int               `json:"charStart,omitempty"`
+		CharEnd      int               `json:"charEnd,omitempty"`
 		Sentences    []payloadSentence `json:"sentences,omitempty"`
 	}
 	type payload struct {
@@ -182,7 +228,7 @@ func marshalDocumentImportPayload(parsed *knowledgeimport.ParsedDocument) string
 				PageEnd:      item.PageEnd,
 				CharStart:    item.CharStart,
 				CharEnd:      item.CharEnd,
-				Sentences:     sentences,
+				Sentences:    sentences,
 			})
 		}
 	}
@@ -389,6 +435,17 @@ func knowledgeBaseDisplayNameV2(ctx context.Context, client ragservice.Client, u
 		return fallback
 	}
 	return fallback
+}
+
+func resolveKnowledgeBaseDisplayName(userID, knowledgeBaseID int64) string {
+	fallback := fmt.Sprintf("知识库%d", knowledgeBaseID)
+	client, err := rpc.RAGClient()
+	if err != nil || client == nil {
+		return fallback
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), knowledgeImportPollRPCDeadline)
+	defer cancel()
+	return knowledgeBaseDisplayNameV2(ctx, client, userID, knowledgeBaseID)
 }
 
 func knowledgeFileTitle(filename string) string {

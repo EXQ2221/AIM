@@ -74,7 +74,7 @@ services:
     environment:
       PORT: "9001"
       HEALTH_PORT: "19001"
-      USER_POSTGRES_DSN: "${USER_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_user port=5432 sslmode=disable TimeZone=UTC}"
+      USER_POSTGRES_DSN: "postgres://aim:exq964864474@postgres:5432/aim_user?sslmode=disable&TimeZone=UTC"
       REDIS_ADDR: "redis:6379"
       CHAT_SERVICE_ADDR: "chat-service:9003"
       TZ: Asia/Shanghai
@@ -103,7 +103,7 @@ services:
     environment:
       PORT: "9002"
       HEALTH_PORT: "19002"
-      AUTH_POSTGRES_DSN: "${AUTH_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_auth port=5432 sslmode=disable TimeZone=UTC}"
+      AUTH_POSTGRES_DSN: "postgres://aim:exq964864474@postgres:5432/aim_auth?sslmode=disable&TimeZone=UTC"
       REDIS_ADDR: "redis:6379"
       USER_SERVICE_ADDR: "user-service:9001"
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
@@ -135,7 +135,7 @@ services:
     environment:
       PORT: "9003"
       HEALTH_PORT: "19003"
-      CHAT_POSTGRES_DSN: "${CHAT_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_chat port=5432 sslmode=disable TimeZone=UTC}"
+      CHAT_POSTGRES_DSN: "postgres://aim:exq964864474@postgres:5432/aim_chat?sslmode=disable&TimeZone=UTC"
       USER_SERVICE_ADDR: "user-service:9001"
       RAG_SERVICE_ADDR: "rag-service:9004"
       REDIS_ADDR: "redis:6379"
@@ -175,11 +175,11 @@ services:
       EMBEDDING_INSECURE_SKIP_VERIFY: "${EMBEDDING_INSECURE_SKIP_VERIFY:-false}"
       RAG_CHUNK_SIZE: "${RAG_CHUNK_SIZE:-1000}"
       RAG_CHUNK_OVERLAP: "${RAG_CHUNK_OVERLAP:-150}"
-      RAG_TOP_K: "${RAG_TOP_K:-5}"
+      RAG_TOP_K: "${RAG_TOP_K:-8}"
       RAG_SEARCH_TIMEOUT_SECONDS: "${RAG_SEARCH_TIMEOUT_SECONDS:-80}"
       RERANK_ENABLED: "${RERANK_ENABLED:-true}"
       RERANK_BASE_URL: "${RERANK_BASE_URL:-https://dashscope.aliyuncs.com/compatible-api/v1}"
-      RERANK_API_KEY: "${RERANK_API_KEY:-${EMBEDDING_API_KEY:-}}"
+      RERANK_API_KEY: "${RERANK_API_KEY}"
       RERANK_MODEL: "${RERANK_MODEL:-qwen3-rerank}"
       RERANK_TIMEOUT_SECONDS: "${RERANK_TIMEOUT_SECONDS:-15}"
       RERANK_SCORE_THRESHOLD: "${RERANK_SCORE_THRESHOLD:-0.25}"
@@ -214,7 +214,7 @@ services:
     environment:
       PORT: "9004"
       HEALTH_PORT: "19004"
-      RAG_POSTGRES_DSN: "${RAG_POSTGRES_DSN:-host=postgres user=${POSTGRES_USER:-aim} password=${POSTGRES_PASSWORD} dbname=aim_chat port=5432 sslmode=disable TimeZone=UTC}"
+      RAG_POSTGRES_DSN: "postgres://aim:exq964864474@postgres:5432/aim_chat?sslmode=disable&TimeZone=UTC"
       EMBEDDING_BASE_URL: "${EMBEDDING_BASE_URL:-}"
       EMBEDDING_API_KEY: "${EMBEDDING_API_KEY:-}"
       EMBEDDING_PROVIDER: "${EMBEDDING_PROVIDER:-}"
@@ -226,7 +226,7 @@ services:
       EMBEDDING_INSECURE_SKIP_VERIFY: "${EMBEDDING_INSECURE_SKIP_VERIFY:-false}"
       RAG_CHUNK_SIZE: "${RAG_CHUNK_SIZE:-1000}"
       RAG_CHUNK_OVERLAP: "${RAG_CHUNK_OVERLAP:-150}"
-      RAG_TOP_K: "${RAG_TOP_K:-5}"
+      RAG_TOP_K: "${RAG_TOP_K:-8}"
       RAG_SEARCH_TIMEOUT_SECONDS: "${RAG_SEARCH_TIMEOUT_SECONDS:-80}"
       TZ: Asia/Shanghai
     depends_on:
@@ -250,16 +250,16 @@ services:
     pull_policy: ${SERVICE_PULL_POLICY:-always}
     restart: unless-stopped
     environment:
-      VISION_BASE_URL: "${VISION_BASE_URL:-${LLM2_BASE_URL:-}}"
-      VISION_API_KEY: "${VISION_API_KEY:-${LLM2_API_KEY:-}}"
+      VISION_BASE_URL: "${VISION_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}"
+      VISION_API_KEY: "${VISION_API_KEY}"
       VISION_MODEL: "${VISION_MODEL:-qwen3.6-plus}"
       VISION_TIMEOUT_SECONDS: "${VISION_TIMEOUT_SECONDS:-90}"
       PARSER_MAX_DESCRIBE_IMAGES: "${PARSER_MAX_DESCRIBE_IMAGES:-8}"
       PARSER_IMAGE_HEAVY_MIN_IMAGES: "${PARSER_IMAGE_HEAVY_MIN_IMAGES:-4}"
       PARSER_IMAGE_HEAVY_TEXT_CHARS_PER_IMAGE: "${PARSER_IMAGE_HEAVY_TEXT_CHARS_PER_IMAGE:-800}"
       PARSER_ENABLE_LLM_CHUNKING: "${PARSER_ENABLE_LLM_CHUNKING:-true}"
-      CHUNKER_BASE_URL: "${CHUNKER_BASE_URL:-${LLM_BASE_URL:-}}"
-      CHUNKER_API_KEY: "${CHUNKER_API_KEY:-${LLM_API_KEY:-}}"
+      CHUNKER_BASE_URL: "${CHUNKER_BASE_URL:-https://api.deepseek.com}"
+      CHUNKER_API_KEY: "${CHUNKER_API_KEY}"
       CHUNKER_MODEL: "${CHUNKER_MODEL:-deepseek-v4-flash}"
       CHUNKER_TIMEOUT_SECONDS: "${CHUNKER_TIMEOUT_SECONDS:-90}"
       CHUNKER_MAX_CONTENT_CHARS: "${CHUNKER_MAX_CONTENT_CHARS:-120000}"
@@ -292,14 +292,21 @@ services:
       LLM_API_KEY: "${LLM_API_KEY:-}"
       LLM_MODEL: "${LLM_MODEL:-deepseek-v4-flash}"
       LLM_INSECURE_SKIP_VERIFY: "${LLM_INSECURE_SKIP_VERIFY:-false}"
-      SUMMARY_LLM_BASE_URL: "${SUMMARY_LLM_BASE_URL:-${LLM_BASE_URL:-}}"
-      SUMMARY_LLM_API_KEY: "${SUMMARY_LLM_API_KEY:-${LLM_API_KEY:-}}"
+      SUMMARY_LLM_BASE_URL: "${SUMMARY_LLM_BASE_URL}"
+      SUMMARY_LLM_API_KEY: "${SUMMARY_LLM_API_KEY}"
       SUMMARY_LLM_MODEL: "${SUMMARY_LLM_MODEL:-deepseek-v4-flash}"
       SUMMARY_LLM_TIMEOUT: "${SUMMARY_LLM_TIMEOUT:-35s}"
-      SUMMARY_LLM_INSECURE_SKIP_VERIFY: "${SUMMARY_LLM_INSECURE_SKIP_VERIFY:-${LLM_INSECURE_SKIP_VERIFY:-false}}"
+      SUMMARY_LLM_INSECURE_SKIP_VERIFY: "${SUMMARY_LLM_INSECURE_SKIP_VERIFY:-false}"
       UPLOAD_DIR: "/app/uploads"
       UPLOAD_PUBLIC_PREFIX: "/uploads"
       UPLOAD_MAX_BYTES: "${UPLOAD_MAX_BYTES:-629145600}"
+      KNOWLEDGE_IMPORT_PARSE_TIMEOUT: "${KNOWLEDGE_IMPORT_PARSE_TIMEOUT:-30m}"
+      KNOWLEDGE_IMPORT_PARSE_HTTP_TIMEOUT: "${KNOWLEDGE_IMPORT_PARSE_HTTP_TIMEOUT:-30m}"
+      KNOWLEDGE_IMPORT_RAG_ADD_TIMEOUT: "${KNOWLEDGE_IMPORT_RAG_ADD_TIMEOUT:-30m}"
+      KNOWLEDGE_IMPORT_WATCH_TIMEOUT: "${KNOWLEDGE_IMPORT_WATCH_TIMEOUT:-30m}"
+      KNOWLEDGE_IMPORT_POLL_INTERVAL: "${KNOWLEDGE_IMPORT_POLL_INTERVAL:-2s}"
+      KNOWLEDGE_IMPORT_POLL_RPC_TIMEOUT: "${KNOWLEDGE_IMPORT_POLL_RPC_TIMEOUT:-5s}"
+      KNOWLEDGE_IMPORT_NOTIFY_RPC_TIMEOUT: "${KNOWLEDGE_IMPORT_NOTIFY_RPC_TIMEOUT:-5s}"
       TZ: Asia/Shanghai
     depends_on:
       auth-service:
@@ -345,7 +352,7 @@ services:
       - aim-net
 
   prometheus:
-    image: ${PROMETHEUS_IMAGE:-${DOCKER_HUB_MIRROR:-docker.io}/prom/prometheus:v2.55.1}
+    image: ${PROMETHEUS_IMAGE:-docker.io/prom/prometheus:v2.55.1}
     container_name: aim-prometheus
     pull_policy: ${SERVICE_PULL_POLICY:-always}
     restart: unless-stopped
@@ -363,7 +370,7 @@ services:
       - aim-net
 
   grafana:
-    image: ${GRAFANA_IMAGE:-${DOCKER_HUB_MIRROR:-docker.io}/grafana/grafana:11.2.2}
+    image: ${GRAFANA_IMAGE:-docker.io/grafana/grafana:11.2.2}
     container_name: aim-grafana
     pull_policy: ${SERVICE_PULL_POLICY:-always}
     restart: unless-stopped

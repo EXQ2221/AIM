@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from .chunker import build_chunks
 from .parser_core import ParsedDocument, parse_document
@@ -14,12 +15,13 @@ async def parse_file(
     file: UploadFile = File(...),
     title: str | None = Form(default=None),
 ) -> ParseResponse:
-    raw = await file.read()
     try:
-        parsed: ParsedDocument = parse_document(
+        await file.seek(0)
+        parsed: ParsedDocument = await run_in_threadpool(
+            parse_document,
             filename=file.filename or "",
             content_type=file.content_type or "",
-            data=raw,
+            data=file.file,
             title_override=title,
         )
     except ValueError as exc:

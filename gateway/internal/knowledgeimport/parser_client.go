@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -32,7 +33,7 @@ type parserServiceResponse struct {
 		PageEnd      int    `json:"pageEnd"`
 		CharStart    int    `json:"charStart"`
 		CharEnd      int    `json:"charEnd"`
-		Sentences     []struct {
+		Sentences    []struct {
 			SentenceIndex int    `json:"sentenceIndex"`
 			Text          string `json:"text"`
 			PageStart     int    `json:"pageStart"`
@@ -44,34 +45,37 @@ type parserServiceResponse struct {
 }
 
 func ParseViaService(ctx context.Context, filename string, contentType string, data []byte, title string) (*ParsedDocument, error) {
+	return ParseViaServiceFromReader(ctx, filename, contentType, bytes.NewReader(data), title)
+}
+
+func ParseViaServiceFromReader(ctx context.Context, filename string, contentType string, reader io.Reader, title string) (*ParsedDocument, error) {
 	baseURL := strings.TrimSpace(os.Getenv("PARSER_SERVICE_URL"))
 	if baseURL == "" {
 		baseURL = "http://parser-service:8000"
 	}
 	url := strings.TrimRight(baseURL, "/") + "/v1/parse"
 
-	var body bytes.Buffer
-	writer := multipart.NewWriter(&body)
-	part, err := writer.CreateFormFile("file", filename)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := part.Write(data); err != nil {
-		return nil, err
-	}
-	if title = strings.TrimSpace(title); title != "" {
-		if err := writer.WriteField("title", title); err != nil {
-			return nil, err
-		}
-	}
-	if err := writer.Close(); err != nil {
-		return nil, err
-	}
-
 	timeout := parseDurationEnv("KNOWLEDGE_IMPORT_PARSE_HTTP_TIMEOUT", 30*time.Minute)
 	client := &http.Client{Timeout: timeout}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &body)
+
+	pr, pw := io.Pipe()
+	writer := multipart.NewWriter(pw)
+	if reader == nil {
+		err := errors.New("source reader is nil")
+		_ = pw.CloseWithError(err)
+		return nil, err
+	}
+	go func() {
+		if err := writeParserMultipart(writer, reader, filename, title); err != nil {
+			_ = pw.CloseWithError(err)
+			return
+		}
+		_ = pw.Close()
+	}()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, pr)
 	if err != nil {
+		_ = pw.CloseWithError(err)
 		return nil, err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
@@ -81,6 +85,7 @@ func ParseViaService(ctx context.Context, filename string, contentType string, d
 
 	resp, err := client.Do(req)
 	if err != nil {
+		_ = pw.CloseWithError(err)
 		return nil, fmt.Errorf("parser service unavailable: %w", err)
 	}
 	defer resp.Body.Close()
@@ -131,6 +136,26 @@ func ParseViaService(ctx context.Context, filename string, contentType string, d
 	}, nil
 }
 
+func writeParserMultipart(writer *multipart.Writer, reader io.Reader, filename string, title string) error {
+	if writer == nil {
+		return errors.New("multipart writer is nil")
+	}
+	if strings.TrimSpace(title) != "" {
+		if err := writer.WriteField("title", strings.TrimSpace(title)); err != nil {
+			return err
+		}
+	}
+
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(part, reader); err != nil {
+		return err
+	}
+	return writer.Close()
+}
+
 func parseDurationEnv(key string, fallback time.Duration) time.Duration {
 	value := strings.TrimSpace(os.Getenv(key))
 	if value == "" {
@@ -154,7 +179,7 @@ func normalizeParsedChunks(raw []struct {
 	PageEnd      int    `json:"pageEnd"`
 	CharStart    int    `json:"charStart"`
 	CharEnd      int    `json:"charEnd"`
-	Sentences     []struct {
+	Sentences    []struct {
 		SentenceIndex int    `json:"sentenceIndex"`
 		Text          string `json:"text"`
 		PageStart     int    `json:"pageStart"`
@@ -200,7 +225,7 @@ func normalizeParsedChunks(raw []struct {
 			PageEnd:      item.PageEnd,
 			CharStart:    item.CharStart,
 			CharEnd:      item.CharEnd,
-			Sentences:     sentences,
+			Sentences:    sentences,
 		})
 	}
 	return result
