@@ -70,6 +70,9 @@ func (f *fakeRAGRepo) GetKnowledgeDocumentByID(ctx context.Context, documentID u
 	copy := *item
 	return &copy, nil
 }
+func (f *fakeRAGRepo) ListKnowledgeDocumentChunks(ctx context.Context, documentID uint64) ([]repository.KnowledgeDocumentChunk, error) {
+	return nil, errors.New("not implemented")
+}
 func (f *fakeRAGRepo) DeleteKnowledgeDocument(ctx context.Context, documentID uint64) error {
 	f.deleteCount++
 	f.deletedDoc = documentID

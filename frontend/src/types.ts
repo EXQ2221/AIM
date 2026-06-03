@@ -408,6 +408,59 @@ export type KnowledgeSearchChunkInfo = {
   content: string;
 };
 
+export type QueryRouteConstraints = {
+  must_ground_in_sources: boolean;
+  allow_external_web: boolean;
+  strict_quote_required: boolean;
+};
+
+export type QueryRoutePlanInfo = {
+  plan_version: string;
+  family: string;
+  source_space: string;
+  scope: string;
+  read_depth: string;
+  output_mode: string;
+  evidence_mode: string;
+  targets: string[];
+  constraints: QueryRouteConstraints;
+  confidence: number;
+  fallback_family: string;
+  reason: string;
+};
+
+export type KnowledgeBaseQueryCitationInfo = {
+  index: number;
+  chunkId: number;
+  documentId: number;
+  documentTitle: string;
+  score: number;
+  excerpt: string;
+};
+
+export type KnowledgeBaseQueryQuoteInfo = {
+  quoteId: string;
+  documentId: number;
+  documentTitle: string;
+  chunkId: number;
+  sentenceIndex: number;
+  pageStart: number;
+  pageEnd: number;
+  charStart: number;
+  charEnd: number;
+  text: string;
+};
+
+export type KnowledgeBaseQueryResponse = {
+  status: string;
+  answer: string;
+  model?: string;
+  plan: QueryRoutePlanInfo;
+  citations: KnowledgeBaseQueryCitationInfo[];
+  quotes: KnowledgeBaseQueryQuoteInfo[];
+  chunks: KnowledgeSearchChunkInfo[];
+};
+
 export type ConversationKnowledgeBaseInfo = {
   id: number;
   conversationId: string;

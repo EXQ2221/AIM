@@ -13,6 +13,7 @@ import type {
   GroupInfo,
   GroupJoinRequestInfo,
   KnowledgeBaseInfo,
+  KnowledgeBaseQueryResponse,
   KnowledgeDocumentInfo,
   KnowledgeSearchChunkInfo,
   JoinGroupResponse,
@@ -589,6 +590,19 @@ export const api = {
         method: "POST",
         body: JSON.stringify(input),
         timeoutMs: 20000
+      }
+    );
+  },
+  queryKnowledgeBase(
+    knowledgeBaseId: number,
+    input: { query: string; topK?: number; conversationId?: string; botId?: number }
+  ) {
+    return request<KnowledgeBaseQueryResponse>(
+      `/api/v1/knowledge-bases/${encodeURIComponent(String(knowledgeBaseId))}/query`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+        timeoutMs: 30000
       }
     );
   },

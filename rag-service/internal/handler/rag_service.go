@@ -102,6 +102,45 @@ func (h *RAGServiceImpl) ListKnowledgeDocuments(ctx context.Context, req *ragpb.
 	return &ragpb.ListKnowledgeDocumentsResponse{Documents: docs}, nil
 }
 
+func (h *RAGServiceImpl) ListKnowledgeDocumentChunks(ctx context.Context, req *ragpb.ListKnowledgeDocumentChunksRequest) (*ragpb.ListKnowledgeDocumentChunksResponse, error) {
+	items, err := h.Service.ListKnowledgeDocumentChunks(ctx, ragbiz.ListKnowledgeDocumentChunksInput{
+		OperatorID:      uint64(req.OperatorId),
+		KnowledgeBaseID: uint64(req.KnowledgeBaseId),
+		DocumentID:      uint64(req.DocumentId),
+	})
+	if err != nil {
+		return nil, err
+	}
+	chunks := make([]*ragpb.KnowledgeDocumentChunkInfo, 0, len(items))
+	for _, item := range items {
+		sentences := make([]*ragpb.KnowledgeSentenceSpanInfo, 0, len(item.Sentences))
+		for _, sentence := range item.Sentences {
+			sentences = append(sentences, &ragpb.KnowledgeSentenceSpanInfo{
+				SentenceIndex: int32(sentence.SentenceIndex),
+				Text:          sentence.Text,
+				PageStart:     int32(sentence.PageStart),
+				PageEnd:       int32(sentence.PageEnd),
+				CharStart:     int32(sentence.CharStart),
+				CharEnd:       int32(sentence.CharEnd),
+			})
+		}
+		chunks = append(chunks, &ragpb.KnowledgeDocumentChunkInfo{
+			ChunkId:      int64(item.ChunkID),
+			DocumentId:   int64(item.DocumentID),
+			ChunkIndex:   int32(item.ChunkIndex),
+			Content:      item.Content,
+			SectionTitle: item.SectionTitle,
+			ChunkType:    item.ChunkType,
+			PageStart:    int32(item.PageStart),
+			PageEnd:      int32(item.PageEnd),
+			CharStart:    int32(item.CharStart),
+			CharEnd:      int32(item.CharEnd),
+			Sentences:     sentences,
+		})
+	}
+	return &ragpb.ListKnowledgeDocumentChunksResponse{Chunks: chunks}, nil
+}
+
 func (h *RAGServiceImpl) DeleteKnowledgeDocument(ctx context.Context, req *ragpb.DeleteKnowledgeDocumentRequest) (*ragpb.CommonResponse, error) {
 	if err := h.Service.DeleteKnowledgeDocument(ctx, ragbiz.DeleteKnowledgeDocumentInput{
 		OperatorID:      uint64(req.OperatorId),

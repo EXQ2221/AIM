@@ -80,6 +80,20 @@ type ChunkMetadata struct {
 	HeadingPath  []string     `json:"headingPath,omitempty"`
 	QuestionNo   int          `json:"questionNo,omitempty"`
 	QuestionText string       `json:"questionText,omitempty"`
+	PageStart    int          `json:"pageStart,omitempty"`
+	PageEnd      int          `json:"pageEnd,omitempty"`
+	CharStart    int          `json:"charStart,omitempty"`
+	CharEnd      int          `json:"charEnd,omitempty"`
+	Sentences    []SentenceSpan `json:"sentences,omitempty"`
+}
+
+type SentenceSpan struct {
+	SentenceIndex int    `json:"sentenceIndex"`
+	Text          string `json:"text"`
+	PageStart     int    `json:"pageStart,omitempty"`
+	PageEnd       int    `json:"pageEnd,omitempty"`
+	CharStart     int    `json:"charStart,omitempty"`
+	CharEnd       int    `json:"charEnd,omitempty"`
 }
 
 type Chunk struct {

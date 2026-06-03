@@ -34,6 +34,7 @@ type RAGRepository interface {
 	UpdateKnowledgeDocument(ctx context.Context, doc *model.KnowledgeDocument) error
 	ListKnowledgeDocumentsByKBID(ctx context.Context, kbID uint64) ([]model.KnowledgeDocument, error)
 	GetKnowledgeDocumentByID(ctx context.Context, documentID uint64) (*model.KnowledgeDocument, error)
+	ListKnowledgeDocumentChunks(ctx context.Context, documentID uint64) ([]KnowledgeDocumentChunk, error)
 	DeleteKnowledgeDocument(ctx context.Context, documentID uint64) error
 	UpdateKnowledgeDocumentStatus(ctx context.Context, documentID uint64, status model.KnowledgeDocumentStatus, errorMessage string) error
 	ReplaceKnowledgeChunksForDocument(ctx context.Context, documentID uint64, records []KnowledgeChunkRecord) error
@@ -70,6 +71,20 @@ type KnowledgeChunkCandidate struct {
 	HasFullText    bool
 	TitleMatched   bool
 	SectionMatched bool
+}
+
+type KnowledgeDocumentChunk struct {
+	ChunkID      uint64
+	DocumentID   uint64
+	ChunkIndex   int
+	Content      string
+	SectionTitle string
+	ChunkType    string
+	PageStart    int
+	PageEnd      int
+	CharStart    int
+	CharEnd      int
+	Sentences     []model.SentenceSpan
 }
 
 var (
@@ -131,6 +146,53 @@ func (r *GormRAGRepository) GetKnowledgeDocumentByID(ctx context.Context, docume
 		return nil, err
 	}
 	return &document, nil
+}
+
+func (r *GormRAGRepository) ListKnowledgeDocumentChunks(ctx context.Context, documentID uint64) ([]KnowledgeDocumentChunk, error) {
+	if documentID == 0 {
+		return nil, errno.Required("document id")
+	}
+	type row struct {
+		ChunkID    uint64          `gorm:"column:chunk_id"`
+		DocumentID uint64          `gorm:"column:document_id"`
+		ChunkIndex int             `gorm:"column:chunk_index"`
+		Content    string          `gorm:"column:content"`
+		Metadata   json.RawMessage `gorm:"column:metadata"`
+	}
+
+	var rows []row
+	if err := r.db.WithContext(ctx).Raw(`
+SELECT
+    kc.id AS chunk_id,
+    kc.document_id,
+    kc.chunk_index,
+    kc.content,
+    kc.metadata
+FROM knowledge_chunks kc
+WHERE kc.document_id = ?
+ORDER BY kc.chunk_index ASC, kc.id ASC;
+`, documentID).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	result := make([]KnowledgeDocumentChunk, 0, len(rows))
+	for _, item := range rows {
+		meta := decodeKnowledgeChunkMeta(item.Metadata)
+		result = append(result, KnowledgeDocumentChunk{
+			ChunkID:      item.ChunkID,
+			DocumentID:   item.DocumentID,
+			ChunkIndex:   item.ChunkIndex,
+			Content:      strings.TrimSpace(item.Content),
+			SectionTitle: strings.TrimSpace(meta.SectionTitle),
+			ChunkType:    string(meta.DocumentType),
+			PageStart:    meta.PageStart,
+			PageEnd:      meta.PageEnd,
+			CharStart:    meta.CharStart,
+			CharEnd:      meta.CharEnd,
+			Sentences:     meta.Sentences,
+		})
+	}
+	return result, nil
 }
 
 func (r *GormRAGRepository) DeleteKnowledgeDocument(ctx context.Context, documentID uint64) error {
@@ -560,6 +622,27 @@ func normalizeSearchQuery(query string) (string, string, string) {
 		questionNo = matches[1]
 	}
 	return core, section, questionNo
+}
+
+type knowledgeChunkMeta struct {
+	DocumentType model.DocumentType `json:"documentType"`
+	SectionTitle string             `json:"sectionTitle"`
+	PageStart    int                `json:"pageStart"`
+	PageEnd      int                `json:"pageEnd"`
+	CharStart    int                `json:"charStart"`
+	CharEnd      int                `json:"charEnd"`
+	Sentences    []model.SentenceSpan `json:"sentences"`
+}
+
+func decodeKnowledgeChunkMeta(raw json.RawMessage) knowledgeChunkMeta {
+	if len(raw) == 0 {
+		return knowledgeChunkMeta{}
+	}
+	var meta knowledgeChunkMeta
+	if err := json.Unmarshal(raw, &meta); err != nil {
+		return knowledgeChunkMeta{}
+	}
+	return meta
 }
 
 var (

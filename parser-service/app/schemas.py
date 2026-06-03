@@ -7,11 +7,25 @@ class HealthResponse(BaseModel):
     ok: bool
 
 
+class ParseSentence(BaseModel):
+    sentenceIndex: int
+    text: str
+    pageStart: int = 0
+    pageEnd: int = 0
+    charStart: int = 0
+    charEnd: int = 0
+
+
 class ParseChunk(BaseModel):
     index: int
     chunkType: str
     sectionTitle: str
     content: str
+    pageStart: int = 0
+    pageEnd: int = 0
+    charStart: int = 0
+    charEnd: int = 0
+    sentences: list[ParseSentence] = []
 
 
 class ParseResponse(BaseModel):

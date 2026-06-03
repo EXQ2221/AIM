@@ -59,6 +59,20 @@ type KnowledgeDocumentView struct {
 	CreatedAt       int64
 }
 
+type KnowledgeDocumentChunkView struct {
+	ChunkID      uint64
+	DocumentID   uint64
+	ChunkIndex   int
+	Content      string
+	SectionTitle string
+	ChunkType    string
+	PageStart    int
+	PageEnd      int
+	CharStart    int
+	CharEnd      int
+	Sentences     []model.SentenceSpan
+}
+
 type KnowledgeSearchChunkView struct {
 	ChunkID    uint64
 	DocumentID uint64
@@ -85,11 +99,31 @@ type IngestChunkInput struct {
 	ChunkType    string `json:"chunkType,omitempty"`
 	SectionTitle string `json:"sectionTitle,omitempty"`
 	Content      string `json:"content"`
+	PageStart    int    `json:"pageStart,omitempty"`
+	PageEnd      int    `json:"pageEnd,omitempty"`
+	CharStart    int    `json:"charStart,omitempty"`
+	CharEnd      int    `json:"charEnd,omitempty"`
+	Sentences     []IngestSentenceSpan `json:"sentences,omitempty"`
+}
+
+type IngestSentenceSpan struct {
+	SentenceIndex int    `json:"sentenceIndex"`
+	Text          string `json:"text"`
+	PageStart     int    `json:"pageStart,omitempty"`
+	PageEnd       int    `json:"pageEnd,omitempty"`
+	CharStart     int    `json:"charStart,omitempty"`
+	CharEnd       int    `json:"charEnd,omitempty"`
 }
 
 type ListKnowledgeDocumentsInput struct {
 	OperatorID      uint64
 	KnowledgeBaseID uint64
+}
+
+type ListKnowledgeDocumentChunksInput struct {
+	OperatorID      uint64
+	KnowledgeBaseID uint64
+	DocumentID      uint64
 }
 
 type DeleteKnowledgeDocumentInput struct {
@@ -419,6 +453,65 @@ func (s *RAGService) ListKnowledgeDocuments(ctx context.Context, input ListKnowl
 			Status:          string(doc.Status),
 			ErrorMessage:    doc.ErrorMessage,
 			CreatedAt:       doc.CreatedAt.Unix(),
+		})
+	}
+	return result, nil
+}
+
+func (s *RAGService) ListKnowledgeDocumentChunks(ctx context.Context, input ListKnowledgeDocumentChunksInput) ([]KnowledgeDocumentChunkView, error) {
+	if s == nil || s.Repo == nil {
+		return nil, ErrRAGUnavailable
+	}
+	if input.OperatorID == 0 || input.KnowledgeBaseID == 0 || input.DocumentID == 0 {
+		return nil, ErrBadRequest
+	}
+
+	kb, err := s.Repo.GetKnowledgeBaseByID(ctx, input.KnowledgeBaseID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrKnowledgeBaseNotFound
+		}
+		return nil, err
+	}
+	if kb.OwnerID != input.OperatorID {
+		accessible, accessErr := s.Repo.IsKnowledgeBaseAccessibleByUser(ctx, input.KnowledgeBaseID, input.OperatorID)
+		if accessErr != nil {
+			return nil, accessErr
+		}
+		if !accessible {
+			return nil, ErrKnowledgeBaseForbidden
+		}
+	}
+
+	doc, err := s.Repo.GetKnowledgeDocumentByID(ctx, input.DocumentID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrKnowledgeDocumentNotFound
+		}
+		return nil, err
+	}
+	if doc.KnowledgeBaseID != input.KnowledgeBaseID {
+		return nil, ErrKnowledgeDocumentNotFound
+	}
+
+	chunks, err := s.Repo.ListKnowledgeDocumentChunks(ctx, input.DocumentID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]KnowledgeDocumentChunkView, 0, len(chunks))
+	for _, item := range chunks {
+		result = append(result, KnowledgeDocumentChunkView{
+			ChunkID:      item.ChunkID,
+			DocumentID:   item.DocumentID,
+			ChunkIndex:   item.ChunkIndex,
+			Content:      item.Content,
+			SectionTitle: item.SectionTitle,
+			ChunkType:    item.ChunkType,
+			PageStart:    item.PageStart,
+			PageEnd:      item.PageEnd,
+			CharStart:    item.CharStart,
+			CharEnd:      item.CharEnd,
+			Sentences:     item.Sentences,
 		})
 	}
 	return result, nil

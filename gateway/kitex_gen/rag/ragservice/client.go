@@ -16,6 +16,7 @@ type Client interface {
 	ListKnowledgeBases(ctx context.Context, req *rag.ListKnowledgeBasesRequest, callOptions ...callopt.Option) (r *rag.ListKnowledgeBasesResponse, err error)
 	AddKnowledgeDocumentText(ctx context.Context, req *rag.AddKnowledgeDocumentTextRequest, callOptions ...callopt.Option) (r *rag.AddKnowledgeDocumentTextResponse, err error)
 	ListKnowledgeDocuments(ctx context.Context, req *rag.ListKnowledgeDocumentsRequest, callOptions ...callopt.Option) (r *rag.ListKnowledgeDocumentsResponse, err error)
+	ListKnowledgeDocumentChunks(ctx context.Context, req *rag.ListKnowledgeDocumentChunksRequest, callOptions ...callopt.Option) (r *rag.ListKnowledgeDocumentChunksResponse, err error)
 	DeleteKnowledgeDocument(ctx context.Context, req *rag.DeleteKnowledgeDocumentRequest, callOptions ...callopt.Option) (r *rag.CommonResponse, err error)
 	SearchKnowledgeBase(ctx context.Context, req *rag.SearchKnowledgeBaseRequest, callOptions ...callopt.Option) (r *rag.SearchKnowledgeBaseResponse, err error)
 	BindConversationKnowledgeBase(ctx context.Context, req *rag.BindConversationKnowledgeBaseRequest, callOptions ...callopt.Option) (r *rag.CommonResponse, err error)
@@ -75,6 +76,11 @@ func (p *kRAGServiceClient) AddKnowledgeDocumentText(ctx context.Context, req *r
 func (p *kRAGServiceClient) ListKnowledgeDocuments(ctx context.Context, req *rag.ListKnowledgeDocumentsRequest, callOptions ...callopt.Option) (r *rag.ListKnowledgeDocumentsResponse, err error) {
 	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
 	return p.kClient.ListKnowledgeDocuments(ctx, req)
+}
+
+func (p *kRAGServiceClient) ListKnowledgeDocumentChunks(ctx context.Context, req *rag.ListKnowledgeDocumentChunksRequest, callOptions ...callopt.Option) (r *rag.ListKnowledgeDocumentChunksResponse, err error) {
+	ctx = client.NewCtxWithCallOptions(ctx, callOptions)
+	return p.kClient.ListKnowledgeDocumentChunks(ctx, req)
 }
 
 func (p *kRAGServiceClient) DeleteKnowledgeDocument(ctx context.Context, req *rag.DeleteKnowledgeDocumentRequest, callOptions ...callopt.Option) (r *rag.CommonResponse, err error) {

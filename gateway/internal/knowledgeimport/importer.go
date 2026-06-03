@@ -36,6 +36,20 @@ type ParsedChunk struct {
 	ChunkType    string
 	SectionTitle string
 	Content      string
+	PageStart    int
+	PageEnd      int
+	CharStart    int
+	CharEnd      int
+	Sentences     []ParsedSentence
+}
+
+type ParsedSentence struct {
+	SentenceIndex int
+	Text          string
+	PageStart     int
+	PageEnd       int
+	CharStart     int
+	CharEnd       int
 }
 
 func Parse(filename string, contentType string, data []byte) (*ParsedDocument, error) {

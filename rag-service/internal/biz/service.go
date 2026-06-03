@@ -177,6 +177,11 @@ func (p *DocumentProcessor) fromProvidedChunks(items []IngestChunkInput) ([]Chun
 		meta := ChunkMetadata{
 			DocumentType: documentType,
 			SectionTitle: sectionTitle,
+			PageStart:    item.PageStart,
+			PageEnd:      item.PageEnd,
+			CharStart:    item.CharStart,
+			CharEnd:      item.CharEnd,
+			Sentences:    buildSentenceSpans(item.Sentences),
 		}
 		if documentType == DocumentTypeQuestionBank {
 			meta.QuestionNo = questionNoFromSection(sectionTitle)
@@ -212,4 +217,30 @@ func (p *DocumentProcessor) updateDocumentStatus(
 	rescueCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = p.RAGRepo.UpdateKnowledgeDocumentStatus(rescueCtx, documentID, status, errMsg)
+}
+
+func buildSentenceSpans(items []IngestSentenceSpan) []model.SentenceSpan {
+	if len(items) == 0 {
+		return nil
+	}
+	result := make([]model.SentenceSpan, 0, len(items))
+	for index, item := range items {
+		text := strings.TrimSpace(item.Text)
+		if text == "" {
+			continue
+		}
+		sentenceIndex := item.SentenceIndex
+		if sentenceIndex <= 0 {
+			sentenceIndex = index + 1
+		}
+		result = append(result, model.SentenceSpan{
+			SentenceIndex: sentenceIndex,
+			Text:          text,
+			PageStart:     item.PageStart,
+			PageEnd:       item.PageEnd,
+			CharStart:     item.CharStart,
+			CharEnd:       item.CharEnd,
+		})
+	}
+	return result
 }

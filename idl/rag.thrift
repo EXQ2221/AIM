@@ -28,6 +28,29 @@ struct KnowledgeDocumentInfo {
   7: i64 created_at
 }
 
+struct KnowledgeDocumentChunkInfo {
+  1: i64 chunk_id
+  2: i64 document_id
+  3: i32 chunk_index
+  4: string content
+  5: string section_title
+  6: string chunk_type
+  7: i32 page_start
+  8: i32 page_end
+  9: i32 char_start
+  10: i32 char_end
+  11: list<KnowledgeSentenceSpanInfo> sentences
+}
+
+struct KnowledgeSentenceSpanInfo {
+  1: i32 sentence_index
+  2: string text
+  3: i32 page_start
+  4: i32 page_end
+  5: i32 char_start
+  6: i32 char_end
+}
+
 struct KnowledgeSearchChunkInfo {
   1: i64 chunk_id
   2: i64 document_id
@@ -72,6 +95,16 @@ struct ListKnowledgeDocumentsRequest {
 
 struct ListKnowledgeDocumentsResponse {
   1: list<KnowledgeDocumentInfo> documents
+}
+
+struct ListKnowledgeDocumentChunksRequest {
+  1: i64 operator_id
+  2: i64 knowledge_base_id
+  3: i64 document_id
+}
+
+struct ListKnowledgeDocumentChunksResponse {
+  1: list<KnowledgeDocumentChunkInfo> chunks
 }
 
 struct DeleteKnowledgeDocumentRequest {
@@ -128,6 +161,7 @@ service RAGService {
   ListKnowledgeBasesResponse ListKnowledgeBases(1: ListKnowledgeBasesRequest req)
   AddKnowledgeDocumentTextResponse AddKnowledgeDocumentText(1: AddKnowledgeDocumentTextRequest req)
   ListKnowledgeDocumentsResponse ListKnowledgeDocuments(1: ListKnowledgeDocumentsRequest req)
+  ListKnowledgeDocumentChunksResponse ListKnowledgeDocumentChunks(1: ListKnowledgeDocumentChunksRequest req)
   CommonResponse DeleteKnowledgeDocument(1: DeleteKnowledgeDocumentRequest req)
   SearchKnowledgeBaseResponse SearchKnowledgeBase(1: SearchKnowledgeBaseRequest req)
   CommonResponse BindConversationKnowledgeBase(1: BindConversationKnowledgeBaseRequest req)

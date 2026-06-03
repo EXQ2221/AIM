@@ -24,6 +24,7 @@ import (
 	"example.com/aim/chat-service/internal/dal/model"
 	"example.com/aim/chat-service/internal/repository"
 	"example.com/aim/chat-service/internal/rpc"
+	"example.com/aim/chat-service/kitex_gen/rag/ragservice"
 	llm "example.com/aim/chat-service/llm-internal/client"
 	"example.com/aim/shared/errno"
 	"gorm.io/gorm"
@@ -58,6 +59,7 @@ type Service struct {
 	ReplyPublisher       botclient.ReplyPublisher
 	UserClient           rpc.UserClient
 	RAGSearcher          RAGSearcher
+	RAGClient            ragservice.Client
 	RAGTopK              int
 	UserMemoryRepo       repository.UserMemoryRepository
 	UserMemorySettingRepo repository.UserMemorySettingRepository
@@ -167,6 +169,10 @@ func (s *Service) SetRAGSearcher(searcher RAGSearcher) {
 	s.RAGSearcher = searcher
 }
 
+func (s *Service) SetRAGClient(client ragservice.Client) {
+	s.RAGClient = client
+}
+
 func (s *Service) SetRAGTopK(topK int) {
 	if topK <= 0 {
 		return
@@ -261,6 +267,13 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 		}
 		return err
 	}
+	llmClient, providerName, err := s.resolveLLMClientAndProvider(resolved.Bot, providerName, modelName)
+	if err != nil {
+		if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, err, 0); logErr != nil {
+			return fmt.Errorf("record failed ai call log: %w; llm select error: %v", logErr, err)
+		}
+		return err
+	}
 	contextLimit := s.ContextMessages
 	if contextLimit <= 0 {
 		contextLimit = 20
@@ -283,8 +296,67 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	if scope == "" {
 		scope = model.BotScopeConversationOnly
 	}
-	if shouldForceConversationOnlyByIntent(question) {
-		scope = model.BotScopeConversationOnly
+	var workflowStreamMeta *botReplyStreamMeta
+	if scope != model.BotScopeConversationOnly && s.RAGClient != nil {
+		streamMeta, streamErr := s.buildStreamMeta(ctx, req, resolved.Bot)
+		if streamErr != nil {
+			log.Printf("knowledge workflow stream meta unavailable: conversation=%d bot=%d err=%v", req.ConversationID, resolved.Bot.ID, streamErr)
+		} else if streamMeta != nil {
+			workflowStreamMeta = streamMeta
+		}
+	}
+	if scope != model.BotScopeConversationOnly && s.RAGClient != nil {
+		workflow, workflowErr := s.runKnowledgeWorkflow(ctx, knowledgeWorkflowRequest{
+			LLMClient:        llmClient,
+			ModelName:        modelName,
+			ResolvedBot:      *resolved,
+			MentionRequest:   req,
+			Question:         question,
+			PromptContent:    promptContent,
+			KnowledgeScope:   scope,
+			UserDisplayNames: userDisplayNames,
+			RecentMessages:   recentMessages,
+			StreamMeta:       workflowStreamMeta,
+		})
+		if workflowErr != nil {
+			log.Printf("knowledge workflow failed: conversation=%d bot=%d scope=%s question=%q err=%v", req.ConversationID, resolved.Bot.ID, scope, question, workflowErr)
+			if scope == model.BotScopeKnowledgeBaseOnly {
+				if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, "知识库查询失败，请稍后再试"); replyErr != nil {
+					return replyErr
+				}
+				_ = s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, workflowErr, 0)
+				return nil
+			}
+		} else if workflow != nil {
+			if scope == model.BotScopeKnowledgeBaseOnly || workflow.DirectAnswer {
+				latencyMS := workflow.LatencyMS
+				botMessage, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, workflow.Answer)
+				if replyErr != nil {
+					if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, replyErr, latencyMS); logErr != nil {
+						return fmt.Errorf("record failed ai call log: %w; create bot reply error: %v", logErr, replyErr)
+					}
+					return replyErr
+				}
+				if workflow.GenerateResp != nil {
+					return s.createSuccessLog(ctx, req, resolved.Bot, providerName, modelName, botMessage.ID, workflow.GenerateResp, latencyMS)
+				}
+				return nil
+			}
+			if strings.TrimSpace(workflow.KnowledgeContext) != "" {
+				ragChunks := []RAGChunk{
+					{Index: 1, Content: workflow.KnowledgeContext, Score: 1},
+				}
+				longTermMemories := s.collectLongTermMemories(ctx, req, question)
+				topicSummary := summarizeRecentTopicV2(recentMessages, req.RequestMessageID, 5)
+				prompt := BuildPromptWithRAGAndMemory(recentMessages, promptContent, contextLimit, userDisplayNames, req.UserID, scope, ragChunks, topicSummary, longTermMemories)
+				systemPrompt := strings.TrimSpace(resolved.Bot.SystemPrompt)
+				if systemPrompt == "" {
+					systemPrompt = DefaultSystemPrompt
+				}
+				systemPrompt = mergePersonaIntoSystemPrompt(systemPrompt, resolved.Bot)
+				return s.generateBotReply(ctx, req, resolved.Bot, llmClient, providerName, modelName, prompt, systemPrompt, recentMessages)
+			}
+		}
 	}
 	ragTopK := s.RAGTopK
 	if ragTopK <= 0 {
@@ -342,145 +414,8 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 	}
 
 	start := time.Now()
-	llmClient := s.LLM
-	if s.LLMSelector != nil {
-		selectedClient, selectedProviderName, selectErr := s.LLMSelector(resolved.Bot)
-		if selectErr != nil {
-			if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, selectErr, 0); logErr != nil {
-				return fmt.Errorf("record failed ai call log: %w; llm select error: %v", logErr, selectErr)
-			}
-			return selectErr
-		}
-		if strings.TrimSpace(selectedProviderName) != "" {
-			providerName = strings.TrimSpace(selectedProviderName)
-		}
-		if selectedClient != nil {
-			llmClient = selectedClient
-		}
-	}
-
-	parts, err := buildUserPromptParts(ctx, prompt, recentMessages, supportsVisionModel(modelName))
-	if err != nil {
-		if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, err, 0); logErr != nil {
-			return fmt.Errorf("record failed ai call log: %w; build prompt parts error: %v", logErr, err)
-		}
-		if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, err.Error()); replyErr != nil {
-			return fmt.Errorf("create bot failure reply error: %w; build prompt parts error: %v", replyErr, err)
-		}
-		return nil
-	}
-
-	llmCtx := ctx
-	cancel := func() {}
-	if s.LLMTimeout > 0 {
-		llmCtx, cancel = context.WithTimeout(ctx, s.LLMTimeout)
-	}
-	defer cancel()
-
-	llmReq := llm.GenerateRequest{
-		Model: modelName,
-		Messages: []llm.ChatMessage{
-			{Role: "system", Content: systemPrompt},
-			{
-				Role:    "user",
-				Content: prompt,
-				Parts:   parts,
-			},
-		},
-	}
-	logLLMRequestDebug(req, resolved.Bot, llmReq)
-	var resp *llm.GenerateResponse
-	llmStart := time.Now()
-	streamer, supportsStreaming := llmClient.(llmStreamingClient)
-	if supportsStreaming {
-		var (
-			contentBuilder strings.Builder
-			streamState    *botReplyStreamMeta
-			firstChunkAt   time.Time
-			chunkCount     int
-		)
-		streamMeta, metaErr := s.buildStreamMeta(ctx, req, resolved.Bot)
-		if metaErr != nil {
-			log.Printf("bot stream meta unavailable: conversation=%d bot=%d err=%v", req.ConversationID, resolved.Bot.ID, metaErr)
-		} else {
-			streamState = streamMeta
-			// Backend-confirmed trigger signal: tell clients the bot task has started.
-			s.publishBotReplyStream(ctx, *streamState)
-		}
-		resp, err = streamer.GenerateStream(llmCtx, llmReq, func(chunk llm.StreamChunk) error {
-			chunkCount++
-			if firstChunkAt.IsZero() && (chunk.Content != "" || chunk.ReasoningContent != "") {
-				firstChunkAt = time.Now()
-			}
-			if chunk.Content != "" {
-				contentBuilder.WriteString(chunk.Content)
-				if streamState != nil {
-					streamState.info.Content = contentBuilder.String()
-					streamState.info.Done = false
-					s.publishBotReplyStream(ctx, *streamState)
-				}
-			}
-			return nil
-		})
-		log.Printf(
-			"bot stream timing: conversation=%d bot=%d model=%s first_chunk_ms=%d llm_total_ms=%d chunks=%d",
-			req.ConversationID,
-			resolved.Bot.ID,
-			modelName,
-			durationMillis(llmStart, firstChunkAt),
-			time.Since(llmStart).Milliseconds(),
-			chunkCount,
-		)
-		if err == nil && resp != nil {
-			if resp.Content == "" {
-				resp.Content = contentBuilder.String()
-			}
-			if streamState != nil && strings.TrimSpace(resp.Content) != "" {
-				streamState.info.Content = resp.Content
-				streamState.info.Done = true
-				s.publishBotReplyStream(ctx, *streamState)
-			}
-		}
-	} else {
-		resp, err = llmClient.Generate(llmCtx, llmReq)
-		log.Printf(
-			"bot llm timing: conversation=%d bot=%d model=%s llm_total_ms=%d mode=non_stream",
-			req.ConversationID,
-			resolved.Bot.ID,
-			modelName,
-			time.Since(llmStart).Milliseconds(),
-		)
-	}
-	latencyMS := time.Since(start).Milliseconds()
-	if err != nil {
-		if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, err, latencyMS); logErr != nil {
-			return fmt.Errorf("record failed ai call log: %w; llm error: %v", logErr, err)
-		}
-		var statusErr *llm.HTTPStatusError
-		if errors.As(err, &statusErr) {
-			if _, replyErr := s.createBotReplyMessage(ctx, req, resolved.Bot, "\u6a21\u578b\u8c03\u7528\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002"); replyErr != nil {
-				return fmt.Errorf("create bot failure reply error: %w; llm error: %v", replyErr, err)
-			}
-			return nil
-		}
-		return err
-	}
-	if resp == nil {
-		err := errno.Internal("llm response is nil")
-		if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, err, latencyMS); logErr != nil {
-			return fmt.Errorf("record failed ai call log: %w; bot error: %v", logErr, err)
-		}
-		return err
-	}
-
-	botMessage, err := s.createBotReplyMessage(ctx, req, resolved.Bot, resp.Content)
-	if err != nil {
-		if logErr := s.createFailedLog(ctx, req, resolved.Bot, providerName, modelName, err, latencyMS); logErr != nil {
-			return fmt.Errorf("record failed ai call log: %w; create bot reply error: %v", logErr, err)
-		}
-		return err
-	}
-	return s.createSuccessLog(ctx, req, resolved.Bot, providerName, modelName, botMessage.ID, resp, latencyMS)
+	_ = start
+	return s.generateBotReply(ctx, req, resolved.Bot, llmClient, providerName, modelName, prompt, systemPrompt, recentMessages)
 }
 
 func (s *Service) searchRAGChunks(ctx context.Context, scope model.BotPermissionScope, userID uint64, conversationID uint64, question string, topK int) ([]RAGChunk, error) {
@@ -503,18 +438,6 @@ func (s *Service) searchRAGChunks(ctx context.Context, scope model.BotPermission
 		return nil, err
 	}
 	return chunks, nil
-}
-
-func shouldForceConversationOnlyByIntent(question string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(question))
-	if normalized == "" {
-		return false
-	}
-	return strings.Contains(normalized, "总结群聊") ||
-		strings.Contains(normalized, "总结最近消息") ||
-		strings.Contains(normalized, "总结一下群聊") ||
-		strings.Contains(normalized, "总结下群聊") ||
-		strings.Contains(normalized, "群聊总结")
 }
 
 func extractSummaryContextLimit(question string) (string, int) {

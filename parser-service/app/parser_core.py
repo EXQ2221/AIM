@@ -33,6 +33,7 @@ class ParsedDocument:
     file_type: str
     image_count: int
     used_vision_description: bool
+    page_texts: list[str]
 
 
 def parse_document(filename: str, content_type: str, data: bytes, title_override: str | None = None) -> ParsedDocument:
@@ -44,19 +45,19 @@ def parse_document(filename: str, content_type: str, data: bytes, title_override
 
     if file_type == "text":
         content = normalize_text(decode_utf8(data))
-        return ParsedDocument(title, "TEXT", ensure_not_empty(content), file_type, 0, False)
+        return ParsedDocument(title, "TEXT", ensure_not_empty(content), file_type, 0, False, [])
     if file_type == "markdown":
         content = normalize_text(decode_utf8(data))
-        return ParsedDocument(title, "MARKDOWN", ensure_not_empty(content), file_type, 0, False)
+        return ParsedDocument(title, "MARKDOWN", ensure_not_empty(content), file_type, 0, False, [])
     if file_type == "pdf":
-        text, images = parse_pdf(data)
-        return build_multimodal_document(title, file_type, text, images)
+        text, page_texts, images = parse_pdf(data)
+        return build_multimodal_document(title, file_type, text, images, page_texts)
     if file_type == "pptx":
         text, images = parse_pptx(data)
-        return build_multimodal_document(title, file_type, text, images)
+        return build_multimodal_document(title, file_type, text, images, [])
     if file_type == "docx":
         text = parse_docx(data)
-        return ParsedDocument(title, "TEXT", ensure_not_empty(text), file_type, 0, False)
+        return ParsedDocument(title, "TEXT", ensure_not_empty(text), file_type, 0, False, [])
     if file_type == "ppt":
         raise ValueError("legacy .ppt is not supported yet, please convert it to .pptx")
     if file_type == "doc":
@@ -132,12 +133,15 @@ def extract_text_from_openxml(xml_text: str) -> str:
     return text
 
 
-def parse_pdf(data: bytes) -> tuple[str, list[bytes]]:
-    reader = PdfReader(io.BytesIO(data))
+def parse_pdf(data: bytes) -> tuple[str, list[str], list[bytes]]:
+    reader = PdfReader(io.BytesIO(data), strict=False)
     pages: list[str] = []
     images: list[bytes] = []
     for page in reader.pages:
-        page_text = (page.extract_text() or "").strip()
+        try:
+            page_text = normalize_text(page.extract_text() or "")
+        except Exception:
+            page_text = ""
         if page_text:
             pages.append(page_text)
         try:
@@ -147,7 +151,8 @@ def parse_pdf(data: bytes) -> tuple[str, list[bytes]]:
         except Exception:
             # Keep parsing even if image extraction fails for some pages.
             continue
-    return normalize_text("\n\n".join(pages)), images
+    combined = normalize_text("\n\n".join(pages))
+    return combined, pages, images
 
 
 def parse_pptx(data: bytes) -> tuple[str, list[bytes]]:
@@ -175,7 +180,7 @@ def parse_pptx(data: bytes) -> tuple[str, list[bytes]]:
     return normalize_text("\n\n".join(texts)), images
 
 
-def build_multimodal_document(title: str, file_type: str, text: str, images: list[bytes]) -> ParsedDocument:
+def build_multimodal_document(title: str, file_type: str, text: str, images: list[bytes], page_texts: list[str]) -> ParsedDocument:
     clean_text = normalize_text(text)
     image_count = len(images)
     heavy = should_use_vision_description(clean_text, image_count)
@@ -198,6 +203,7 @@ def build_multimodal_document(title: str, file_type: str, text: str, images: lis
         file_type=file_type,
         image_count=image_count,
         used_vision_description=used_vision,
+        page_texts=page_texts,
     )
 
 

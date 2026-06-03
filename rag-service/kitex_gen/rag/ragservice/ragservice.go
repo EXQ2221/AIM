@@ -48,6 +48,13 @@ var serviceMethods = map[string]kitex.MethodInfo{
 		false,
 		kitex.WithStreamingMode(kitex.StreamingNone),
 	),
+	"ListKnowledgeDocumentChunks": kitex.NewMethodInfo(
+		listKnowledgeDocumentChunksHandler,
+		newRAGServiceListKnowledgeDocumentChunksArgs,
+		newRAGServiceListKnowledgeDocumentChunksResult,
+		false,
+		kitex.WithStreamingMode(kitex.StreamingNone),
+	),
 	"DeleteKnowledgeDocument": kitex.NewMethodInfo(
 		deleteKnowledgeDocumentHandler,
 		newRAGServiceDeleteKnowledgeDocumentArgs,
@@ -239,6 +246,24 @@ func newRAGServiceListKnowledgeDocumentsResult() interface{} {
 	return rag.NewRAGServiceListKnowledgeDocumentsResult()
 }
 
+func listKnowledgeDocumentChunksHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
+	realArg := arg.(*rag.RAGServiceListKnowledgeDocumentChunksArgs)
+	realResult := result.(*rag.RAGServiceListKnowledgeDocumentChunksResult)
+	success, err := handler.(rag.RAGService).ListKnowledgeDocumentChunks(ctx, realArg.Req)
+	if err != nil {
+		return err
+	}
+	realResult.Success = success
+	return nil
+}
+func newRAGServiceListKnowledgeDocumentChunksArgs() interface{} {
+	return rag.NewRAGServiceListKnowledgeDocumentChunksArgs()
+}
+
+func newRAGServiceListKnowledgeDocumentChunksResult() interface{} {
+	return rag.NewRAGServiceListKnowledgeDocumentChunksResult()
+}
+
 func deleteKnowledgeDocumentHandler(ctx context.Context, handler interface{}, arg, result interface{}) error {
 	realArg := arg.(*rag.RAGServiceDeleteKnowledgeDocumentArgs)
 	realResult := result.(*rag.RAGServiceDeleteKnowledgeDocumentResult)
@@ -384,6 +409,16 @@ func (p *kClient) ListKnowledgeDocuments(ctx context.Context, req *rag.ListKnowl
 	_args.Req = req
 	var _result rag.RAGServiceListKnowledgeDocumentsResult
 	if err = p.c.Call(ctx, "ListKnowledgeDocuments", &_args, &_result); err != nil {
+		return
+	}
+	return _result.GetSuccess(), nil
+}
+
+func (p *kClient) ListKnowledgeDocumentChunks(ctx context.Context, req *rag.ListKnowledgeDocumentChunksRequest) (r *rag.ListKnowledgeDocumentChunksResponse, err error) {
+	var _args rag.RAGServiceListKnowledgeDocumentChunksArgs
+	_args.Req = req
+	var _result rag.RAGServiceListKnowledgeDocumentChunksResult
+	if err = p.c.Call(ctx, "ListKnowledgeDocumentChunks", &_args, &_result); err != nil {
 		return
 	}
 	return _result.GetSuccess(), nil

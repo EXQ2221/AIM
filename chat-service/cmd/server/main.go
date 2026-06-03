@@ -202,6 +202,7 @@ func newBotServiceFromEnv(
 	botService.SetLLMTimeout(botconf.BotLLMTimeoutFromEnv())
 	botService.SetContextMessages(botconf.BotContextMessagesFromEnv())
 	botService.SetRAGTopK(ragTopKFromEnv())
+	botService.SetRAGClient(ragClient)
 	if ragSearcher := newBotRAGSearcher(ragClient); ragSearcher != nil {
 		botService.SetRAGSearcher(ragSearcher)
 	}

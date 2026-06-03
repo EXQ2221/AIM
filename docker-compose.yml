@@ -323,6 +323,13 @@ services:
       UPLOAD_DIR: "/app/uploads"
       UPLOAD_PUBLIC_PREFIX: "/uploads"
       UPLOAD_MAX_BYTES: "5242880"
+      KNOWLEDGE_IMPORT_PARSE_TIMEOUT: "${KNOWLEDGE_IMPORT_PARSE_TIMEOUT:-30m}"
+      KNOWLEDGE_IMPORT_PARSE_HTTP_TIMEOUT: "${KNOWLEDGE_IMPORT_PARSE_HTTP_TIMEOUT:-30m}"
+      KNOWLEDGE_IMPORT_RAG_ADD_TIMEOUT: "${KNOWLEDGE_IMPORT_RAG_ADD_TIMEOUT:-30m}"
+      KNOWLEDGE_IMPORT_WATCH_TIMEOUT: "${KNOWLEDGE_IMPORT_WATCH_TIMEOUT:-30m}"
+      KNOWLEDGE_IMPORT_POLL_INTERVAL: "${KNOWLEDGE_IMPORT_POLL_INTERVAL:-2s}"
+      KNOWLEDGE_IMPORT_POLL_RPC_TIMEOUT: "${KNOWLEDGE_IMPORT_POLL_RPC_TIMEOUT:-5s}"
+      KNOWLEDGE_IMPORT_NOTIFY_RPC_TIMEOUT: "${KNOWLEDGE_IMPORT_NOTIFY_RPC_TIMEOUT:-5s}"
       TZ: Asia/Shanghai
     depends_on:
       auth-service:
@@ -343,6 +350,28 @@ services:
       - gateway_uploads:/app/uploads
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - aim-net
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-m.daocloud.io/docker.io/library/node:20-alpine}
+        NGINX_IMAGE: ${NGINX_IMAGE:-m.daocloud.io/docker.io/library/nginx:1.27-alpine}
+    container_name: aim-frontend
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10

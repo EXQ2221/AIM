@@ -50,9 +50,40 @@ func parseIngestPayload(raw string) (string, []IngestChunkInput) {
 			ChunkType:    chunkType,
 			SectionTitle: sectionTitle,
 			Content:      chunkContent,
+			PageStart:    item.PageStart,
+			PageEnd:      item.PageEnd,
+			CharStart:    item.CharStart,
+			CharEnd:      item.CharEnd,
+			Sentences:     normalizeIngestSentences(item.Sentences),
 		})
 	}
 	return normalizedContent, chunks
+}
+
+func normalizeIngestSentences(items []IngestSentenceSpan) []IngestSentenceSpan {
+	if len(items) == 0 {
+		return nil
+	}
+	result := make([]IngestSentenceSpan, 0, len(items))
+	for index, item := range items {
+		text := strings.TrimSpace(item.Text)
+		if text == "" {
+			continue
+		}
+		sentenceIndex := item.SentenceIndex
+		if sentenceIndex <= 0 {
+			sentenceIndex = index + 1
+		}
+		result = append(result, IngestSentenceSpan{
+			SentenceIndex: sentenceIndex,
+			Text:          text,
+			PageStart:     item.PageStart,
+			PageEnd:       item.PageEnd,
+			CharStart:     item.CharStart,
+			CharEnd:       item.CharEnd,
+		})
+	}
+	return result
 }
 
 var questionNoPattern = regexp.MustCompile(`(?:第\s*)?(\d{1,6})\s*题?`)

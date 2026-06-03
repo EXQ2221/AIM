@@ -122,11 +122,24 @@ func marshalDocumentImportPayload(parsed *knowledgeimport.ParsedDocument) string
 	if parsed == nil {
 		return ""
 	}
+	type payloadSentence struct {
+		SentenceIndex int    `json:"sentenceIndex"`
+		Text          string `json:"text"`
+		PageStart     int    `json:"pageStart,omitempty"`
+		PageEnd       int    `json:"pageEnd,omitempty"`
+		CharStart     int    `json:"charStart,omitempty"`
+		CharEnd       int    `json:"charEnd,omitempty"`
+	}
 	type payloadChunk struct {
 		Index        int    `json:"index"`
 		ChunkType    string `json:"chunkType,omitempty"`
 		SectionTitle string `json:"sectionTitle,omitempty"`
 		Content      string `json:"content"`
+		PageStart    int    `json:"pageStart,omitempty"`
+		PageEnd      int    `json:"pageEnd,omitempty"`
+		CharStart    int    `json:"charStart,omitempty"`
+		CharEnd      int    `json:"charEnd,omitempty"`
+		Sentences    []payloadSentence `json:"sentences,omitempty"`
 	}
 	type payload struct {
 		Version int            `json:"version"`
@@ -145,11 +158,31 @@ func marshalDocumentImportPayload(parsed *knowledgeimport.ParsedDocument) string
 			if content == "" {
 				continue
 			}
+			sentences := make([]payloadSentence, 0, len(item.Sentences))
+			for _, sentence := range item.Sentences {
+				text := strings.TrimSpace(sentence.Text)
+				if text == "" {
+					continue
+				}
+				sentences = append(sentences, payloadSentence{
+					SentenceIndex: sentence.SentenceIndex,
+					Text:          text,
+					PageStart:     sentence.PageStart,
+					PageEnd:       sentence.PageEnd,
+					CharStart:     sentence.CharStart,
+					CharEnd:       sentence.CharEnd,
+				})
+			}
 			body.Chunks = append(body.Chunks, payloadChunk{
 				Index:        item.Index,
 				ChunkType:    strings.TrimSpace(item.ChunkType),
 				SectionTitle: strings.TrimSpace(item.SectionTitle),
 				Content:      content,
+				PageStart:    item.PageStart,
+				PageEnd:      item.PageEnd,
+				CharStart:    item.CharStart,
+				CharEnd:      item.CharEnd,
+				Sentences:     sentences,
 			})
 		}
 	}
@@ -201,7 +234,7 @@ func watchKnowledgeDocumentImport(userID, knowledgeBaseID int64, knowledgeBaseNa
 					KnowledgeBaseID: knowledgeBaseID,
 					Title:           documentTitle,
 					Status:          "FAILED",
-					ErrorMessage:    "processing timeout (>5m), circuit-break degraded",
+					ErrorMessage:    fmt.Sprintf("processing timeout (>%s), circuit-break degraded", knowledgeImportWatchTimeout.Round(time.Second)),
 				}, startedAt)
 				return
 			case <-ticker.C:

@@ -1032,7 +1032,7 @@ func TestServiceHandleMentionConversationAndKBContinuesOnRAGError(t *testing.T) 
 	}
 }
 
-func TestServiceHandleMentionSummaryIntentForcesConversationOnly(t *testing.T) {
+func TestServiceHandleMentionSummaryIntentStillUsesKnowledgeBase(t *testing.T) {
 	messageRepo := &fakeMessageRepo{
 		recent: []model.Message{
 			{ID: 1, ConversationID: 10, SenderID: 10001, SenderType: model.SenderTypeUser, MessageType: model.MessageTypeText, Content: datatypes.JSON(`{"text":"history message"}`), Status: model.MessageStatusNormal},
@@ -1077,15 +1077,15 @@ func TestServiceHandleMentionSummaryIntentForcesConversationOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandleMention returned error: %v", err)
 	}
-	if searcher.called != 0 {
-		t.Fatalf("expected rag search skipped by summary intent, got %d calls", searcher.called)
+	if searcher.called != 1 {
+		t.Fatalf("expected rag search to remain enabled, got %d calls", searcher.called)
 	}
 	if len(llmClient.requests) != 1 {
 		t.Fatalf("expected one llm call, got %d", len(llmClient.requests))
 	}
 	prompt := llmClient.requests[0].Messages[1].Content
-	if strings.Contains(prompt, "【本地知识库】") {
-		t.Fatalf("summary intent should not include knowledge base prompt: %q", prompt)
+	if !strings.Contains(prompt, "【本地知识库】") || !strings.Contains(prompt, "kb-1") {
+		t.Fatalf("summary intent should still include knowledge base prompt: %q", prompt)
 	}
 }
 

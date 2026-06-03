@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,18 @@ type parserServiceResponse struct {
 		ChunkType    string `json:"chunkType"`
 		SectionTitle string `json:"sectionTitle"`
 		Content      string `json:"content"`
+		PageStart    int    `json:"pageStart"`
+		PageEnd      int    `json:"pageEnd"`
+		CharStart    int    `json:"charStart"`
+		CharEnd      int    `json:"charEnd"`
+		Sentences     []struct {
+			SentenceIndex int    `json:"sentenceIndex"`
+			Text          string `json:"text"`
+			PageStart     int    `json:"pageStart"`
+			PageEnd       int    `json:"pageEnd"`
+			CharStart     int    `json:"charStart"`
+			CharEnd       int    `json:"charEnd"`
+		} `json:"sentences"`
 	} `json:"chunks"`
 }
 
@@ -55,7 +68,7 @@ func ParseViaService(ctx context.Context, filename string, contentType string, d
 		return nil, err
 	}
 
-	timeout := 10 * time.Minute
+	timeout := parseDurationEnv("KNOWLEDGE_IMPORT_PARSE_HTTP_TIMEOUT", 30*time.Minute)
 	client := &http.Client{Timeout: timeout}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &body)
 	if err != nil {
@@ -118,11 +131,37 @@ func ParseViaService(ctx context.Context, filename string, contentType string, d
 	}, nil
 }
 
+func parseDurationEnv(key string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	if seconds, err := strconv.Atoi(value); err == nil && seconds > 0 {
+		return time.Duration(seconds) * time.Second
+	}
+	if d, err := time.ParseDuration(value); err == nil && d > 0 {
+		return d
+	}
+	return fallback
+}
+
 func normalizeParsedChunks(raw []struct {
 	Index        int    `json:"index"`
 	ChunkType    string `json:"chunkType"`
 	SectionTitle string `json:"sectionTitle"`
 	Content      string `json:"content"`
+	PageStart    int    `json:"pageStart"`
+	PageEnd      int    `json:"pageEnd"`
+	CharStart    int    `json:"charStart"`
+	CharEnd      int    `json:"charEnd"`
+	Sentences     []struct {
+		SentenceIndex int    `json:"sentenceIndex"`
+		Text          string `json:"text"`
+		PageStart     int    `json:"pageStart"`
+		PageEnd       int    `json:"pageEnd"`
+		CharStart     int    `json:"charStart"`
+		CharEnd       int    `json:"charEnd"`
+	} `json:"sentences"`
 }) []ParsedChunk {
 	if len(raw) == 0 {
 		return nil
@@ -137,11 +176,31 @@ func normalizeParsedChunks(raw []struct {
 		if sectionTitle == "" {
 			sectionTitle = fmt.Sprintf("Chunk %d", idx+1)
 		}
+		sentences := make([]ParsedSentence, 0, len(item.Sentences))
+		for _, sentence := range item.Sentences {
+			text := strings.TrimSpace(sentence.Text)
+			if text == "" {
+				continue
+			}
+			sentences = append(sentences, ParsedSentence{
+				SentenceIndex: sentence.SentenceIndex,
+				Text:          text,
+				PageStart:     sentence.PageStart,
+				PageEnd:       sentence.PageEnd,
+				CharStart:     sentence.CharStart,
+				CharEnd:       sentence.CharEnd,
+			})
+		}
 		result = append(result, ParsedChunk{
 			Index:        item.Index,
 			ChunkType:    strings.ToUpper(strings.TrimSpace(item.ChunkType)),
 			SectionTitle: sectionTitle,
 			Content:      content,
+			PageStart:    item.PageStart,
+			PageEnd:      item.PageEnd,
+			CharStart:    item.CharStart,
+			CharEnd:      item.CharEnd,
+			Sentences:     sentences,
 		})
 	}
 	return result

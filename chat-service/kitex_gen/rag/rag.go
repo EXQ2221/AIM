@@ -232,6 +232,199 @@ var fieldIDToName_KnowledgeDocumentInfo = map[int16]string{
 	7: "created_at",
 }
 
+type KnowledgeDocumentChunkInfo struct {
+	ChunkId      int64                        `thrift:"chunk_id,1" frugal:"1,default,i64" json:"chunk_id"`
+	DocumentId   int64                        `thrift:"document_id,2" frugal:"2,default,i64" json:"document_id"`
+	ChunkIndex   int32                        `thrift:"chunk_index,3" frugal:"3,default,i32" json:"chunk_index"`
+	Content      string                       `thrift:"content,4" frugal:"4,default,string" json:"content"`
+	SectionTitle string                       `thrift:"section_title,5" frugal:"5,default,string" json:"section_title"`
+	ChunkType    string                       `thrift:"chunk_type,6" frugal:"6,default,string" json:"chunk_type"`
+	PageStart    int32                        `thrift:"page_start,7" frugal:"7,default,i32" json:"page_start"`
+	PageEnd      int32                        `thrift:"page_end,8" frugal:"8,default,i32" json:"page_end"`
+	CharStart    int32                        `thrift:"char_start,9" frugal:"9,default,i32" json:"char_start"`
+	CharEnd      int32                        `thrift:"char_end,10" frugal:"10,default,i32" json:"char_end"`
+	Sentences    []*KnowledgeSentenceSpanInfo `thrift:"sentences,11" frugal:"11,default,list<KnowledgeSentenceSpanInfo>" json:"sentences"`
+}
+
+func NewKnowledgeDocumentChunkInfo() *KnowledgeDocumentChunkInfo {
+	return &KnowledgeDocumentChunkInfo{}
+}
+
+func (p *KnowledgeDocumentChunkInfo) InitDefault() {
+}
+
+func (p *KnowledgeDocumentChunkInfo) GetChunkId() (v int64) {
+	return p.ChunkId
+}
+
+func (p *KnowledgeDocumentChunkInfo) GetDocumentId() (v int64) {
+	return p.DocumentId
+}
+
+func (p *KnowledgeDocumentChunkInfo) GetChunkIndex() (v int32) {
+	return p.ChunkIndex
+}
+
+func (p *KnowledgeDocumentChunkInfo) GetContent() (v string) {
+	return p.Content
+}
+
+func (p *KnowledgeDocumentChunkInfo) GetSectionTitle() (v string) {
+	return p.SectionTitle
+}
+
+func (p *KnowledgeDocumentChunkInfo) GetChunkType() (v string) {
+	return p.ChunkType
+}
+
+func (p *KnowledgeDocumentChunkInfo) GetPageStart() (v int32) {
+	return p.PageStart
+}
+
+func (p *KnowledgeDocumentChunkInfo) GetPageEnd() (v int32) {
+	return p.PageEnd
+}
+
+func (p *KnowledgeDocumentChunkInfo) GetCharStart() (v int32) {
+	return p.CharStart
+}
+
+func (p *KnowledgeDocumentChunkInfo) GetCharEnd() (v int32) {
+	return p.CharEnd
+}
+
+func (p *KnowledgeDocumentChunkInfo) GetSentences() (v []*KnowledgeSentenceSpanInfo) {
+	return p.Sentences
+}
+func (p *KnowledgeDocumentChunkInfo) SetChunkId(val int64) {
+	p.ChunkId = val
+}
+func (p *KnowledgeDocumentChunkInfo) SetDocumentId(val int64) {
+	p.DocumentId = val
+}
+func (p *KnowledgeDocumentChunkInfo) SetChunkIndex(val int32) {
+	p.ChunkIndex = val
+}
+func (p *KnowledgeDocumentChunkInfo) SetContent(val string) {
+	p.Content = val
+}
+func (p *KnowledgeDocumentChunkInfo) SetSectionTitle(val string) {
+	p.SectionTitle = val
+}
+func (p *KnowledgeDocumentChunkInfo) SetChunkType(val string) {
+	p.ChunkType = val
+}
+func (p *KnowledgeDocumentChunkInfo) SetPageStart(val int32) {
+	p.PageStart = val
+}
+func (p *KnowledgeDocumentChunkInfo) SetPageEnd(val int32) {
+	p.PageEnd = val
+}
+func (p *KnowledgeDocumentChunkInfo) SetCharStart(val int32) {
+	p.CharStart = val
+}
+func (p *KnowledgeDocumentChunkInfo) SetCharEnd(val int32) {
+	p.CharEnd = val
+}
+func (p *KnowledgeDocumentChunkInfo) SetSentences(val []*KnowledgeSentenceSpanInfo) {
+	p.Sentences = val
+}
+
+func (p *KnowledgeDocumentChunkInfo) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("KnowledgeDocumentChunkInfo(%+v)", *p)
+}
+
+var fieldIDToName_KnowledgeDocumentChunkInfo = map[int16]string{
+	1:  "chunk_id",
+	2:  "document_id",
+	3:  "chunk_index",
+	4:  "content",
+	5:  "section_title",
+	6:  "chunk_type",
+	7:  "page_start",
+	8:  "page_end",
+	9:  "char_start",
+	10: "char_end",
+	11: "sentences",
+}
+
+type KnowledgeSentenceSpanInfo struct {
+	SentenceIndex int32  `thrift:"sentence_index,1" frugal:"1,default,i32" json:"sentence_index"`
+	Text          string `thrift:"text,2" frugal:"2,default,string" json:"text"`
+	PageStart     int32  `thrift:"page_start,3" frugal:"3,default,i32" json:"page_start"`
+	PageEnd       int32  `thrift:"page_end,4" frugal:"4,default,i32" json:"page_end"`
+	CharStart     int32  `thrift:"char_start,5" frugal:"5,default,i32" json:"char_start"`
+	CharEnd       int32  `thrift:"char_end,6" frugal:"6,default,i32" json:"char_end"`
+}
+
+func NewKnowledgeSentenceSpanInfo() *KnowledgeSentenceSpanInfo {
+	return &KnowledgeSentenceSpanInfo{}
+}
+
+func (p *KnowledgeSentenceSpanInfo) InitDefault() {
+}
+
+func (p *KnowledgeSentenceSpanInfo) GetSentenceIndex() (v int32) {
+	return p.SentenceIndex
+}
+
+func (p *KnowledgeSentenceSpanInfo) GetText() (v string) {
+	return p.Text
+}
+
+func (p *KnowledgeSentenceSpanInfo) GetPageStart() (v int32) {
+	return p.PageStart
+}
+
+func (p *KnowledgeSentenceSpanInfo) GetPageEnd() (v int32) {
+	return p.PageEnd
+}
+
+func (p *KnowledgeSentenceSpanInfo) GetCharStart() (v int32) {
+	return p.CharStart
+}
+
+func (p *KnowledgeSentenceSpanInfo) GetCharEnd() (v int32) {
+	return p.CharEnd
+}
+func (p *KnowledgeSentenceSpanInfo) SetSentenceIndex(val int32) {
+	p.SentenceIndex = val
+}
+func (p *KnowledgeSentenceSpanInfo) SetText(val string) {
+	p.Text = val
+}
+func (p *KnowledgeSentenceSpanInfo) SetPageStart(val int32) {
+	p.PageStart = val
+}
+func (p *KnowledgeSentenceSpanInfo) SetPageEnd(val int32) {
+	p.PageEnd = val
+}
+func (p *KnowledgeSentenceSpanInfo) SetCharStart(val int32) {
+	p.CharStart = val
+}
+func (p *KnowledgeSentenceSpanInfo) SetCharEnd(val int32) {
+	p.CharEnd = val
+}
+
+func (p *KnowledgeSentenceSpanInfo) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("KnowledgeSentenceSpanInfo(%+v)", *p)
+}
+
+var fieldIDToName_KnowledgeSentenceSpanInfo = map[int16]string{
+	1: "sentence_index",
+	2: "text",
+	3: "page_start",
+	4: "page_end",
+	5: "char_start",
+	6: "char_end",
+}
+
 type KnowledgeSearchChunkInfo struct {
 	ChunkId    int64   `thrift:"chunk_id,1" frugal:"1,default,i64" json:"chunk_id"`
 	DocumentId int64   `thrift:"document_id,2" frugal:"2,default,i64" json:"document_id"`
@@ -599,6 +792,82 @@ func (p *ListKnowledgeDocumentsResponse) String() string {
 
 var fieldIDToName_ListKnowledgeDocumentsResponse = map[int16]string{
 	1: "documents",
+}
+
+type ListKnowledgeDocumentChunksRequest struct {
+	OperatorId      int64 `thrift:"operator_id,1" frugal:"1,default,i64" json:"operator_id"`
+	KnowledgeBaseId int64 `thrift:"knowledge_base_id,2" frugal:"2,default,i64" json:"knowledge_base_id"`
+	DocumentId      int64 `thrift:"document_id,3" frugal:"3,default,i64" json:"document_id"`
+}
+
+func NewListKnowledgeDocumentChunksRequest() *ListKnowledgeDocumentChunksRequest {
+	return &ListKnowledgeDocumentChunksRequest{}
+}
+
+func (p *ListKnowledgeDocumentChunksRequest) InitDefault() {
+}
+
+func (p *ListKnowledgeDocumentChunksRequest) GetOperatorId() (v int64) {
+	return p.OperatorId
+}
+
+func (p *ListKnowledgeDocumentChunksRequest) GetKnowledgeBaseId() (v int64) {
+	return p.KnowledgeBaseId
+}
+
+func (p *ListKnowledgeDocumentChunksRequest) GetDocumentId() (v int64) {
+	return p.DocumentId
+}
+func (p *ListKnowledgeDocumentChunksRequest) SetOperatorId(val int64) {
+	p.OperatorId = val
+}
+func (p *ListKnowledgeDocumentChunksRequest) SetKnowledgeBaseId(val int64) {
+	p.KnowledgeBaseId = val
+}
+func (p *ListKnowledgeDocumentChunksRequest) SetDocumentId(val int64) {
+	p.DocumentId = val
+}
+
+func (p *ListKnowledgeDocumentChunksRequest) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListKnowledgeDocumentChunksRequest(%+v)", *p)
+}
+
+var fieldIDToName_ListKnowledgeDocumentChunksRequest = map[int16]string{
+	1: "operator_id",
+	2: "knowledge_base_id",
+	3: "document_id",
+}
+
+type ListKnowledgeDocumentChunksResponse struct {
+	Chunks []*KnowledgeDocumentChunkInfo `thrift:"chunks,1" frugal:"1,default,list<KnowledgeDocumentChunkInfo>" json:"chunks"`
+}
+
+func NewListKnowledgeDocumentChunksResponse() *ListKnowledgeDocumentChunksResponse {
+	return &ListKnowledgeDocumentChunksResponse{}
+}
+
+func (p *ListKnowledgeDocumentChunksResponse) InitDefault() {
+}
+
+func (p *ListKnowledgeDocumentChunksResponse) GetChunks() (v []*KnowledgeDocumentChunkInfo) {
+	return p.Chunks
+}
+func (p *ListKnowledgeDocumentChunksResponse) SetChunks(val []*KnowledgeDocumentChunkInfo) {
+	p.Chunks = val
+}
+
+func (p *ListKnowledgeDocumentChunksResponse) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("ListKnowledgeDocumentChunksResponse(%+v)", *p)
+}
+
+var fieldIDToName_ListKnowledgeDocumentChunksResponse = map[int16]string{
+	1: "chunks",
 }
 
 type DeleteKnowledgeDocumentRequest struct {
@@ -997,6 +1266,8 @@ type RAGService interface {
 
 	ListKnowledgeDocuments(ctx context.Context, req *ListKnowledgeDocumentsRequest) (r *ListKnowledgeDocumentsResponse, err error)
 
+	ListKnowledgeDocumentChunks(ctx context.Context, req *ListKnowledgeDocumentChunksRequest) (r *ListKnowledgeDocumentChunksResponse, err error)
+
 	DeleteKnowledgeDocument(ctx context.Context, req *DeleteKnowledgeDocumentRequest) (r *CommonResponse, err error)
 
 	SearchKnowledgeBase(ctx context.Context, req *SearchKnowledgeBaseRequest) (r *SearchKnowledgeBaseResponse, err error)
@@ -1385,6 +1656,82 @@ func (p *RAGServiceListKnowledgeDocumentsResult) String() string {
 }
 
 var fieldIDToName_RAGServiceListKnowledgeDocumentsResult = map[int16]string{
+	0: "success",
+}
+
+type RAGServiceListKnowledgeDocumentChunksArgs struct {
+	Req *ListKnowledgeDocumentChunksRequest `thrift:"req,1" frugal:"1,default,ListKnowledgeDocumentChunksRequest" json:"req"`
+}
+
+func NewRAGServiceListKnowledgeDocumentChunksArgs() *RAGServiceListKnowledgeDocumentChunksArgs {
+	return &RAGServiceListKnowledgeDocumentChunksArgs{}
+}
+
+func (p *RAGServiceListKnowledgeDocumentChunksArgs) InitDefault() {
+}
+
+var RAGServiceListKnowledgeDocumentChunksArgs_Req_DEFAULT *ListKnowledgeDocumentChunksRequest
+
+func (p *RAGServiceListKnowledgeDocumentChunksArgs) GetReq() (v *ListKnowledgeDocumentChunksRequest) {
+	if !p.IsSetReq() {
+		return RAGServiceListKnowledgeDocumentChunksArgs_Req_DEFAULT
+	}
+	return p.Req
+}
+func (p *RAGServiceListKnowledgeDocumentChunksArgs) SetReq(val *ListKnowledgeDocumentChunksRequest) {
+	p.Req = val
+}
+
+func (p *RAGServiceListKnowledgeDocumentChunksArgs) IsSetReq() bool {
+	return p.Req != nil
+}
+
+func (p *RAGServiceListKnowledgeDocumentChunksArgs) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("RAGServiceListKnowledgeDocumentChunksArgs(%+v)", *p)
+}
+
+var fieldIDToName_RAGServiceListKnowledgeDocumentChunksArgs = map[int16]string{
+	1: "req",
+}
+
+type RAGServiceListKnowledgeDocumentChunksResult struct {
+	Success *ListKnowledgeDocumentChunksResponse `thrift:"success,0,optional" frugal:"0,optional,ListKnowledgeDocumentChunksResponse" json:"success,omitempty"`
+}
+
+func NewRAGServiceListKnowledgeDocumentChunksResult() *RAGServiceListKnowledgeDocumentChunksResult {
+	return &RAGServiceListKnowledgeDocumentChunksResult{}
+}
+
+func (p *RAGServiceListKnowledgeDocumentChunksResult) InitDefault() {
+}
+
+var RAGServiceListKnowledgeDocumentChunksResult_Success_DEFAULT *ListKnowledgeDocumentChunksResponse
+
+func (p *RAGServiceListKnowledgeDocumentChunksResult) GetSuccess() (v *ListKnowledgeDocumentChunksResponse) {
+	if !p.IsSetSuccess() {
+		return RAGServiceListKnowledgeDocumentChunksResult_Success_DEFAULT
+	}
+	return p.Success
+}
+func (p *RAGServiceListKnowledgeDocumentChunksResult) SetSuccess(x interface{}) {
+	p.Success = x.(*ListKnowledgeDocumentChunksResponse)
+}
+
+func (p *RAGServiceListKnowledgeDocumentChunksResult) IsSetSuccess() bool {
+	return p.Success != nil
+}
+
+func (p *RAGServiceListKnowledgeDocumentChunksResult) String() string {
+	if p == nil {
+		return "<nil>"
+	}
+	return fmt.Sprintf("RAGServiceListKnowledgeDocumentChunksResult(%+v)", *p)
+}
+
+var fieldIDToName_RAGServiceListKnowledgeDocumentChunksResult = map[int16]string{
 	0: "success",
 }
 

@@ -106,6 +106,7 @@ func New() *gin.Engine {
 	knowledgeBaseGroup.GET("/:knowledgeBaseId/documents", handler.ListKnowledgeDocuments)
 	knowledgeBaseGroup.DELETE("/:knowledgeBaseId/documents/:documentId", handler.DeleteKnowledgeDocument)
 	knowledgeBaseGroup.POST("/:knowledgeBaseId/search", handler.SearchKnowledgeBase)
+	knowledgeBaseGroup.POST("/:knowledgeBaseId/query", handler.AskKnowledgeBase)
 
 	botGroup := engine.Group("/api/v1/bots")
 	botGroup.Use(middleware.Auth())
@@ -120,6 +121,10 @@ func New() *gin.Engine {
 	notificationGroup.GET("", handler.ListNotifications)
 	notificationGroup.POST("/read-all", handler.MarkAllNotificationsRead)
 	notificationGroup.POST("/:notificationId/read", handler.MarkNotificationRead)
+
+	queryRouterGroup := engine.Group("/api/v1/query-router")
+	queryRouterGroup.Use(middleware.Auth())
+	queryRouterGroup.POST("/plan", handler.PlanQueryRoute)
 
 	return engine
 }

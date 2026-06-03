@@ -133,10 +133,11 @@ func (s *ConversationRAGSearcher) SearchForConversation(ctx context.Context, req
 		}
 	}
 
-	// Keep topK chunks globally across all bound KBs.
+	// Use the full recall window for prompt grounding; topK remains the minimum target,
+	// but long-form KB tasks need more than the final answer fan-out size.
 	sortByScoreDesc(all)
-	if len(all) > topK {
-		all = all[:topK]
+	if len(all) > recallTopK {
+		all = all[:recallTopK]
 	}
 	for idx := range all {
 		all[idx].Index = idx + 1

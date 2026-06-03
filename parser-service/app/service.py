@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from .chunker import build_chunks
 from .parser_core import ParsedDocument, parse_document
-from .schemas import ParseChunk, ParseResponse
+from .schemas import ParseChunk, ParseResponse, ParseSentence
 
 router = APIRouter()
 
@@ -27,7 +27,7 @@ async def parse_file(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"parse failed: {exc}") from exc
 
-    chunks = build_chunks(parsed.title, parsed.content)
+    chunks = build_chunks(parsed.title, parsed.content, parsed.page_texts)
 
     return ParseResponse(
         title=parsed.title,
@@ -42,6 +42,21 @@ async def parse_file(
                 chunkType=item.chunk_type,
                 sectionTitle=item.section_title,
                 content=item.content,
+                pageStart=item.page_start,
+                pageEnd=item.page_end,
+                charStart=item.char_start,
+                charEnd=item.char_end,
+                sentences=[
+                    ParseSentence(
+                        sentenceIndex=sentence.sentence_index,
+                        text=sentence.text,
+                        pageStart=sentence.page_start,
+                        pageEnd=sentence.page_end,
+                        charStart=sentence.char_start,
+                        charEnd=sentence.char_end,
+                    )
+                    for sentence in item.sentences
+                ],
             )
             for item in chunks
         ],
