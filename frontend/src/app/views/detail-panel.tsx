@@ -20,6 +20,7 @@
 } from "lucide-react";
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
+import { MarkdownContent } from "../components/markdown-content";
 import type {
   AICallLogInfo,
   AICallLogQuotaInfo,
@@ -113,6 +114,7 @@ export function DetailPanel({
   userMemorySetting,
   loadingUserMemories,
   loadingUserMemorySetting,
+  isMobileLayout,
   onTabChange,
   onCreateFriendGroup,
   onAddFriend,
@@ -205,6 +207,7 @@ export function DetailPanel({
   userMemorySetting: UserMemorySettingInfo;
   loadingUserMemories: boolean;
   loadingUserMemorySetting: boolean;
+  isMobileLayout?: boolean;
   onTabChange: (tab: DetailTab) => void;
   onCreateFriendGroup: (name: string) => Promise<void>;
   onAddFriend: (input: { targetAimId: string; remark: string; groupId: number | null }) => Promise<void>;
@@ -426,6 +429,7 @@ export function DetailPanel({
           userMemorySetting={userMemorySetting}
           loadingUserMemories={loadingUserMemories}
           loadingUserMemorySetting={loadingUserMemorySetting}
+          isMobileLayout={isMobileLayout}
           conversations={conversations}
           onRefreshSessions={onRefreshSessions}
           onLogout={onLogout}
@@ -1063,7 +1067,9 @@ function KnowledgeBasePanel({
                   <span>
                     文档 #{item.documentId} · score {item.score.toFixed(4)}
                   </span>
-                  <p>{item.content}</p>
+                  <div className="message-markdown kb-markdown">
+                    <MarkdownContent content={item.content} />
+                  </div>
                 </div>
               ))}
               {knowledgeSearchChunks.length === 0 && <span className="kb-empty">暂无检索结果</span>}
@@ -2887,6 +2893,7 @@ function AccountView({
   userMemorySetting,
   loadingUserMemories,
   loadingUserMemorySetting,
+  isMobileLayout = false,
   conversations,
   onRefreshSessions,
   onLogout,
@@ -2912,6 +2919,7 @@ function AccountView({
   userMemorySetting: UserMemorySettingInfo;
   loadingUserMemories: boolean;
   loadingUserMemorySetting: boolean;
+  isMobileLayout?: boolean;
   conversations: ConversationInfo[];
   onRefreshSessions: () => Promise<void>;
   onLogout: () => Promise<void>;
@@ -2937,6 +2945,7 @@ function AccountView({
   const [creatingMemory, setCreatingMemory] = useState(false);
   const [savingMemoryId, setSavingMemoryId] = useState<number | null>(null);
   const [memoryExpanded, setMemoryExpanded] = useState(false);
+  const [sessionExpanded, setSessionExpanded] = useState(!isMobileLayout);
   const [memoryEnabledDraft, setMemoryEnabledDraft] = useState(Boolean(userMemorySetting.enabled));
   const [memoryScopeDraft, setMemoryScopeDraft] = useState<"ALL_GROUPS" | "SELECTED_GROUPS">(
     userMemorySetting.scope === "SELECTED_GROUPS" ? "SELECTED_GROUPS" : "ALL_GROUPS"
@@ -2969,6 +2978,10 @@ function AccountView({
     setMemoryScopeDraft(userMemorySetting.scope === "SELECTED_GROUPS" ? "SELECTED_GROUPS" : "ALL_GROUPS");
     setMemoryConversationDrafts(Array.isArray(userMemorySetting.conversationIds) ? userMemorySetting.conversationIds : []);
   }, [userMemorySetting]);
+
+  useEffect(() => {
+    setSessionExpanded(!isMobileLayout);
+  }, [isMobileLayout]);
 
   const handleCreateMemory = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -3266,31 +3279,52 @@ function AccountView({
         )}
       </div>
 
-      <div className="section-title">
-        <span>登录会话</span>
+      <div className={cx("section-title", isMobileLayout && "session-section-title")}>
+        {isMobileLayout ? (
+          <button
+            className="section-toggle"
+            type="button"
+            aria-expanded={sessionExpanded}
+            onClick={() => setSessionExpanded((current) => !current)}
+          >
+            <span className="section-toggle-label">
+              <strong>登录会话</strong>
+              <span className="session-toggle-count">{sessions.length}</span>
+            </span>
+            <ChevronDown size={16} className={cx("section-toggle-chevron", sessionExpanded && "expanded")} />
+          </button>
+        ) : (
+          <span>登录会话</span>
+        )}
         <IconButton label="刷新会话" onClick={() => void onRefreshSessions()}>
           <RefreshCw size={16} />
         </IconButton>
       </div>
 
-      <div className="session-list">
-        {sessions.map((session) => (
-          <div className="session-row" key={session.session_id}>
-            <Smartphone size={20} />
-            <div>
-              <strong>
-                {session.device_name || "AIM Web"}
-                {session.current && <span className="inline-tag">当前</span>}
-              </strong>
-              <span>{session.last_ip || session.login_ip || "未知 IP"}</span>
-              <time>{formatRelative(session.last_seen_at || session.created_at)}</time>
-            </div>
-            <button disabled={busy} type="button" onClick={() => void onRevokeSession(session.session_id, password)}>
-              撤销
-            </button>
-          </div>
-        ))}
-      </div>
+      {(!isMobileLayout || sessionExpanded) && (
+        <div className={cx("session-list", isMobileLayout && "session-list-mobile")}>
+          {sessions.length === 0 ? (
+            <div className="session-empty">暂无登录会话</div>
+          ) : (
+            sessions.map((session) => (
+              <div className="session-row" key={session.session_id}>
+                <Smartphone size={20} />
+                <div>
+                  <strong>
+                    {session.device_name || "AIM Web"}
+                    {session.current && <span className="inline-tag">当前</span>}
+                  </strong>
+                  <span>{session.last_ip || session.login_ip || "未知 IP"}</span>
+                  <time>{formatRelative(session.last_seen_at || session.created_at)}</time>
+                </div>
+                <button disabled={busy} type="button" onClick={() => void onRevokeSession(session.session_id, password)}>
+                  撤销
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }

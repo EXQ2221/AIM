@@ -1,11 +1,11 @@
 ﻿import { ChevronLeft, DoorOpen, FileImage, Loader2, LockKeyhole, MessageCircle, Mic, PanelRightOpen, Paperclip, RefreshCw, SendHorizontal, UserPlus, X } from "lucide-react";
 import { ChangeEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MessageSquarePlus, Search } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { api } from "../../api";
+import { MarkdownContent } from "../components/markdown-content";
 import { Avatar, IconButton, MessageBubble, WsBadge } from "../ui";
-import { cx, roleLabel } from "../utils";
+import type { ImagePreviewPayload } from "../ui";
+import { cx, formatVoiceDuration, roleLabel } from "../utils";
 import type {
   ConversationInfo,
   ConversationSummaryResponse,
@@ -52,6 +52,13 @@ type PendingImageDraft = {
 type PendingFileDraft = {
   id: string;
   file: File;
+};
+
+type VoiceDraft = {
+  blob: Blob;
+  mimeType: string;
+  durationMs: number;
+  previewURL: string;
 };
 
 type ConversationSummaryCacheItem = {
@@ -142,6 +149,7 @@ export function ChatPanel({
   onReplySelect,
   onRecallMessage,
   onDeleteLocalMessage,
+  onPreviewImage,
   onCancelReply,
   onSend
 }: {
@@ -174,6 +182,7 @@ export function ChatPanel({
   onReplySelect: (message: MessageInfo) => void;
   onRecallMessage: (message: MessageInfo) => Promise<void>;
   onDeleteLocalMessage: (message: MessageInfo) => void;
+  onPreviewImage?: (payload: ImagePreviewPayload) => void;
   onCancelReply: () => void;
   onSend: (payload?: OutgoingMessagePayload) => void;
 }) {
@@ -211,8 +220,10 @@ export function ChatPanel({
   const [inviteInvitingId, setInviteInvitingId] = useState<number | null>(null);
   const [uploadingKind, setUploadingKind] = useState<"IMAGE" | "FILE" | "VOICE" | null>(null);
   const [voicePanelOpen, setVoicePanelOpen] = useState(false);
+  const [voicePreparing, setVoicePreparing] = useState(false);
   const [voiceRecording, setVoiceRecording] = useState(false);
   const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const [voiceDraft, setVoiceDraft] = useState<VoiceDraft | null>(null);
   const [mediaStatus, setMediaStatus] = useState("");
   const [imageDrafts, setImageDrafts] = useState<PendingImageDraft[]>([]);
   const [fileDrafts, setFileDrafts] = useState<PendingFileDraft[]>([]);
@@ -220,9 +231,12 @@ export function ChatPanel({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
   const voiceChunksRef = useRef<BlobPart[]>([]);
   const voiceStartedAtRef = useRef(0);
   const voiceTimerRef = useRef<number | null>(null);
+  const voicePreparingRef = useRef(false);
+  const voiceStartRequestRef = useRef(0);
   const discardVoiceUploadRef = useRef(false);
   const messagesRef = useRef<MessageInfo[]>([]);
   const historyJumpRunningRef = useRef(false);
@@ -295,7 +309,7 @@ export function ChatPanel({
   };
 
   const isRealtimeReady = Boolean(conversation && canSend && wsStatus === "open");
-  const mediaBusy = uploadingKind !== null || voiceRecording;
+  const mediaBusy = uploadingKind !== null || voicePreparing || voiceRecording || voiceDraft !== null;
 
   const ensureMediaReady = useCallback(() => {
     if (!isRealtimeReady) {
@@ -317,6 +331,16 @@ export function ChatPanel({
       mediaStreamRef.current.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
     }
+  }, []);
+
+  const clearVoiceDraft = useCallback(() => {
+    voiceAudioRef.current?.pause();
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.currentTime = 0;
+    }
+    setVoiceDraft(null);
+    setVoiceSeconds(0);
+    setMediaStatus("");
   }, []);
 
   const clearImageDrafts = useCallback(() => {
@@ -471,7 +495,7 @@ export function ChatPanel({
   }, []);
 
   const startVoiceRecording = useCallback(async () => {
-    if (!ensureMediaReady() || mediaBusy || voiceRecording) {
+    if (!ensureMediaReady() || mediaBusy || voiceRecording || voicePreparingRef.current) {
       return;
     }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
@@ -482,14 +506,26 @@ export function ChatPanel({
       return;
     }
 
+    const requestId = voiceStartRequestRef.current + 1;
+    voiceStartRequestRef.current = requestId;
+    voicePreparingRef.current = true;
+    setVoicePreparing(true);
+    setVoicePanelOpen(true);
+    setMediaStatus("正在申请麦克风权限...");
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (voiceStartRequestRef.current !== requestId) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       mediaStreamRef.current = stream;
       voiceChunksRef.current = [];
       discardVoiceUploadRef.current = false;
       voiceStartedAtRef.current = Date.now();
       setVoiceSeconds(0);
-      setMediaStatus("录音中，松开发送");
+      setMediaStatus("录音中，点按结束");
+      setVoiceDraft(null);
 
       const preferredMimeTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
       const selectedMimeType = preferredMimeTypes.find((item) => MediaRecorder.isTypeSupported(item));
@@ -522,39 +558,28 @@ export function ChatPanel({
           return;
         }
 
-        setUploadingKind("VOICE");
-        setMediaStatus("语音上传中...");
-        try {
-          const ext = recorder.mimeType.includes("mp4") ? "m4a" : "webm";
-          const file = new File([blob], `voice-${Date.now()}.${ext}`, {
-            type: recorder.mimeType || "audio/webm"
-          });
-          const uploaded = await api.uploadVoice(file);
-          onSend({
-            messageType: "VOICE",
-            contentPayload: {
-              url: uploaded.file.url,
-              name: uploaded.file.filename || file.name,
-              mimeType: uploaded.file.content_type || file.type || "audio/webm",
-              size: uploaded.file.size,
-              durationMs
-            }
-          });
-          setMediaStatus("");
-        } catch (error) {
-          setMediaStatus("");
-          alert(error instanceof Error ? error.message : "语音上传失败");
-        } finally {
-          setUploadingKind(null);
-        }
+        const previewURL = URL.createObjectURL(blob);
+        setVoiceDraft({
+          blob,
+          mimeType: recorder.mimeType || "audio/webm",
+          durationMs,
+          previewURL
+        });
+        setMediaStatus("录音完成，可试听后发送");
       };
 
       recorder.onerror = () => {
+        mediaRecorderRef.current = null;
+        voiceChunksRef.current = [];
+        setVoiceRecording(false);
+        stopVoiceTimer();
+        stopVoiceStream();
         setMediaStatus("录音失败，请重试");
       };
 
       recorder.start();
       setVoiceRecording(true);
+      setMediaStatus("录音中，点按结束");
       voiceTimerRef.current = window.setInterval(() => {
         setVoiceSeconds(Math.floor((Date.now() - voiceStartedAtRef.current) / 1000));
       }, 250);
@@ -562,10 +587,75 @@ export function ChatPanel({
       setVoiceRecording(false);
       stopVoiceTimer();
       stopVoiceStream();
+      setVoicePanelOpen(false);
       setMediaStatus("");
       alert(error instanceof Error ? error.message : "无法启用麦克风");
+    } finally {
+      voicePreparingRef.current = false;
+      setVoicePreparing(false);
     }
-  }, [ensureMediaReady, mediaBusy, onSend, stopVoiceStream, stopVoiceTimer, voiceRecording]);
+  }, [ensureMediaReady, mediaBusy, stopVoiceStream, stopVoiceTimer, voiceRecording]);
+
+  const handlePlayVoiceDraft = useCallback(() => {
+    const audio = voiceAudioRef.current;
+    if (!audio) {
+      return;
+    }
+    if (audio.paused) {
+      void audio.play();
+      return;
+    }
+    audio.pause();
+  }, []);
+
+  const handleCancelVoiceDraft = useCallback(() => {
+    clearVoiceDraft();
+    setVoicePanelOpen(false);
+  }, [clearVoiceDraft]);
+
+  const handleVoiceToggle = useCallback(() => {
+    if (!conversation || !canSend || wsStatus !== "open" || uploadingKind !== null || voicePreparing || voiceDraft !== null) {
+      return;
+    }
+    if (voiceRecording) {
+      stopVoiceRecording();
+      return;
+    }
+    void startVoiceRecording();
+  }, [canSend, conversation, startVoiceRecording, stopVoiceRecording, uploadingKind, voiceDraft, voicePreparing, voiceRecording, wsStatus]);
+
+  const handleSendVoiceDraft = useCallback(async () => {
+    if (!ensureMediaReady() || uploadingKind !== null || voiceRecording || !voiceDraft) {
+      return;
+    }
+
+    setUploadingKind("VOICE");
+    setMediaStatus("语音上传中...");
+    try {
+      const ext = voiceDraft.mimeType.includes("mp4") ? "m4a" : "webm";
+      const file = new File([voiceDraft.blob], `voice-${Date.now()}.${ext}`, {
+        type: voiceDraft.mimeType || "audio/webm"
+      });
+      const uploaded = await api.uploadVoice(file);
+      onSend({
+        messageType: "VOICE",
+        contentPayload: {
+          url: uploaded.file.url,
+          name: uploaded.file.filename || file.name,
+          mimeType: uploaded.file.content_type || file.type || "audio/webm",
+          size: uploaded.file.size,
+          durationMs: voiceDraft.durationMs
+        }
+      });
+      clearVoiceDraft();
+      setVoicePanelOpen(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "语音上传失败");
+    } finally {
+      setUploadingKind(null);
+      setMediaStatus("");
+    }
+  }, [clearVoiceDraft, ensureMediaReady, onSend, uploadingKind, voiceDraft, voiceRecording]);
 
   const sendDisabled = !conversation || !canSend || !messageDraft.trim() || wsStatus !== "open";
   const composerDisabled = !conversation || !canSend || wsStatus !== "open";
@@ -638,6 +728,8 @@ export function ChatPanel({
   useEffect(
     () => () => {
       discardVoiceUploadRef.current = true;
+      voicePreparingRef.current = false;
+      voiceStartRequestRef.current += 1;
       clearImageDrafts();
       clearFileDrafts();
       stopVoiceRecording();
@@ -650,14 +742,26 @@ export function ChatPanel({
   useEffect(() => {
     setMediaStatus("");
     setVoicePanelOpen(false);
+    voicePreparingRef.current = false;
+    voiceStartRequestRef.current += 1;
+    setVoicePreparing(false);
     setVoiceSeconds(0);
+    clearVoiceDraft();
     clearImageDrafts();
     clearFileDrafts();
     discardVoiceUploadRef.current = true;
     stopVoiceRecording();
     stopVoiceTimer();
     stopVoiceStream();
-  }, [clearFileDrafts, clearImageDrafts, conversation?.conversationId, stopVoiceRecording, stopVoiceStream, stopVoiceTimer]);
+  }, [clearFileDrafts, clearImageDrafts, clearVoiceDraft, conversation?.conversationId, stopVoiceRecording, stopVoiceStream, stopVoiceTimer]);
+
+  useEffect(() => {
+    return () => {
+      if (voiceDraft?.previewURL) {
+        URL.revokeObjectURL(voiceDraft.previewURL);
+      }
+    };
+  }, [voiceDraft]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -1005,6 +1109,7 @@ export function ChatPanel({
                     onReply={() => onReplySelect(message)}
                     onRecall={() => void onRecallMessage(message)}
                     onDeleteLocal={() => onDeleteLocalMessage(message)}
+                    onPreviewImage={onPreviewImage}
                     mentionTarget={
                       message.senderType === "BOT"
                         ? sender?.aliases?.[0] || sender?.mentionName || sender?.nickname || "ai"
@@ -1105,37 +1210,75 @@ export function ChatPanel({
                   文件
                 </button>
                 <button
-                  className={cx("voice-toggle-button", voiceRecording && "recording", voicePanelOpen && "active")}
-                  disabled={uploadingKind !== null || composerDisabled}
+                  className={cx(
+                    "voice-toggle-button",
+                    voiceRecording && "recording",
+                    (voicePanelOpen || voiceRecording || voiceDraft !== null || voicePreparing) && "active"
+                  )}
+                  disabled={uploadingKind !== null || composerDisabled || voicePreparing || voiceDraft !== null}
                   type="button"
-                  onClick={() => setVoicePanelOpen((current) => !current)}
+                  onClick={() => handleVoiceToggle()}
                 >
                   <Mic size={16} />
-                  {voiceRecording ? `录音中 ${voiceSeconds}s` : "语音"}
+                  {voicePreparing
+                    ? "准备录音..."
+                    : voiceRecording
+                      ? `结束录音 ${voiceSeconds}s`
+                      : voiceDraft
+                        ? "语音待发送"
+                        : "开始录音"}
                 </button>
               </div>
               {voicePanelOpen && (
                 <div className="media-composer">
-                  <div className="voice-preview-meta">
-                    <strong>{voiceRecording ? `录音中 ${voiceSeconds}s` : "按住说话，松开发送"}</strong>
-                    <span>和 QQ 一样：按住按钮录音，松开发送。</span>
-                  </div>
-                  <div className="media-composer-actions">
-                    <button
-                      className={cx("voice-toggle-button", voiceRecording && "recording")}
-                      disabled={uploadingKind !== null || composerDisabled}
-                      type="button"
-                      onMouseDown={() => void startVoiceRecording()}
-                      onMouseUp={stopVoiceRecording}
-                      onMouseLeave={stopVoiceRecording}
-                      onTouchStart={() => void startVoiceRecording()}
-                      onTouchEnd={stopVoiceRecording}
-                      onTouchCancel={stopVoiceRecording}
-                      onContextMenu={(event) => event.preventDefault()}
-                    >
-                      {voiceRecording ? "松开发送" : "按住说话"}
-                    </button>
-                  </div>
+                  {voiceRecording ? (
+                    <>
+                      <div className="voice-preview-meta">
+                        <strong>{`录音中 ${voiceSeconds}s`}</strong>
+                        <span>点上方按钮结束录音，录完后可以试听、取消或发送。</span>
+                      </div>
+                      <div className="media-composer-actions">
+                        <button
+                          className={cx("voice-toggle-button", voiceRecording && "recording")}
+                          disabled={uploadingKind !== null || composerDisabled}
+                          type="button"
+                          onClick={() => stopVoiceRecording()}
+                        >
+                          结束录音
+                        </button>
+                      </div>
+                    </>
+                  ) : voiceDraft ? (
+                    <>
+                      <div className="voice-preview-meta">
+                        <strong>录音完成，先试听后发送</strong>
+                        <span>{formatVoiceDuration(voiceDraft.durationMs)} · 你可以先确认效果，再决定是否发送</span>
+                      </div>
+                      <audio
+                        ref={voiceAudioRef}
+                        className="voice-preview-audio"
+                        controls
+                        preload="metadata"
+                        src={voiceDraft.previewURL}
+                      />
+                      <div className="media-composer-actions voice-preview-actions">
+                        <button disabled={uploadingKind !== null || composerDisabled} type="button" onClick={handleCancelVoiceDraft}>
+                          取消
+                        </button>
+                        <button disabled={uploadingKind !== null || composerDisabled} type="button" onClick={handlePlayVoiceDraft}>
+                          试听
+                        </button>
+                        <button disabled={uploadingKind !== null || composerDisabled} type="button" onClick={() => void handleSendVoiceDraft()}>
+                          发送
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="voice-preview-meta">
+                      <strong>{voicePreparing ? "正在准备麦克风" : "点按上方按钮开始录音"}</strong>
+                      <span>{voicePreparing ? "请稍等，正在申请麦克风权限。" : "录完后可以试听、取消或发送。"}</span>
+                    </div>
+                  )}
                 </div>
               )}
               {mediaStatus && <div className="composer-media-status">{mediaStatus}</div>}
@@ -1374,7 +1517,7 @@ export function ChatPanel({
                     <span>消息条数：{conversationSummaryResult.messageCountUsed}</span>
                   </div>
                   <div className="message-markdown">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{conversationSummaryResult.summary}</ReactMarkdown>
+                    <MarkdownContent content={conversationSummaryResult.summary} />
                   </div>
                 </div>
               )}

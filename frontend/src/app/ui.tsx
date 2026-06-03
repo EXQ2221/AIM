@@ -1,8 +1,6 @@
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { Database, FileText, Loader2, MessageCircle, Mic, SendHorizontal, UserPlus, UserRound, Wifi, WifiOff } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { MessageInfo, MobilePane } from "../types";
 import type { ToastState, WsStatus } from "./types";
 import {
@@ -19,10 +17,17 @@ import {
   parseVoiceMessageContent,
   roleLabel
 } from "./utils";
+import { MarkdownContent } from "./components/markdown-content";
 
 type ContextMenuState = {
   x: number;
   y: number;
+};
+
+export type ImagePreviewPayload = {
+  url: string;
+  name: string;
+  text?: string;
 };
 
 export function MessageBubble({
@@ -41,7 +46,8 @@ export function MessageBubble({
   onJumpToReply,
   onReply,
   onRecall,
-  onDeleteLocal
+  onDeleteLocal,
+  onPreviewImage
 }: {
   message: MessageInfo;
   mine: boolean;
@@ -59,6 +65,7 @@ export function MessageBubble({
   onReply?: () => void;
   onRecall?: () => void;
   onDeleteLocal?: () => void;
+  onPreviewImage?: (payload: ImagePreviewPayload) => void;
 }) {
   const imageContent = message.messageType === "IMAGE" ? parseImageMessageContent(message.content) : null;
   const fileContent = message.messageType === "FILE" ? parseFileMessageContent(message.content) : null;
@@ -129,7 +136,7 @@ export function MessageBubble({
 
   const markdownText = messageText(message);
   const enableMarkdown = !recalled && (message.messageType === "TEXT" || message.messageType === "BOT_REPLY");
-  const streamMarkdownText = message.isBotGenerating ? message.content : markdownText;
+  const streamMarkdownText = markdownText;
 
   return (
     <article data-message-id={String(message.id)} className={cx("message-row", mine && "mine", highlighted && "highlighted")}>
@@ -178,7 +185,7 @@ export function MessageBubble({
         ) : message.isBotGenerating ? (
           <div className="message-bot-generating">
             <div className="message-markdown">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamMarkdownText || "..."}</ReactMarkdown>
+              <MarkdownContent content={streamMarkdownText || "..."} />
             </div>
             <span className="message-state pending">
               <Loader2 className="spin" size={14} />
@@ -187,9 +194,25 @@ export function MessageBubble({
           </div>
         ) : message.messageType === "IMAGE" && imageContent ? (
           <div className="message-media message-image">
-            <a href={imageContent.url} target="_blank" rel="noreferrer">
-              <img alt={imageContent.name} src={imageContent.url} />
-            </a>
+            {onPreviewImage ? (
+              <button
+                className="message-image-preview-button"
+                type="button"
+                onClick={() =>
+                  onPreviewImage({
+                    url: imageContent.url,
+                    name: imageContent.name,
+                    text: imageContent.text
+                  })
+                }
+              >
+                <img alt={imageContent.name} src={imageContent.url} />
+              </button>
+            ) : (
+              <a href={imageContent.url} target="_blank" rel="noreferrer">
+                <img alt={imageContent.name} src={imageContent.url} />
+              </a>
+            )}
             <span>{imageContent.name}</span>
             {imageContent.text && <p>{imageContent.text}</p>}
           </div>
@@ -217,7 +240,7 @@ export function MessageBubble({
           </div>
         ) : enableMarkdown ? (
           <div className="message-markdown">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownText}</ReactMarkdown>
+            <MarkdownContent content={markdownText} />
           </div>
         ) : (
           <p>{markdownText}</p>

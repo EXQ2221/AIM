@@ -71,6 +71,7 @@ import {
   statusLabel
 } from "./app/utils";
 import { Avatar, Field, IconButton, MessageBubble, MobileNav, StatusPill, Toast, WsBadge } from "./app/ui";
+import type { ImagePreviewPayload } from "./app/ui";
 import type {
   AICallLogInfo,
   AICallLogQuotaInfo,
@@ -208,6 +209,13 @@ function App() {
       return "light";
     }
   });
+  const [isMobileLayout, setIsMobileLayout] = useState(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return false;
+    }
+    return window.matchMedia("(max-width: 768px)").matches;
+  });
+  const [imagePreview, setImagePreview] = useState<ImagePreviewPayload | null>(null);
 
   const selectedConversationIdRef = useRef<string | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
@@ -238,6 +246,46 @@ function App() {
       // ignore storage write failures
     }
   }, [theme]);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    const updateMobileLayout = () => setIsMobileLayout(mediaQuery.matches);
+    updateMobileLayout();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", updateMobileLayout);
+      return () => {
+        mediaQuery.removeEventListener("change", updateMobileLayout);
+      };
+    }
+    mediaQuery.addListener(updateMobileLayout);
+    return () => {
+      mediaQuery.removeListener(updateMobileLayout);
+    };
+  }, []);
+  useEffect(() => {
+    if (!isMobileLayout) {
+      setImagePreview(null);
+    }
+  }, [isMobileLayout]);
+  useEffect(() => {
+    if (!imagePreview) {
+      return;
+    }
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setImagePreview(null);
+      }
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [imagePreview]);
   useEffect(() => {
     if (!localHiddenMessagesStorageKey) {
       setHiddenMessageIdsByConversation({});
@@ -1425,6 +1473,16 @@ function App() {
     [refreshConversations, refreshCurrentConversationMessages, refreshGroupJoinRequests, selectedConversationId, showToast]
   );
 
+  const handlePreviewImage = useCallback(
+    (payload: ImagePreviewPayload) => {
+      if (!isMobileLayout) {
+        return;
+      }
+      setImagePreview(payload);
+    },
+    [isMobileLayout]
+  );
+
   useEffect(() => {
     if (detailTab !== "friends") return;
     void refreshGroupJoinRequests();
@@ -1526,6 +1584,7 @@ function App() {
         onReplySelect={handleReplyMessage}
         onRecallMessage={handleRecallMessage}
         onDeleteLocalMessage={handleDeleteMessageLocal}
+        onPreviewImage={isMobileLayout ? handlePreviewImage : undefined}
         onCancelReply={() => setReplyingTo(null)}
         onSend={handleSendMessage}
       />
@@ -1577,6 +1636,7 @@ function App() {
         userMemorySetting={userMemorySetting}
         loadingUserMemories={loadingUserMemories}
         loadingUserMemorySetting={loadingUserMemorySetting}
+        isMobileLayout={isMobileLayout}
         onTabChange={setDetailTab}
         onCreateFriendGroup={handleCreateFriendGroup}
         onAddFriend={handleAddFriend}
@@ -1642,6 +1702,24 @@ function App() {
       />
 
       <Toast toast={toast} onClose={() => setToast(null)} />
+      {imagePreview && (
+        <div className="modal-overlay image-preview-overlay" onClick={() => setImagePreview(null)}>
+          <div className="modal-box image-preview-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header image-preview-header">
+              <div className="image-preview-header-copy">
+                <strong title={imagePreview.name}>{imagePreview.name}</strong>
+                {imagePreview.text && <span>{imagePreview.text}</span>}
+              </div>
+              <button aria-label="关闭图片预览" type="button" onClick={() => setImagePreview(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="image-preview-body">
+              <img alt={imagePreview.name} src={imagePreview.url} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
