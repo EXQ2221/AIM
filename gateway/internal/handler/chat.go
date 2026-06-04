@@ -18,9 +18,9 @@ const (
 )
 
 var (
-	knowledgeImportParseTimeout      = getenvDuration("KNOWLEDGE_IMPORT_PARSE_TIMEOUT", 5*time.Minute)
-	knowledgeImportRAGAddTimeout     = getenvDuration("KNOWLEDGE_IMPORT_RAG_ADD_TIMEOUT", 90*time.Second)
-	knowledgeImportWatchTimeout      = getenvDuration("KNOWLEDGE_IMPORT_WATCH_TIMEOUT", 5*time.Minute)
+	knowledgeImportParseTimeout      = getenvDuration("KNOWLEDGE_IMPORT_PARSE_TIMEOUT", 30*time.Minute)
+	knowledgeImportRAGAddTimeout     = getenvDuration("KNOWLEDGE_IMPORT_RAG_ADD_TIMEOUT", 30*time.Minute)
+	knowledgeImportWatchTimeout      = getenvDuration("KNOWLEDGE_IMPORT_WATCH_TIMEOUT", 30*time.Minute)
 	knowledgeImportPollInterval      = getenvDuration("KNOWLEDGE_IMPORT_POLL_INTERVAL", 2*time.Second)
 	knowledgeImportPollRPCDeadline   = getenvDuration("KNOWLEDGE_IMPORT_POLL_RPC_TIMEOUT", 5*time.Second)
 	knowledgeImportNotifyRPCDeadline = getenvDuration("KNOWLEDGE_IMPORT_NOTIFY_RPC_TIMEOUT", 5*time.Second)

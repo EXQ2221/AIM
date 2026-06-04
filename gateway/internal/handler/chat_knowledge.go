@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -129,10 +130,6 @@ func AddKnowledgeDocumentText(ctx *gin.Context) {
 		return
 	}
 
-	kbName := fmt.Sprintf("知识库%d", kbID)
-	if ragClient, ragErr := rpc.RAGClient(); ragErr == nil {
-		kbName = knowledgeBaseDisplayNameV2(ctx.Request.Context(), ragClient, authCtx.UserID, kbID)
-	}
 	startedAt := time.Now()
 
 	client, err := rpc.RAGClient()
@@ -156,19 +153,27 @@ func AddKnowledgeDocumentText(ctx *gin.Context) {
 		return
 	}
 	if status := strings.ToUpper(strings.TrimSpace(resp.Document.Status)); status == "PENDING" || status == "PROCESSING" {
-		pushKnowledgeImportStatusNotification(
-			authCtx.UserID,
-			"知识库文档导入已提交",
-			fmt.Sprintf("知识库「%s」的文档「%s」已提交，正在后台处理。", kbName, strings.TrimSpace(resp.Document.Title)),
-		)
-		watchKnowledgeDocumentImport(
-			authCtx.UserID,
-			kbID,
-			kbName,
-			resp.Document.DocumentId,
-			strings.TrimSpace(resp.Document.Title),
-			startedAt,
-		)
+		docID := resp.Document.DocumentId
+		docTitle := strings.TrimSpace(resp.Document.Title)
+		if docTitle == "" {
+			docTitle = strings.TrimSpace(req.Title)
+		}
+		go func() {
+			kbName := resolveKnowledgeBaseDisplayName(authCtx.UserID, kbID)
+			pushKnowledgeImportStatusNotification(
+				authCtx.UserID,
+				"知识库文档导入已提交",
+				fmt.Sprintf("知识库「%s」的文档「%s」已提交，正在后台处理。", kbName, docTitle),
+			)
+			watchKnowledgeDocumentImport(
+				authCtx.UserID,
+				kbID,
+				kbName,
+				docID,
+				docTitle,
+				startedAt,
+			)
+		}()
 	}
 	writeJSON(ctx, 200, dto.APIResponse{
 		Code:    0,
@@ -260,60 +265,58 @@ func AddKnowledgeDocumentFile(ctx *gin.Context) {
 	}
 	defer src.Close()
 
-	data, readErr := io.ReadAll(io.LimitReader(src, maxKnowledgeDocumentUploadBytes+1))
-	if readErr != nil {
+	tempFile, createErr := os.CreateTemp("", "aim-knowledge-upload-*")
+	if createErr != nil {
+		writeError(ctx, 500, createErr.Error())
+		return
+	}
+	tempPath := tempFile.Name()
+	cleanupTemp := true
+	defer func() {
+		_ = tempFile.Close()
+		if cleanupTemp {
+			_ = os.Remove(tempPath)
+		}
+	}()
+
+	sourceSize, copyErr := io.Copy(tempFile, src)
+	if copyErr != nil {
 		logger.Warn("knowledge_import.read_failed",
 			zap.Int64("user_id", authCtx.UserID),
 			zap.Int64("kb_id", kbID),
 			zap.String("filename", fileHeader.Filename),
-			zap.Error(readErr),
+			zap.Error(copyErr),
 		)
-		writeError(ctx, 500, readErr.Error())
+		writeError(ctx, 500, copyErr.Error())
 		return
 	}
-	if int64(len(data)) > maxKnowledgeDocumentUploadBytes {
-		logger.Warn("knowledge_import.rejected_too_large",
-			zap.Int64("user_id", authCtx.UserID),
-			zap.Int64("kb_id", kbID),
-			zap.String("filename", fileHeader.Filename),
-			zap.Int("size_bytes", len(data)),
-			zap.Int64("limit_bytes", maxKnowledgeDocumentUploadBytes),
-		)
-		writeError(ctx, 413, "file is too large")
+	if err := tempFile.Close(); err != nil {
+		writeError(ctx, 500, err.Error())
 		return
 	}
+	cleanupTemp = false
 
 	title := strings.TrimSpace(ctx.PostForm("title"))
 	if title == "" {
 		title = knowledgeFileTitle(fileHeader.Filename)
 	}
-	kbName := fmt.Sprintf("知识库%d", kbID)
-	if client, err := rpc.RAGClient(); err == nil {
-		kbName = knowledgeBaseDisplayNameV2(ctx.Request.Context(), client, authCtx.UserID, kbID)
-	}
-
 	startedAt := time.Now()
-	pushKnowledgeImportStatusNotification(
-		authCtx.UserID,
-		"知识库文件导入已提交",
-		fmt.Sprintf("知识库「%s」的文件「%s」已提交，正在后台解析并入库。", kbName, title),
-	)
 	go runKnowledgeDocumentFileImport(knowledgeDocumentFileImportTask{
-		UserID:            authCtx.UserID,
-		KnowledgeBaseID:   kbID,
-		KnowledgeBaseName: kbName,
-		Filename:          fileHeader.Filename,
-		ContentType:       fileHeader.Header.Get("Content-Type"),
-		Title:             title,
-		Data:              data,
-		StartedAt:         startedAt,
+		UserID:          authCtx.UserID,
+		KnowledgeBaseID: kbID,
+		Filename:        fileHeader.Filename,
+		ContentType:     fileHeader.Header.Get("Content-Type"),
+		Title:           title,
+		SourcePath:      tempPath,
+		SourceSize:      sourceSize,
+		StartedAt:       startedAt,
 	})
 
 	logger.Info("knowledge_import.accepted",
 		zap.Int64("user_id", authCtx.UserID),
 		zap.Int64("kb_id", kbID),
 		zap.String("filename", fileHeader.Filename),
-		zap.Int("size_bytes", len(data)),
+		zap.Int64("size_bytes", sourceSize),
 	)
 	writeJSON(ctx, 202, dto.APIResponse{
 		Code:    0,

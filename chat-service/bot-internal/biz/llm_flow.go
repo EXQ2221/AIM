@@ -45,6 +45,7 @@ func (s *Service) generateBotReply(
 	prompt string,
 	systemPrompt string,
 	recentMessages []model.Message,
+	workflow *knowledgeWorkflowResult,
 ) error {
 	parts, err := buildUserPromptParts(ctx, prompt, recentMessages, supportsVisionModel(modelName))
 	if err != nil {
@@ -165,5 +166,6 @@ func (s *Service) generateBotReply(
 		}
 		return err
 	}
+	s.registerKnowledgeSnapshot(botMessage.ID, req, botModel, workflow)
 	return s.createSuccessLog(ctx, req, botModel, providerName, modelName, botMessage.ID, resp, latencyMS)
 }

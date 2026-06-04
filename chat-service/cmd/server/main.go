@@ -266,7 +266,7 @@ func newBotRAGSearcher(ragClient ragservice.Client) bot.RAGSearcher {
 }
 
 func ragTopKFromEnv() int {
-	value := intFromEnv("RAG_TOP_K", 5)
+	value := intFromEnv("RAG_TOP_K", 8)
 	if value < 1 {
 		return 1
 	}

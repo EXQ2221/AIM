@@ -27,6 +27,7 @@ type knowledgeWorkflowRequest struct {
 	UserDisplayNames map[uint64]string
 	RecentMessages   []model.Message
 	StreamMeta       *botReplyStreamMeta
+	ActiveContext    *activeKnowledgeContext
 }
 
 type knowledgeWorkflowResult struct {
@@ -36,6 +37,9 @@ type knowledgeWorkflowResult struct {
 	GenerateResp     *llm.GenerateResponse
 	DirectAnswer     bool
 	LatencyMS        int64
+	PrimaryDocID     uint64
+	PrimaryDocTitle  string
+	DocumentRefs     []knowledgeContextDocument
 }
 
 type workflowFamily string
@@ -109,6 +113,9 @@ func (s *Service) runKnowledgeWorkflow(ctx context.Context, req knowledgeWorkflo
 	}
 	bindings := bindingsResp.GetKnowledgeBases()
 	if len(bindings) == 0 {
+		if s.KnowledgeContextStore != nil {
+			s.KnowledgeContextStore.Delete(req.MentionRequest.UserID, req.MentionRequest.ConversationID, req.ResolvedBot.Bot.ID)
+		}
 		return &knowledgeWorkflowResult{
 			Plan: workflowPlan{
 				Family:       workflowFamilyUnsupported,
@@ -133,11 +140,17 @@ func (s *Service) runKnowledgeWorkflow(ctx context.Context, req knowledgeWorkflo
 	}
 	switch plan.Family {
 	case workflowFamilyLookup:
-		return s.executeKnowledgeLookup(ctx, req, *conversation, bindings, *plan)
+		result, err := s.executeKnowledgeLookup(ctx, req, *conversation, bindings, *plan)
+		s.rememberKnowledgeContext(req, result)
+		return result, err
 	case workflowFamilyRead:
-		return s.executeKnowledgeRead(ctx, req, *conversation, bindings, *plan)
+		result, err := s.executeKnowledgeRead(ctx, req, *conversation, bindings, *plan)
+		s.rememberKnowledgeContext(req, result)
+		return result, err
 	case workflowFamilySynthesize:
-		return s.executeKnowledgeSynthesize(ctx, req, *conversation, bindings, *plan)
+		result, err := s.executeKnowledgeSynthesize(ctx, req, *conversation, bindings, *plan)
+		s.rememberKnowledgeContext(req, result)
+		return result, err
 	default:
 		return &knowledgeWorkflowResult{
 			Plan:             *plan,
@@ -227,6 +240,9 @@ func planKnowledgeWorkflow(ctx context.Context, req knowledgeWorkflowRequest, bi
 }
 
 func fastPlanKnowledgeWorkflow(req knowledgeWorkflowRequest, bindings []*ragpb.ConversationKnowledgeBaseInfo) *workflowPlan {
+	if plan := planFromActiveKnowledgeContext(req); plan != nil {
+		return plan
+	}
 	queries := buildKnowledgeQueriesForWorkflow(req)
 	text := strings.ToLower(strings.Join(queries, " "))
 	if strings.TrimSpace(text) == "" {
@@ -273,6 +289,59 @@ func fallbackPlanKnowledgeWorkflow(req knowledgeWorkflowRequest, bindings []*rag
 		return &workflowPlan{Family: workflowFamilyRead, OutputMode: workflowOutputAnswer, EvidenceMode: workflowEvidenceNone, Reason: "回退：默认阅读路径", Confidence: 0.68}
 	}
 	return &workflowPlan{Family: workflowFamilySynthesize, OutputMode: workflowOutputAnswer, EvidenceMode: workflowEvidenceNone, Reason: "回退：默认综合路径", Confidence: 0.66}
+}
+
+func planFromActiveKnowledgeContext(req knowledgeWorkflowRequest) *workflowPlan {
+	ctx := req.ActiveContext
+	if ctx == nil {
+		return nil
+	}
+	if isStrongKnowledgeRetarget(req.Question, *ctx) {
+		return nil
+	}
+	output := ctx.OutputMode
+	evidence := ctx.EvidenceMode
+	lower := strings.ToLower(strings.TrimSpace(req.Question))
+	if containsAny(lower, "原句", "原文", "关键句", "摘录", "逐字", "引用") {
+		evidence = workflowEvidenceExactQuote
+		output = workflowOutputExtract
+	}
+	if containsAny(lower, "比较", "对比", "区别", "异同", "不同点", "共同点", "分别") {
+		return &workflowPlan{Family: workflowFamilySynthesize, OutputMode: workflowOutputCompare, EvidenceMode: evidence, Reason: "继承活跃知识上下文：比较追问", Confidence: 0.99}
+	}
+	if containsAny(lower, "总结", "概括", "梳理", "提纲", "主旨", "核心观点", "脉络") {
+		if len(ctx.DocumentRefs) > 1 {
+			return &workflowPlan{Family: workflowFamilySynthesize, OutputMode: workflowOutputSummary, EvidenceMode: evidence, Reason: "继承活跃知识上下文：总结追问", Confidence: 0.99}
+		}
+		return &workflowPlan{Family: workflowFamilyRead, OutputMode: workflowOutputSummary, EvidenceMode: evidence, Reason: "继承活跃知识上下文：总结追问", Confidence: 0.99}
+	}
+	switch ctx.Family {
+	case workflowFamilyRead, workflowFamilyLookup:
+		return &workflowPlan{Family: workflowFamilyRead, OutputMode: output, EvidenceMode: evidence, Reason: "继承活跃知识上下文", Confidence: 0.97}
+	case workflowFamilySynthesize:
+		return &workflowPlan{Family: workflowFamilySynthesize, OutputMode: output, EvidenceMode: evidence, Reason: "继承活跃知识上下文", Confidence: 0.97}
+	default:
+		return nil
+	}
+}
+
+func isStrongKnowledgeRetarget(question string, ctx activeKnowledgeContext) bool {
+	lower := strings.ToLower(strings.TrimSpace(question))
+	if lower == "" {
+		return false
+	}
+	if containsAny(lower, "换成", "换到", "另外", "另一", "另一个", "重新", "别的", "新的", "不要看这个", "不看这个") {
+		return true
+	}
+	if title := normalizeDocMatchText(ctx.PrimaryDocTitle); title != "" && !strings.Contains(lower, title) {
+		for _, ref := range ctx.DocumentRefs {
+			next := normalizeDocMatchText(ref.Title)
+			if next != "" && next != title && strings.Contains(lower, next) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func newKnowledgeRouterClient() (llm.Client, string, error) {
@@ -390,12 +459,12 @@ func (s *Service) executeKnowledgeLookup(
 		return nil, err
 	}
 	answer := strings.TrimSpace(answerResp.Content)
+	chunkMap := make(map[int64][]*ragpb.KnowledgeDocumentChunkInfo)
 	if plan.EvidenceMode == workflowEvidenceExactQuote {
 		documents, resolveErr := s.resolveKnowledgeDocuments(ctx, req, bindings)
 		if resolveErr != nil {
 			return nil, resolveErr
 		}
-		chunkMap := make(map[int64][]*ragpb.KnowledgeDocumentChunkInfo, len(documents))
 		for _, item := range documents {
 			chunkMap[int64(item.DocumentID)] = item.Chunks
 		}
@@ -412,6 +481,7 @@ func (s *Service) executeKnowledgeLookup(
 		GenerateResp:     answerResp,
 		DirectAnswer:     plan.EvidenceMode == workflowEvidenceExactQuote,
 		LatencyMS:        time.Since(start).Milliseconds(),
+		DocumentRefs:     collectKnowledgeContextDocumentsFromChunks(chunkMap),
 	}, nil
 }
 
@@ -461,6 +531,9 @@ func (s *Service) executeKnowledgeRead(
 		GenerateResp:     answerResp,
 		DirectAnswer:     plan.EvidenceMode == workflowEvidenceExactQuote,
 		LatencyMS:        time.Since(start).Milliseconds(),
+		PrimaryDocID:     document.DocumentID,
+		PrimaryDocTitle:  document.Title,
+		DocumentRefs:     []knowledgeContextDocument{{DocumentID: document.DocumentID, Title: document.Title}},
 	}, nil
 }
 
@@ -524,6 +597,9 @@ func (s *Service) executeKnowledgeSynthesize(
 		GenerateResp:     answerResp,
 		DirectAnswer:     plan.EvidenceMode == workflowEvidenceExactQuote,
 		LatencyMS:        time.Since(start).Milliseconds(),
+		PrimaryDocID:     documents[0].DocumentID,
+		PrimaryDocTitle:  documents[0].Title,
+		DocumentRefs:     collectKnowledgeContextDocuments(documents),
 	}, nil
 }
 
@@ -672,7 +748,121 @@ func buildKnowledgeQueriesForWorkflow(req knowledgeWorkflowRequest) []string {
 	if extra := strings.TrimSpace(ExtractQuestion(req.PromptContent)); extra != "" {
 		queries = append(queries, extra)
 	}
+	if req.ActiveContext != nil && !isStrongKnowledgeRetarget(req.Question, *req.ActiveContext) {
+		if title := strings.TrimSpace(req.ActiveContext.PrimaryDocTitle); title != "" {
+			queries = append(queries, title)
+		}
+		if last := strings.TrimSpace(req.ActiveContext.LastQuestion); last != "" {
+			queries = append(queries, last)
+		}
+	}
 	return deduplicateQuestions(queries)
+}
+
+func (s *Service) rememberKnowledgeContext(req knowledgeWorkflowRequest, result *knowledgeWorkflowResult) {
+	if s == nil || s.KnowledgeContextStore == nil || result == nil || strings.TrimSpace(result.Answer) == "" {
+		return
+	}
+	item := activeKnowledgeContext{
+		UserID:          req.MentionRequest.UserID,
+		ConversationID: req.MentionRequest.ConversationID,
+		BotID:          req.ResolvedBot.Bot.ID,
+		Family:         result.Plan.Family,
+		OutputMode:     result.Plan.OutputMode,
+		EvidenceMode:   result.Plan.EvidenceMode,
+		KnowledgeScope: string(req.KnowledgeScope),
+		LastQuestion:   strings.TrimSpace(req.Question),
+		LastAnswer:     strings.TrimSpace(result.Answer),
+	}
+	switch result.Plan.Family {
+	case workflowFamilyRead:
+		if title, ok := inferPrimaryDocumentTitleFromAnswer(result.Answer, req.ActiveContext); ok {
+			item.PrimaryDocTitle = title
+		}
+		if req.ActiveContext != nil && item.PrimaryDocTitle == "" {
+			item.PrimaryDocTitle = req.ActiveContext.PrimaryDocTitle
+			item.PrimaryDocID = req.ActiveContext.PrimaryDocID
+			item.DocumentRefs = req.ActiveContext.DocumentRefs
+		}
+	case workflowFamilySynthesize:
+		if req.ActiveContext != nil {
+			item.DocumentRefs = req.ActiveContext.DocumentRefs
+			item.PrimaryDocID = req.ActiveContext.PrimaryDocID
+			item.PrimaryDocTitle = req.ActiveContext.PrimaryDocTitle
+		}
+	default:
+		if req.ActiveContext != nil {
+			item.PrimaryDocID = req.ActiveContext.PrimaryDocID
+			item.PrimaryDocTitle = req.ActiveContext.PrimaryDocTitle
+			item.DocumentRefs = req.ActiveContext.DocumentRefs
+		}
+	}
+	if item.PrimaryDocTitle == "" && req.ActiveContext != nil {
+		item.PrimaryDocTitle = req.ActiveContext.PrimaryDocTitle
+	}
+	s.KnowledgeContextStore.Set(item)
+}
+
+func (s *Service) registerKnowledgeSnapshot(messageID uint64, req HandleMentionRequest, botModel model.Bot, workflow *knowledgeWorkflowResult) {
+	if s == nil || s.KnowledgeSnapshotStore == nil || messageID == 0 || workflow == nil || strings.TrimSpace(workflow.Answer) == "" {
+		return
+	}
+	s.KnowledgeSnapshotStore.Set(sharedKnowledgeSnapshot{
+		MessageID:       messageID,
+		ConversationID:  req.ConversationID,
+		BotID:           botModel.ID,
+		Family:          workflow.Plan.Family,
+		OutputMode:      workflow.Plan.OutputMode,
+		EvidenceMode:    workflow.Plan.EvidenceMode,
+		KnowledgeScope:  "",
+		Question:        strings.TrimSpace(req.Content),
+		Answer:          strings.TrimSpace(workflow.Answer),
+		PrimaryDocID:    workflow.PrimaryDocID,
+		PrimaryDocTitle: workflow.PrimaryDocTitle,
+		DocumentRefs:    workflow.DocumentRefs,
+	})
+}
+
+func inferPrimaryDocumentTitleFromAnswer(answer string, ctx *activeKnowledgeContext) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	if strings.TrimSpace(ctx.PrimaryDocTitle) != "" {
+		return ctx.PrimaryDocTitle, true
+	}
+	if len(ctx.DocumentRefs) == 1 {
+		return strings.TrimSpace(ctx.DocumentRefs[0].Title), ctx.DocumentRefs[0].Title != ""
+	}
+	_ = answer
+	return "", false
+}
+
+func collectKnowledgeContextDocuments(documents []readableKnowledgeDocument) []knowledgeContextDocument {
+	if len(documents) == 0 {
+		return nil
+	}
+	result := make([]knowledgeContextDocument, 0, len(documents))
+	for _, item := range documents {
+		result = append(result, knowledgeContextDocument{
+			DocumentID: item.DocumentID,
+			Title:      strings.TrimSpace(item.Title),
+		})
+	}
+	return normalizeKnowledgeContextDocuments(result)
+}
+
+func collectKnowledgeContextDocumentsFromChunks(chunks map[int64][]*ragpb.KnowledgeDocumentChunkInfo) []knowledgeContextDocument {
+	if len(chunks) == 0 {
+		return nil
+	}
+	result := make([]knowledgeContextDocument, 0, len(chunks))
+	for documentID := range chunks {
+		result = append(result, knowledgeContextDocument{
+			DocumentID: uint64(documentID),
+			Title:      "",
+		})
+	}
+	return normalizeKnowledgeContextDocuments(result)
 }
 
 func normalizeDocMatchQueries(queries []string) []string {

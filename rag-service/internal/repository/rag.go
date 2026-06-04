@@ -8,9 +8,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
-	"example.com/aim/shared/errno"
 	"example.com/aim/rag-service/internal/dal/model"
+	"example.com/aim/shared/errno"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -84,7 +85,7 @@ type KnowledgeDocumentChunk struct {
 	PageEnd      int
 	CharStart    int
 	CharEnd      int
-	Sentences     []model.SentenceSpan
+	Sentences    []model.SentenceSpan
 }
 
 var (
@@ -189,7 +190,7 @@ ORDER BY kc.chunk_index ASC, kc.id ASC;
 			PageEnd:      meta.PageEnd,
 			CharStart:    meta.CharStart,
 			CharEnd:      meta.CharEnd,
-			Sentences:     meta.Sentences,
+			Sentences:    meta.Sentences,
 		})
 	}
 	return result, nil
@@ -262,10 +263,11 @@ func (r *GormRAGRepository) SearchKnowledgeChunkCandidatesByKB(ctx context.Conte
 		return nil, err
 	}
 	query = strings.TrimSpace(query)
-	titleQuery, sectionQuery, questionNoQuery := normalizeSearchQuery(query)
-	if titleQuery == "" {
-		titleQuery = "__no_title_match__"
+	titleTerms := BuildSearchTerms(query)
+	if len(titleTerms) == 0 {
+		titleTerms = []string{"__no_title_match__"}
 	}
+	_, sectionQuery, questionNoQuery := normalizeSearchQuery(query)
 	if sectionQuery == "" {
 		sectionQuery = "__no_section_match__"
 	}
@@ -407,7 +409,13 @@ LIMIT ?;
 		}
 
 		var titleRows []row
-		if err := r.db.WithContext(ctx).Raw(`
+		titleConditions := make([]string, 0, len(titleTerms))
+		titleArgs := make([]interface{}, 0, len(titleTerms)+3)
+		for _, term := range titleTerms {
+			titleConditions = append(titleConditions, "COALESCE(kd.title, '') ILIKE ('%%' || ? || '%%')")
+			titleArgs = append(titleArgs, term)
+		}
+		titleQuerySQL := fmt.Sprintf(`
 SELECT
     kc.id AS chunk_id,
     kc.document_id,
@@ -424,12 +432,14 @@ JOIN knowledge_chunks kc ON kc.document_id = kd.id
 WHERE kd.knowledge_base_id = ?
   AND kd.status = ?
   AND (
-        kd.title ILIKE ('%%' || ? || '%%')
-        OR kd.title ILIKE ('%%' || ? || '%%')
+        %s
   )
 ORDER BY kd.id DESC, kc.chunk_index ASC
 LIMIT ?;
-`, kbID, model.KnowledgeDocumentStatusReady, query, titleQuery, titleLimit).Scan(&titleRows).Error; err != nil {
+`, strings.Join(titleConditions, " OR "))
+		titleArgs = append([]interface{}{kbID, model.KnowledgeDocumentStatusReady}, titleArgs...)
+		titleArgs = append(titleArgs, titleLimit)
+		if err := r.db.WithContext(ctx).Raw(titleQuerySQL, titleArgs...).Scan(&titleRows).Error; err != nil {
 			return nil, err
 		}
 		for _, item := range titleRows {
@@ -624,13 +634,94 @@ func normalizeSearchQuery(query string) (string, string, string) {
 	return core, section, questionNo
 }
 
+func BuildSearchTerms(query string) []string {
+	core, _, _ := normalizeSearchQuery(query)
+	if core == "" {
+		core = strings.TrimSpace(strings.ToLower(query))
+	}
+	if core == "" {
+		return nil
+	}
+
+	tokens := strings.Fields(core)
+	if len(tokens) == 0 {
+		compact := strings.ReplaceAll(core, " ", "")
+		if compact != "" {
+			tokens = []string{compact}
+		}
+	}
+
+	const maxTerms = 12
+	terms := make([]string, 0, len(tokens)*2)
+	seen := make(map[string]struct{}, len(tokens)*2)
+	add := func(term string) {
+		term = strings.TrimSpace(term)
+		if term == "" || len([]rune(term)) < 2 {
+			return
+		}
+		if _, ok := seen[term]; ok {
+			return
+		}
+		seen[term] = struct{}{}
+		terms = append(terms, term)
+	}
+
+	for _, token := range tokens {
+		if len(terms) >= maxTerms {
+			break
+		}
+		add(token)
+		runes := []rune(token)
+		if len(runes) < 3 || !containsHanRune(token) {
+			continue
+		}
+		for i := 0; i+1 < len(runes) && len(terms) < maxTerms; i++ {
+			add(string(runes[i : i+2]))
+		}
+	}
+
+	if len(terms) == 0 {
+		add(strings.ReplaceAll(core, " ", ""))
+	}
+	return terms
+}
+
+func containsHanRune(value string) bool {
+	for _, r := range value {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
+}
+
+func CalcTermOverlapScore(left []string, right []string) float64 {
+	if len(left) == 0 || len(right) == 0 {
+		return 0
+	}
+	rightSet := make(map[string]struct{}, len(right))
+	for _, term := range right {
+		rightSet[term] = struct{}{}
+	}
+	matched := 0
+	for _, term := range left {
+		if _, ok := rightSet[term]; ok {
+			matched++
+		}
+	}
+	if matched == 0 {
+		return 0
+	}
+	return float64(2*matched) / float64(len(left)+len(right))
+}
+
 type knowledgeChunkMeta struct {
-	DocumentType model.DocumentType `json:"documentType"`
-	SectionTitle string             `json:"sectionTitle"`
-	PageStart    int                `json:"pageStart"`
-	PageEnd      int                `json:"pageEnd"`
-	CharStart    int                `json:"charStart"`
-	CharEnd      int                `json:"charEnd"`
+	DocumentType model.DocumentType   `json:"documentType"`
+	SectionTitle string               `json:"sectionTitle"`
+	PageStart    int                  `json:"pageStart"`
+	PageEnd      int                  `json:"pageEnd"`
+	CharStart    int                  `json:"charStart"`
+	CharEnd      int                  `json:"charEnd"`
 	Sentences    []model.SentenceSpan `json:"sentences"`
 }
 

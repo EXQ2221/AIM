@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"example.com/aim/shared/errno"
 	"example.com/aim/rag-service/internal/dal/model"
 	"example.com/aim/rag-service/internal/observability"
 	embedding "example.com/aim/rag-service/internal/provider"
 	"example.com/aim/rag-service/internal/repository"
+	"example.com/aim/shared/errno"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -70,7 +70,7 @@ type KnowledgeDocumentChunkView struct {
 	PageEnd      int
 	CharStart    int
 	CharEnd      int
-	Sentences     []model.SentenceSpan
+	Sentences    []model.SentenceSpan
 }
 
 type KnowledgeSearchChunkView struct {
@@ -95,15 +95,15 @@ type AddKnowledgeDocumentTextInput struct {
 }
 
 type IngestChunkInput struct {
-	Index        int    `json:"index"`
-	ChunkType    string `json:"chunkType,omitempty"`
-	SectionTitle string `json:"sectionTitle,omitempty"`
-	Content      string `json:"content"`
-	PageStart    int    `json:"pageStart,omitempty"`
-	PageEnd      int    `json:"pageEnd,omitempty"`
-	CharStart    int    `json:"charStart,omitempty"`
-	CharEnd      int    `json:"charEnd,omitempty"`
-	Sentences     []IngestSentenceSpan `json:"sentences,omitempty"`
+	Index        int                  `json:"index"`
+	ChunkType    string               `json:"chunkType,omitempty"`
+	SectionTitle string               `json:"sectionTitle,omitempty"`
+	Content      string               `json:"content"`
+	PageStart    int                  `json:"pageStart,omitempty"`
+	PageEnd      int                  `json:"pageEnd,omitempty"`
+	CharStart    int                  `json:"charStart,omitempty"`
+	CharEnd      int                  `json:"charEnd,omitempty"`
+	Sentences    []IngestSentenceSpan `json:"sentences,omitempty"`
 }
 
 type IngestSentenceSpan struct {
@@ -511,7 +511,7 @@ func (s *RAGService) ListKnowledgeDocumentChunks(ctx context.Context, input List
 			PageEnd:      item.PageEnd,
 			CharStart:    item.CharStart,
 			CharEnd:      item.CharEnd,
-			Sentences:     item.Sentences,
+			Sentences:    item.Sentences,
 		})
 	}
 	return result, nil
@@ -776,7 +776,14 @@ func calcTitleScoreSimple(query string, title string) float64 {
 	if strings.Contains(titleNorm, queryNorm) || strings.Contains(queryNorm, titleNorm) {
 		return 0.5
 	}
-	return 0
+	overlap := repository.CalcTermOverlapScore(repository.BuildSearchTerms(query), repository.BuildSearchTerms(title))
+	if overlap <= 0 {
+		return 0
+	}
+	if overlap >= 0.75 {
+		return overlap
+	}
+	return 0.25 + overlap*0.7
 }
 
 func calcSectionScoreSimple(query string, meta chunkMetaView) float64 {
