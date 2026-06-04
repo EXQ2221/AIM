@@ -21,4 +21,11 @@ output/
 scripts/
 tmp_skill_pack/
 output_*.md
+output.md
+AGENTS.md
+insert_bot.sql
+t5_cookie.txt
+t7_cookie.txt
+ts_cookie.txt
+docs/specs/
 aim-all-images*.tar
