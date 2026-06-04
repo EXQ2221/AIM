@@ -11,7 +11,9 @@ import (
 	"example.com/aim/chat-service/internal/dal/model"
 	"example.com/aim/chat-service/internal/repository"
 	"example.com/aim/chat-service/internal/rpc"
+	ragpb "example.com/aim/chat-service/kitex_gen/rag"
 	llm "example.com/aim/chat-service/llm-internal/client"
+	callopt "github.com/cloudwego/kitex/client/callopt"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
@@ -865,6 +867,165 @@ func (s *fakeRAGSearcher) SearchForConversation(ctx context.Context, req RAGSear
 		return nil, s.err
 	}
 	return s.chunks, nil
+}
+
+type recordingReplyPublisher struct {
+	streamEvents  chan botmodel.BotReplyStreamEvent
+	createdEvents chan botmodel.BotReplyCreatedEvent
+}
+
+func (p *recordingReplyPublisher) PublishBotReplyCreated(ctx context.Context, event botmodel.BotReplyCreatedEvent) error {
+	if p.createdEvents != nil {
+		select {
+		case p.createdEvents <- event:
+		default:
+		}
+	}
+	return nil
+}
+
+func (p *recordingReplyPublisher) PublishBotReplyStream(ctx context.Context, event botmodel.BotReplyStreamEvent) error {
+	if p.streamEvents != nil {
+		select {
+		case p.streamEvents <- event:
+		default:
+		}
+	}
+	return nil
+}
+
+type blockingRAGClient struct {
+	started chan struct{}
+	release <-chan struct{}
+}
+
+func (c *blockingRAGClient) Health(ctx context.Context, req *ragpb.HealthRequest, callOptions ...callopt.Option) (*ragpb.HealthResponse, error) {
+	return &ragpb.HealthResponse{}, nil
+}
+
+func (c *blockingRAGClient) CreateKnowledgeBase(ctx context.Context, req *ragpb.CreateKnowledgeBaseRequest, callOptions ...callopt.Option) (*ragpb.CreateKnowledgeBaseResponse, error) {
+	return &ragpb.CreateKnowledgeBaseResponse{}, nil
+}
+
+func (c *blockingRAGClient) ListKnowledgeBases(ctx context.Context, req *ragpb.ListKnowledgeBasesRequest, callOptions ...callopt.Option) (*ragpb.ListKnowledgeBasesResponse, error) {
+	return &ragpb.ListKnowledgeBasesResponse{}, nil
+}
+
+func (c *blockingRAGClient) AddKnowledgeDocumentText(ctx context.Context, req *ragpb.AddKnowledgeDocumentTextRequest, callOptions ...callopt.Option) (*ragpb.AddKnowledgeDocumentTextResponse, error) {
+	return &ragpb.AddKnowledgeDocumentTextResponse{}, nil
+}
+
+func (c *blockingRAGClient) ListKnowledgeDocuments(ctx context.Context, req *ragpb.ListKnowledgeDocumentsRequest, callOptions ...callopt.Option) (*ragpb.ListKnowledgeDocumentsResponse, error) {
+	return &ragpb.ListKnowledgeDocumentsResponse{}, nil
+}
+
+func (c *blockingRAGClient) ListKnowledgeDocumentChunks(ctx context.Context, req *ragpb.ListKnowledgeDocumentChunksRequest, callOptions ...callopt.Option) (*ragpb.ListKnowledgeDocumentChunksResponse, error) {
+	return &ragpb.ListKnowledgeDocumentChunksResponse{}, nil
+}
+
+func (c *blockingRAGClient) DeleteKnowledgeDocument(ctx context.Context, req *ragpb.DeleteKnowledgeDocumentRequest, callOptions ...callopt.Option) (*ragpb.CommonResponse, error) {
+	return &ragpb.CommonResponse{}, nil
+}
+
+func (c *blockingRAGClient) SearchKnowledgeBase(ctx context.Context, req *ragpb.SearchKnowledgeBaseRequest, callOptions ...callopt.Option) (*ragpb.SearchKnowledgeBaseResponse, error) {
+	return &ragpb.SearchKnowledgeBaseResponse{}, nil
+}
+
+func (c *blockingRAGClient) BindConversationKnowledgeBase(ctx context.Context, req *ragpb.BindConversationKnowledgeBaseRequest, callOptions ...callopt.Option) (*ragpb.CommonResponse, error) {
+	return &ragpb.CommonResponse{}, nil
+}
+
+func (c *blockingRAGClient) ListConversationKnowledgeBases(ctx context.Context, req *ragpb.ListConversationKnowledgeBasesRequest, callOptions ...callopt.Option) (*ragpb.ListConversationKnowledgeBasesResponse, error) {
+	if c.started != nil {
+		select {
+		case c.started <- struct{}{}:
+		default:
+		}
+	}
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-c.release:
+	}
+	return &ragpb.ListConversationKnowledgeBasesResponse{}, nil
+}
+
+func (c *blockingRAGClient) UnbindConversationKnowledgeBase(ctx context.Context, req *ragpb.UnbindConversationKnowledgeBaseRequest, callOptions ...callopt.Option) (*ragpb.CommonResponse, error) {
+	return &ragpb.CommonResponse{}, nil
+}
+
+func TestServiceHandleMentionPublishesPlaceholderBeforeKnowledgeWorkflow(t *testing.T) {
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	replyPublisher := &recordingReplyPublisher{
+		streamEvents:  make(chan botmodel.BotReplyStreamEvent, 1),
+		createdEvents: make(chan botmodel.BotReplyCreatedEvent, 1),
+	}
+	messageRepo := &fakeMessageRepo{}
+	conversationRepo := &fakeConversationRepo{}
+	aiCallLogRepo := &fakeAICallLogRepo{}
+	llmClient := &fakeLLMClient{response: &llm.GenerateResponse{Content: "bot reply"}}
+	service := NewService(llmClient, messageRepo, conversationRepo, aiCallLogRepo)
+	service.SetDefaultModel("env-model")
+	service.SetLimiter(NewLimiter(10, 1))
+	service.SetMemberRepository(&fakeMemberRepo{
+		members: []model.ConversationMember{
+			{ConversationID: 10, MemberType: model.MemberTypeUser, MemberID: 10001, Status: model.MemberStatusNormal},
+			{ConversationID: 10, MemberType: model.MemberTypeBot, MemberID: 7, Role: model.MemberRoleBot, Status: model.MemberStatusNormal},
+		},
+	})
+	service.SetBotRepository(&fakeBotRepo{
+		bots: map[uint64]*model.Bot{
+			7: {
+				ID:          7,
+				Name:        "AIM",
+				MentionName: "aim",
+				ModelName:   "db-model",
+				Status:      model.BotStatusEnabled,
+			},
+		},
+	})
+	conversationBotRepo := newFakeConversationBotRepo()
+	_ = conversationBotRepo.Create(context.Background(), &model.ConversationBot{
+		ConversationID:  10,
+		BotID:           7,
+		Enabled:         true,
+		PermissionScope: model.BotScopeConversationAndKB,
+	})
+	service.SetConversationBotRepository(conversationBotRepo)
+	service.SetReplyPublisher(replyPublisher)
+	service.SetRAGClient(&blockingRAGClient{
+		started: started,
+		release: release,
+	})
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- service.HandleMention(context.Background(), HandleMentionRequest{
+			ConversationID: 10,
+			UserID:         10001,
+			Content:        "@aim summarize",
+		})
+	}()
+
+	<-started
+
+	select {
+	case event := <-replyPublisher.streamEvents:
+		if event.Stream.Done {
+			t.Fatalf("expected placeholder stream event before knowledge workflow finished, got done event: %+v", event)
+		}
+		if strings.TrimSpace(event.Stream.Content) != "" {
+			t.Fatalf("expected empty placeholder content, got %q", event.Stream.Content)
+		}
+	default:
+		t.Fatal("expected bot placeholder stream event before knowledge workflow finished")
+	}
+
+	close(release)
+	if err := <-errCh; err != nil {
+		t.Fatalf("HandleMention returned error: %v", err)
+	}
 }
 
 func TestServiceHandleMentionKnowledgeBaseOnlyUsesRAG(t *testing.T) {

@@ -61,6 +61,8 @@ type Service struct {
 	RAGSearcher          RAGSearcher
 	RAGClient            ragservice.Client
 	RAGTopK              int
+	KnowledgeContextStore *activeKnowledgeContextStore
+	KnowledgeSnapshotStore *sharedKnowledgeSnapshotStore
 	UserMemoryRepo       repository.UserMemoryRepository
 	UserMemorySettingRepo repository.UserMemorySettingRepository
 	UserMemoryExtractor  UserMemoryExtractor
@@ -118,6 +120,8 @@ func NewService(
 		MessageRepo:          messageRepo,
 		ConversationRepo:     conversationRepo,
 		AICallLogRepo:        aiCallLogRepo,
+		KnowledgeContextStore: newActiveKnowledgeContextStore(20 * time.Minute),
+		KnowledgeSnapshotStore: newSharedKnowledgeSnapshotStore(30 * time.Minute),
 	}
 }
 
@@ -303,9 +307,38 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 			log.Printf("knowledge workflow stream meta unavailable: conversation=%d bot=%d err=%v", req.ConversationID, resolved.Bot.ID, streamErr)
 		} else if streamMeta != nil {
 			workflowStreamMeta = streamMeta
+			s.publishBotReplyStream(ctx, *workflowStreamMeta)
 		}
 	}
 	if scope != model.BotScopeConversationOnly && s.RAGClient != nil {
+		var activeContext *activeKnowledgeContext
+		if req.ReplyToID != nil && s.KnowledgeSnapshotStore != nil {
+			if snapshot, ok := s.KnowledgeSnapshotStore.Get(*req.ReplyToID); ok && snapshot.ConversationID == req.ConversationID && snapshot.BotID == resolved.Bot.ID {
+				activeContext = &activeKnowledgeContext{
+					UserID:          req.UserID,
+					ConversationID:  req.ConversationID,
+					BotID:           resolved.Bot.ID,
+					Family:          snapshot.Family,
+					OutputMode:      snapshot.OutputMode,
+					EvidenceMode:    snapshot.EvidenceMode,
+					KnowledgeScope:  snapshot.KnowledgeScope,
+					LastQuestion:    snapshot.Question,
+					LastAnswer:      snapshot.Answer,
+					PrimaryDocID:    snapshot.PrimaryDocID,
+					PrimaryDocTitle: snapshot.PrimaryDocTitle,
+					DocumentRefs:    snapshot.DocumentRefs,
+					UpdatedAt:       time.Now(),
+				}
+				if s.KnowledgeContextStore != nil {
+					s.KnowledgeContextStore.Set(*activeContext)
+				}
+			}
+		}
+		if activeContext == nil && s.KnowledgeContextStore != nil {
+			if item, ok := s.KnowledgeContextStore.Get(req.UserID, req.ConversationID, resolved.Bot.ID); ok {
+				activeContext = &item
+			}
+		}
 		workflow, workflowErr := s.runKnowledgeWorkflow(ctx, knowledgeWorkflowRequest{
 			LLMClient:        llmClient,
 			ModelName:        modelName,
@@ -317,6 +350,7 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 			UserDisplayNames: userDisplayNames,
 			RecentMessages:   recentMessages,
 			StreamMeta:       workflowStreamMeta,
+			ActiveContext:    activeContext,
 		})
 		if workflowErr != nil {
 			log.Printf("knowledge workflow failed: conversation=%d bot=%d scope=%s question=%q err=%v", req.ConversationID, resolved.Bot.ID, scope, question, workflowErr)
@@ -337,6 +371,7 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 					}
 					return replyErr
 				}
+				s.registerKnowledgeSnapshot(botMessage.ID, req, resolved.Bot, workflow)
 				if workflow.GenerateResp != nil {
 					return s.createSuccessLog(ctx, req, resolved.Bot, providerName, modelName, botMessage.ID, workflow.GenerateResp, latencyMS)
 				}
@@ -354,7 +389,7 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 					systemPrompt = DefaultSystemPrompt
 				}
 				systemPrompt = mergePersonaIntoSystemPrompt(systemPrompt, resolved.Bot)
-				return s.generateBotReply(ctx, req, resolved.Bot, llmClient, providerName, modelName, prompt, systemPrompt, recentMessages)
+				return s.generateBotReply(ctx, req, resolved.Bot, llmClient, providerName, modelName, prompt, systemPrompt, recentMessages, workflow)
 			}
 		}
 	}
@@ -415,7 +450,7 @@ func (s *Service) HandleMention(ctx context.Context, req HandleMentionRequest) e
 
 	start := time.Now()
 	_ = start
-	return s.generateBotReply(ctx, req, resolved.Bot, llmClient, providerName, modelName, prompt, systemPrompt, recentMessages)
+	return s.generateBotReply(ctx, req, resolved.Bot, llmClient, providerName, modelName, prompt, systemPrompt, recentMessages, nil)
 }
 
 func (s *Service) searchRAGChunks(ctx context.Context, scope model.BotPermissionScope, userID uint64, conversationID uint64, question string, topK int) ([]RAGChunk, error) {
