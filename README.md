@@ -314,7 +314,7 @@ gateway 会把上传内容写入容器内的 `/app/uploads`，并通过 `/upload
 
 ## API 总览
 
-以下是当前对外的主要 API 分组，完整细节以 [API 接口文档](docs/api/api-reference.md) 为准。
+以下是当前对外的主要 API 分组，完整细节以 `docs/api/api-reference.md` 为准。
 
 ### Auth
 
@@ -480,7 +480,7 @@ GET /ws/chat?token=<access_token>
 }
 ```
 
-更多协议细节请参考 [WebSocket 说明](docs/specs/websocket.md)。
+更多协议细节请参考 `docs/specs/websocket.md`。
 
 ## 环境变量参考
 
@@ -566,11 +566,9 @@ GET /ws/chat?token=<access_token>
 
 ## 文档索引
 
-- [API 接口文档](docs/api/api-reference.md)
-- [WebSocket 说明](docs/specs/websocket.md)
-- [chat-service 规格](docs/specs/chat-service-spec.md)
-- [Auth 链路说明](docs/chains/auth-chain.md)
-- [Bot 与 RAG 链路说明](docs/chains/bot-rag-chain.md)
-- [P3 AI Bot 完整规格](docs/specs/p3-ai-bot-complete-spec.md)
-- [P4 RAG 规格](docs/specs/p4-rag-spec.md)
+- `docs/api/api-reference.md`
+- `docs/chains/auth-chain.md`
+- `docs/chains/bot-rag-chain.md`
+
+
 
