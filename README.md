@@ -566,9 +566,9 @@ GET /ws/chat?token=<access_token>
 
 ## 文档索引
 
-- `docs/api/api-reference.md`
-- `docs/chains/auth-chain.md`
-- `docs/chains/bot-rag-chain.md`
+[API 接口文档](docs/api/api-reference.md)
+[Auth 链路说明](docs/chains/auth-chain.md)
+[Bot 与 RAG 链路说明](docs/chains/bot-rag-chain.md)
 
 
 
