@@ -2,6 +2,7 @@
 .idea/
 .vscode/
 .env
+.env.online
 bin/
 dist/
 node_modules/
@@ -9,6 +10,8 @@ tmp/
 coverage.out
 .gocache/
 .gocache-*/
+__pycache__/
+*.pyc
 *.log
 *.pid
 *.out
@@ -18,3 +21,4 @@ output/
 scripts/
 tmp_skill_pack/
 output_*.md
+aim-all-images*.tar
